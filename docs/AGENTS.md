@@ -27,6 +27,9 @@
 - **缓存**：Redis 7+
 - **认证**：JWT（python-jose）
 - **密码加密**：bcrypt（passlib）
+- **Python版本**：3.11（锁定）
+- **包管理**：uv（替代pip，速度快10-100倍）
+- **依赖管理**：pyproject.toml + uv.lock（确保团队依赖版本一致）
 
 ### 前端
 - **框架**：Vue 3.4+（Composition API）
@@ -62,7 +65,10 @@ GuangdongEducationStudyAbroadProgram/
 │   │   └── utils/             # 工具函数
 │   ├── migrations/            # 数据库迁移（Alembic）
 │   ├── tests/                 # 测试
-│   └── requirements.txt
+│   ├── .venv/                 # 虚拟环境（已加入.gitignore，不提交）
+│   ├── pyproject.toml         # 依赖配置（替代requirements.txt）
+│   ├── uv.lock                # 依赖锁定（提交，确保团队版本一致）
+│   └── .python-version        # Python版本锁定（3.11）
 │
 ├── frontend/                   # Vue前端
 │   ├── src/
@@ -85,6 +91,7 @@ GuangdongEducationStudyAbroadProgram/
 │   ├── 开发路线图.md
 │   └── 运行日志.md
 │
+├── .gitignore                  # Git忽略配置
 ├── docker-compose.yml
 └── nginx.conf
 ```
@@ -136,34 +143,154 @@ GuangdongEducationStudyAbroadProgram/
 
 ## 五、开发环境搭建
 
-### 5.1 后端
+### 5.1 后端（使用 uv 管理 Python 虚拟环境）
+
+> **重要**：本项目使用 `uv` 替代传统的 `pip + venv`，速度更快、依赖管理更可靠。
+> 所有团队成员必须使用相同的 Python 版本（3.11）和依赖版本（通过 uv.lock 锁定）。
+
+#### 第一步：安装 uv
+
+**Windows（PowerShell，以管理员身份运行）**：
+```powershell
+irm https://astral.sh/uv/install.ps1 | iex
+```
+
+**Mac/Linux**：
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+**验证安装成功**：
+```bash
+uv --version
+# 应输出版本号，如：uv 0.12.14
+```
+
+#### 第二步：克隆项目并进入后端目录
 
 ```bash
-# 1. 进入后端目录
-cd backend
-
-# 2. 创建虚拟环境
-python -m venv venv
-source venv/bin/activate  # Linux/Mac
-# venv\Scripts\activate   # Windows
-
-# 3. 安装依赖
-pip install -r requirements.txt
-
-# 4. 配置环境变量
-cp .env.example .env
-# 编辑 .env 填写配置
-
-# 5. 数据库初始化
-# 确保PostgreSQL已启动
-alembic upgrade head
-
-# 6. 运行开发服务器
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-
-# 7. 访问API文档
-# http://localhost:8000/docs
+git clone http://47.106.207.27:3000/longtrying/GuangdongEducationStudyAbroadProgram.git
+cd GuangdongEducationStudyAbroadProgram/backend
 ```
+
+#### 第三步：安装 Python 3.11
+
+```bash
+uv python install
+```
+
+> 说明：uv 会读取 `backend/.python-version` 文件（内容为 `3.11`），自动安装对应的 Python 版本。
+> 如果已安装会跳过，不会重复安装。
+
+**验证**：
+```bash
+uv python list
+# 应看到 3.11.x 版本标记为已安装
+```
+
+#### 第四步：创建虚拟环境并安装依赖
+
+```bash
+uv sync
+```
+
+> 说明：这一步会做三件事：
+> 1. 在 `backend/.venv/` 创建虚拟环境（Python 3.11）
+> 2. 根据 `pyproject.toml` 安装所有依赖
+> 3. 生成/更新 `uv.lock` 锁定文件（确保团队依赖版本完全一致）
+
+**验证**：
+```bash
+.venv/Scripts/python --version    # Windows
+# 或 source .venv/bin/python --version  # Mac/Linux
+# 应输出：Python 3.11.x
+
+uv pip list
+# 应看到所有已安装的依赖包列表
+```
+
+#### 第五步：激活虚拟环境
+
+**Windows**：
+```bash
+.venv\Scripts\activate
+```
+
+**Mac/Linux**：
+```bash
+source .venv/bin/activate
+```
+
+**验证激活成功**（命令行前面会出现 `(base)` 或 `.venv` 标识）：
+```bash
+python --version
+# 应输出：Python 3.11.x
+
+pip list
+# 应看到所有已安装的依赖包
+```
+
+#### 第六步：配置环境变量
+
+```bash
+# 复制环境变量模板
+cp .env.example .env
+
+# 编辑 .env 文件，填写实际配置
+# 必须配置的项：
+#   DATABASE_URL - PostgreSQL数据库连接地址
+#   REDIS_URL - Redis连接地址
+#   SECRET_KEY - JWT密钥（请用随机字符串）
+#   DIFY_BASE_URL - Dify服务地址
+#   DIFY_*_AGENT_KEY - 各Agent的API Key
+```
+
+#### 第七步：初始化数据库
+
+```bash
+# 确保 PostgreSQL 已启动且数据库已创建
+# 执行数据库迁移
+alembic upgrade head
+```
+
+#### 第八步：启动开发服务器
+
+```bash
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+**验证**：浏览器访问 http://localhost:8000/docs ，应看到 FastAPI 自动生成的 API 文档页面。
+
+#### 日常开发命令速查
+
+| 操作 | 命令 | 说明 |
+|------|------|------|
+| 激活虚拟环境 | `.venv\Scripts\activate` (Win) / `source .venv/bin/activate` (Mac/Linux) | 每次打开新终端都要执行 |
+| 添加生产依赖 | `uv add <包名>` | 自动更新 pyproject.toml 和 uv.lock |
+| 添加开发依赖 | `uv add --dev <包名>` | 如 pytest、black 等 |
+| 同步依赖 | `uv sync` | 拉取代码后执行，确保依赖一致 |
+| 查看已安装依赖 | `uv pip list` | - |
+| 代码格式化 | `black app/` | - |
+| 代码检查 | `ruff check app/ --fix` | - |
+| 运行测试 | `pytest` | - |
+| 退出虚拟环境 | `deactivate` | - |
+
+#### 常见问题排查
+
+**Q: `uv sync` 报错 "Unable to determine which files to ship"**
+A: 确保 `backend/app/__init__.py` 文件存在。
+
+**Q: 激活虚拟环境后 `python --version` 不是 3.11**
+A: 删除 `.venv/` 目录，重新执行 `uv sync`。
+
+**Q: 依赖冲突怎么办？**
+A: 删除 `uv.lock` 和 `.venv/`，重新执行 `uv sync`。
+
+**Q: 拉取代码后项目跑不起来？**
+A: 执行 `uv sync` 同步依赖（可能有人添加了新依赖）。
+
+**Q: Windows 下激活脚本报错 "无法加载文件，因为在此系统上禁止运行脚本"？**
+A: PowerShell 以管理员身份运行：`Set-ExecutionPolicy RemoteSigned`，然后重新激活。
 
 ### 5.2 前端
 
@@ -373,7 +500,12 @@ chore: 构建
 - [ ] 查看开发路线图，了解当前进度
 - [ ] 查看更新记录，了解最近变更
 - [ ] 查看运行日志，了解已知问题
-- [ ] 搭建开发环境，确保能正常运行
+- [ ] 安装 uv（参考 5.1 节第一步）
+- [ ] 进入 `backend/` 目录，执行 `uv python install` 安装 Python 3.11
+- [ ] 执行 `uv sync` 创建虚拟环境并安装依赖
+- [ ] 激活虚拟环境，验证 `python --version` 输出 3.11.x
+- [ ] 配置 `.env` 环境变量
+- [ ] 启动开发服务器，访问 http://localhost:8000/docs 验证
 - [ ] 阅读核心代码，理解架构
 - [ ] 联系项目负责人，了解背景
 
