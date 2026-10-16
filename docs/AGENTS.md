@@ -23,7 +23,8 @@
 ### 后端
 - **框架**：FastAPI 0.109+
 - **ORM**：SQLAlchemy 2.0+（异步）
-- **数据库**：PostgreSQL 15+
+- **数据库**：MySQL 8.0+（端口59000，库名GuangdongEducationStudyAbroadProgram）
+- **数据库驱动**：aiomysql（异步MySQL驱动）
 - **缓存**：Redis 7+
 - **认证**：JWT（python-jose）
 - **密码加密**：bcrypt（passlib）
@@ -40,7 +41,8 @@
 - **HTTP**：Axios 1.6+
 
 ### AI能力
-- **平台**：Dify 0.8+
+- **平台**：Dify 1.16.0-rc1
+- **协议**：OpenAI协议接口
 - **能力**：Agent编排、RAG知识库、工作流
 
 ### 部署
@@ -102,15 +104,28 @@ GuangdongEducationStudyAbroadProgram/
 
 ### 4.1 用户角色
 
-| 角色 | 说明 | 核心功能 |
-|------|------|----------|
-| STUDENT | 学生 | 请假、考务查询、心理测评、反馈提交 |
-| EMPLOYEE | 员工 | CRM管理、日报、成绩录入、审批 |
-| ADMIN | 管理员 | 用户管理、系统配置、数据导出 |
+| 角色 | 编码 | 说明 | 账号来源 | 核心功能 |
+|------|------|------|----------|----------|
+| 意向客户 | `PROSPECT` | 陌生访客、意向客户，尚未与公司有业务往来 | 自行注册（功能权限需由员工开通） | 浏览课程/活动、提交咨询、活动报名 |
+| 留学生 | `STUDENT` | 公司核心服务对象 | 员工申请 → 经理审批后转化 | 请假、考务查询、心理关怀、反馈提交、课程报名、进度追踪、生活支持、更多服务 |
+| 员工 | `EMPLOYEE` | 公司工作人员（普通员工） | 管理层创建 | CRM录入/跟进（支持文字/PDF/照片/Word/Excel多格式）、代客户申请留学生（需经理审批）、审批学生流程、口述日报、成绩录入 |
+| 管理层 | `MANAGER` | 公司管理人员（含经理/总裁） | 系统管理员创建（测试用）或其他管理层创建 | 全部客户查询、经营看板、智能报告、审批员工流程、员工管理、权限配置 |
 
-### 4.2 数据库表（11张核心表）
+**权限模型**：
+- PROSPECT/STUDENT/EMPLOYEE：固定权限集
+- MANAGER：基础权限 + `sys_user.permissions` JSON 字段中定义的额外权限（由系统管理员逐人配置）
+- 系统管理员账号：仅测试用，不参与业务流程
+- 意向客户注册后状态为"待开通"，需员工审核开通
+- 员工审批学生流程（单层审批）；留学生转化需经理审批
+- 员工数据隔离：普通员工只能看到自己名下的客户
+- 二期拆分为3个独立角色：人事（HR，不可看客户/经营）、经理（MANAGER_DIRECTOR，只看下属+自己客户）、总裁（MANAGER_PRESIDENT，看全部）
 
-1. **sys_user** - 统一用户表
+### 4.2 数据库表（17张核心表）
+
+> **数据库**：MySQL 8.0+，端口59000，库名 `GuangdongEducationStudyAbroadProgram`
+> **自动建表**：应用启动时自动创建所有表，无需手动执行SQL
+
+1. **sys_user** - 统一用户表（含permissions JSON字段）
 2. **student_admin_service** - 学生行政服务表
 3. **student_psych_profile** - 心理健康画像表
 4. **student_psych_alert** - 心理预警表
@@ -121,6 +136,12 @@ GuangdongEducationStudyAbroadProgram/
 9. **course_project** - 课程与项目表
 10. **event_lecture** - 活动与讲座表
 11. **event_registration** - 活动报名表
+12. **customer_assessment** - 客户研判记录表（含is_valid有效性标记）
+13. **ai_report** - 智能报告表
+14. **employee_todo** - 员工待办事项表
+15. **student_academic** - 学生学业考务表
+16. **student_application_progress** - 留学申请进度表
+17. **sys_notification** - 站内消息表
 
 ### 4.3 API接口分组
 
@@ -133,11 +154,71 @@ GuangdongEducationStudyAbroadProgram/
 - `/api/v1/events/*` - 活动管理
 - `/api/v1/ai/*` - AI服务（Dify）
 
-### 4.4 AI Agent（3个）
+### 4.4 AI Agent（3个，均置顶显示）
 
-1. **留学生智能管家** - 请假、考务、心理监测、反馈、知识问答
-2. **企业员工助手** - CRM、日报、成绩、待办、业务知识
-3. **客服Agent** - 课程推荐、活动报名、FAQ、留学咨询
+1. **智能客服Agent** — 公开主页置顶，7大场景智能应答 + 主动信息采集 + 年轻化人设
+2. **企业智能助手Agent** — 员工端置顶，CRM管理、口述日报整理、待办提醒、指令式处理（需二次确认）、权限感知（员工/管理层不同能力）
+3. **学生智能助手Agent** — 留学生端置顶，行政服务代办、心理关怀（限制预期：不承诺退费/不给出医疗级建议）、学业提醒、主动推送
+
+### 4.5 页面结构概览
+
+**公开主页（无需登录）**：
+- 公司介绍、业务展示、课程/活动浏览、留学政策、FAQ
+- 注册/登录入口
+- 智能客服Agent窗口（右下角置顶）
+
+**员工端（登录后）**：
+- 普通员工：工作台 → CRM录入/查询 → 代客申请 → 审批学生 → 成绩录入 → 口述日报 → 组织架构 → 新人指引 → 待办 → 个人信息
+- 管理层（一期）：经营看板 → 全部客户 → 智能报告(5类) → 审批中心 → 用户管理 → 权限配置 → 个人信息
+- 企业智能助手Agent窗口（右下角置顶）
+
+**留学生端（登录后）**：
+- 工作台 → 请假 → 心理关怀 → 售后反馈 → 学业考务 → 进度追踪 → 生活支持 → 更多服务 → 个人信息
+- 学生智能助手Agent窗口（右下角置顶）
+
+### 4.6 关键业务规则
+
+**客户信息采集**：
+- 三渠道：意向客户自行注册 / 员工录入（多格式：文字/PDF/照片/Word/Excel） / 管理层录入
+- 有效性判断：电话号码为唯一有效性标准，有电话号码=有效线索，无联系方式=仅记录咨询日志
+- 客户去重：按电话号码去重，先录入的员工获得跟进权；管理层可变更归属
+- 研判结果：仅员工和管理层可见，意向客户和留学生不可查看
+
+**审批流程**：
+- 学生请假等流程：负责的员工单层审批
+- 意向客户→留学生转化：员工申请 → 经理审批
+
+**消息通知**：站内消息 + Agent主动推送（学生登录后）
+
+**活动报名**：必须注册登录后才可报名，未登录跳转登录页，登录后跳回继续
+
+**指令式业务处理**：Agent执行前需二次确认
+
+### 4.7 一期/二期范围
+
+**一期（核心业务闭环，15周）**：
+- 公开主页 + 智能客服Agent
+- 员工端（CRM/审批/日报/成绩）+ 企业助手Agent
+- 管理层端（看板/报告/审批/权限配置）
+- 留学生端（7个子模块）+ 学生助手Agent
+- 4个业务角色：PROSPECT/STUDENT/EMPLOYEE/MANAGER
+
+**二期（扩展功能）**：
+- 人事模块拆分（独立HR角色）
+- 经理/总裁拆分（MANAGER_DIRECTOR + MANAGER_PRESIDENT）
+- 专业心理测评量表
+- NL2SQL增强
+- 语音输入增强
+
+### 4.8 已确认的设计决策
+
+| # | 决策 |
+|---|------|
+| 1 | 电话号码为客户信息唯一有效性标准 |
+| 2 | 客户研判结果页面可见（员工+管理层） |
+| 3 | 一期用AI对话式情绪评估，二期引入专业量表 |
+| 4 | 学生界面用"更多服务"替代"增值转化" |
+| 5 | 一期人事并入MANAGER，二期拆分 |
 
 ---
 
@@ -238,24 +319,18 @@ cp .env.example .env
 
 # 编辑 .env 文件，填写实际配置
 # 必须配置的项：
-#   DATABASE_URL - PostgreSQL数据库连接地址
+#   DATABASE_URL - MySQL数据库连接地址（端口59000，库名GuangdongEducationStudyAbroadProgram）
 #   REDIS_URL - Redis连接地址
 #   SECRET_KEY - JWT密钥（请用随机字符串）
-#   DIFY_BASE_URL - Dify服务地址
+#   DIFY_BASE_URL - Dify服务地址（版本1.16.0-rc1，OpenAI协议）
 #   DIFY_*_AGENT_KEY - 各Agent的API Key
 ```
 
-#### 第七步：初始化数据库
+#### 第七步：启动开发服务器
 
 ```bash
-# 确保 PostgreSQL 已启动且数据库已创建
-# 执行数据库迁移
-alembic upgrade head
-```
-
-#### 第八步：启动开发服务器
-
-```bash
+# 确保 MySQL 已启动且数据库 GuangdongEducationStudyAbroadProgram 已创建
+# 应用启动时会自动创建所有17张表，无需手动执行迁移
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
@@ -349,8 +424,8 @@ docker-compose down
 ### 6.1 后端环境变量（.env）
 
 ```bash
-# 数据库
-DATABASE_URL=postgresql+asyncpg://admin:password@localhost:5432/education
+# 数据库（MySQL 8.0+，端口59000）
+DATABASE_URL=mysql+aiomysql://root:your_password@localhost:59000/GuangdongEducationStudyAbroadProgram
 
 # Redis
 REDIS_URL=redis://localhost:6379
@@ -359,8 +434,10 @@ REDIS_URL=redis://localhost:6379
 SECRET_KEY=your-secret-key-here
 ACCESS_TOKEN_EXPIRE_MINUTES=1440
 
-# Dify
+# Dify（版本1.16.0-rc1，使用OpenAI协议）
 DIFY_BASE_URL=http://localhost:3000
+DIFY_VERSION=1.16.0-rc1
+DIFY_API_PROTOCOL=openai
 DIFY_STUDENT_AGENT_KEY=app-xxx
 DIFY_EMPLOYEE_AGENT_KEY=app-yyy
 DIFY_CUSTOMER_AGENT_KEY=app-zzz
@@ -432,8 +509,12 @@ chore: 构建
 | 200 | 成功 |
 | 40001 | 用户名或密码错误 |
 | 40002 | 参数验证失败 |
+| 40003 | 账号已被禁用 |
+| 40004 | 用户名已存在 |
+| 40006 | 账号待开通 |
 | 40101 | 未登录或Token过期 |
 | 40301 | 无权限 |
+| 40901 | 数据冲突（客户重复录入） |
 | 50001 | 服务器错误 |
 
 ---
@@ -443,10 +524,11 @@ chore: 构建
 ### Q1: 数据库连接失败？
 
 检查：
-1. PostgreSQL是否启动
+1. MySQL是否启动（端口59000）
 2. DATABASE_URL配置是否正确
-3. 数据库是否已创建
+3. 数据库 `GuangdongEducationStudyAbroadProgram` 是否已创建
 4. 用户名密码是否正确
+5. MySQL字符集是否为utf8mb4
 
 ### Q2: Dify接口调用失败？
 
@@ -511,5 +593,5 @@ chore: 构建
 
 ---
 
-**最后更新**：2026-10-14  
+**最后更新**：2026-10-15  
 **维护人**：开发团队
