@@ -1,4 +1,4 @@
-from sqlalchemy import DateTime, ForeignKey, Integer, JSON, String, Text, func
+from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, JSON, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
@@ -12,7 +12,7 @@ class CrmLead(Base):
     contact_info: Mapped[str | None] = mapped_column(Text, nullable=True)
     background_info: Mapped[str | None] = mapped_column(Text, nullable=True)
     follow_up_history = mapped_column(JSON, nullable=True)
-    status: Mapped[str] = mapped_column(String(20), default="新增意向", index=True)
+    status: Mapped[str] = mapped_column(String(20), default="新录入", index=True)
     owner_employee_id: Mapped[int] = mapped_column(Integer, ForeignKey("sys_user.id"), nullable=False, index=True)
     create_time = mapped_column(DateTime, server_default=func.now())
     update_time = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
@@ -30,9 +30,24 @@ class CustomerAssessment(Base):
     match_score: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
     matched_products = mapped_column(JSON, nullable=True)
     recommendation: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_valid: Mapped[bool] = mapped_column(Boolean, default=True)
+    invalid_reason: Mapped[str | None] = mapped_column(String(200), nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="pending", index=True)
     employee_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("sys_user.id"), nullable=True, index=True)
     create_time = mapped_column(DateTime, server_default=func.now())
+
+
+class CrmFollowUp(Base):
+    __tablename__ = "crm_follow_up"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    lead_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("crm_lead.id"), nullable=False, index=True)
+    employee_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("sys_user.id"), nullable=False, index=True)
+    follow_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    content: Mapped[str | None] = mapped_column(Text, nullable=True)
+    next_action: Mapped[str | None] = mapped_column(Text, nullable=True)
+    next_date = mapped_column(DateTime, nullable=True)
+    created_at = mapped_column(DateTime, server_default=func.now())
 
 
 class AiReport(Base):
@@ -47,3 +62,13 @@ class AiReport(Base):
     generated_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("sys_user.id"), nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="generating", index=True)
     create_time = mapped_column(DateTime, server_default=func.now())
+
+
+class AiReportAttachment(Base):
+    __tablename__ = "ai_report_attachment"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    report_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("ai_report.id"), nullable=False, index=True)
+    file_path: Mapped[str] = mapped_column(String(500), nullable=False)
+    file_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    created_at = mapped_column(DateTime, server_default=func.now())

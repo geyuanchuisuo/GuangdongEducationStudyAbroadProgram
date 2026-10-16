@@ -45,25 +45,29 @@ app.add_middleware(RequestLogMiddleware)
 
 @app.exception_handler(BusinessError)
 async def business_error_handler(request: Request, exc: BusinessError):
+    trace_id = getattr(request.state, "request_id", "")
     logger.warning(
-        "业务异常 [%s] %s: code=%s message=%s",
+        "业务异常 [%s] [%s] %s: code=%s message=%s",
+        trace_id,
         request.method,
         request.url.path,
         exc.code,
         exc.message,
     )
-    return error_response(code=exc.code, message=exc.message)
+    return error_response(code=exc.code, message=exc.message, trace_id=trace_id)
 
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
+    trace_id = getattr(request.state, "request_id", "")
     logger.exception(
-        "未处理异常 [%s] %s: %s",
+        "未处理异常 [%s] [%s] %s: %s",
+        trace_id,
         request.method,
         request.url.path,
         str(exc),
     )
-    return error_response(code=50001, message="服务器内部错误")
+    return error_response(code=50001, message="服务器内部错误", trace_id=trace_id)
 
 
 app.include_router(auth.router, prefix=settings.API_V1_PREFIX)

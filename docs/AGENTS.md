@@ -120,28 +120,49 @@ GuangdongEducationStudyAbroadProgram/
 - 员工数据隔离：普通员工只能看到自己名下的客户
 - 二期拆分为3个独立角色：人事（HR，不可看客户/经营）、经理（MANAGER_DIRECTOR，只看下属+自己客户）、总裁（MANAGER_PRESIDENT，看全部）
 
-### 4.2 数据库表（17张核心表）
+### 4.2 数据库表（27张，v5.0.0更新）
 
 > **数据库**：MySQL 8.0+，端口59000，库名 `GuangdongEducationStudyAbroadProgram`
 > **自动建表**：应用启动时自动创建所有表，无需手动执行SQL
 
+**公共基础表（M0管理）**：
 1. **sys_user** - 统一用户表（含permissions JSON字段）
-2. **student_admin_service** - 学生行政服务表
-3. **student_psych_profile** - 心理健康画像表
-4. **student_psych_alert** - 心理预警表
-5. **student_feedback_ticket** - 售后反馈工单表
-6. **crm_lead** - 意向客户表
-7. **employee_daily_report** - 员工日报表
-8. **student_score** - 学生成绩表
-9. **course_project** - 课程与项目表
-10. **event_lecture** - 活动与讲座表
+2. **sys_notification** - 站内消息表
+3. **sys_event** - 事件总线表（v5.0.0新增）
+4. **sys_approval** - 通用审批单表（v5.0.0新增）
+5. **sys_operation_log** - 操作日志表（v5.0.0新增）
+
+**客户模块表（M1）**：
+6. **crm_lead** - 意向客户表（6态状态机）
+7. **customer_assessment** - 客户研判记录表（含is_valid有效性标记）
+8. **crm_follow_up** - 客户跟进记录表（v5.0.0新增）
+
+**客服模块表（M2）**：
+9. **course_project** - 课程与项目表（公共共用，M2维护）
+10. **event_lecture** - 活动与讲座表（公共共用，M2维护）
 11. **event_registration** - 活动报名表
-12. **customer_assessment** - 客户研判记录表（含is_valid有效性标记）
-13. **ai_report** - 智能报告表
-14. **employee_todo** - 员工待办事项表
-15. **student_academic** - 学生学业考务表
-16. **student_application_progress** - 留学申请进度表
-17. **sys_notification** - 站内消息表
+12. **cs_chat_session** - 客服会话表（v5.0.0新增）
+13. **cs_chat_message** - 客服消息表（v5.0.0新增）
+14. **cs_intent_log** - 意图/转化日志表（v5.0.0新增）
+15. **cs_faq** - 常见问答对表（v5.0.0新增）
+
+**员工模块表（M3）**：
+16. **employee_daily_report** - 员工日报表
+17. **student_score** - 学生成绩表
+18. **employee_org** - 组织架构表（v5.0.0新增）
+19. **employee_todo** - 员工待办事项表
+
+**学生模块表（M4）**：
+20. **student_admin_service** - 学生行政服务表
+21. **student_psych_profile** - 心理健康画像表
+22. **student_psych_alert** - 心理预警表
+23. **student_feedback_ticket** - 售后反馈工单表
+24. **student_academic** - 学生学业考务表
+25. **student_application_progress** - 留学申请进度表
+
+**报告模块表（M5）**：
+26. **ai_report** - 智能报告表
+27. **ai_report_attachment** - 报告附件表（v5.0.0新增）
 
 ### 4.3 API接口分组
 
@@ -152,7 +173,29 @@ GuangdongEducationStudyAbroadProgram/
 - `/api/v1/crm/*` - CRM客户管理
 - `/api/v1/courses/*` - 课程项目
 - `/api/v1/events/*` - 活动管理
-- `/api/v1/ai/*` - AI服务（Dify）
+- `/api/v1/ai/*` - AI服务（统一网关，禁止直连Dify）
+- `/api/v1/events/bus/*` - 事件总线（v5.0.0新增）
+- `/api/v1/approvals/*` - 审批引擎（v5.0.0新增）
+- `/api/v1/notifications/*` - 通知中心（v5.0.0新增）
+- `/api/v1/files/*` - 文件存储（v5.0.0新增）
+
+### 4.3.1 模块划分与职责边界（v5.0.0新增）
+
+> 详见 `promts/lon/提示词整合测试_demo/docs/基础架构方案_五人并行开发.md`
+
+| 模块 | 核心职责 | 对外查询接口（供M5报告取数） |
+|------|---------|---------------------------|
+| **M0 公共基础设施** | 认证鉴权、统一响应/异常、AI网关、事件总线、审批引擎、通知中心、文件存储、数据权限 | - |
+| **M1 客户模块** | 客户注册/登录、画像研判、客户CRUD、6态状态流转 | `GET /api/v1/crm/leads/{id}`, `GET /api/v1/crm/leads/stats` |
+| **M2 客服模块** | 7大场景对话、知识库RAG、活动报名闭环、转线索 | `GET /api/v1/cs/courses`, `GET /api/v1/cs/events` |
+| **M3 员工模块** | CRM管理、日报、成绩、审批、口述日报 | `GET /api/v1/employee/reports`, `GET /api/v1/employee/reports/summary` |
+| **M4 学生模块** | 请假、心理关怀、售后反馈、学业考务 | `GET /api/v1/student/psych/stats`, `GET /api/v1/student/tickets/stats` |
+| **M5 报告模块** | 5类报告生成、经营看板 | 只调各模块接口取数，不直接查别人的表 |
+
+**模块间解耦原则**：
+- 模块间业务流转走事件总线（`sys_event`），不直接import对方service
+- 报告模块只调各模块暴露的查询接口，不直接查别人的表
+- 所有模块共用M0的AI网关，禁止直连Dify
 
 ### 4.4 AI Agent（3个，均置顶显示）
 
@@ -593,5 +636,5 @@ chore: 构建
 
 ---
 
-**最后更新**：2026-10-15  
+**最后更新**：2026-10-16  
 **维护人**：开发团队
