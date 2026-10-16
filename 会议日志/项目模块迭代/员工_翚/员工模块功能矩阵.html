@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>员工模块 · 功能矩阵</title>
+<style>
+  :root{
+    --line:#e3e8ef; --bg:#f6f8fb; --txt:#1f2937; --sub:#6b7280;
+    --p1:#2563eb; --p2:#f59e0b; --emp:#dbeafe; --mgr:#dcfce7; --hr:#fce7f3; --pres:#fef3c7; --na:#eef1f5;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"PingFang SC","Microsoft YaHei","WenQuanYi Micro Hei",system-ui,sans-serif;
+    color:var(--txt);background:var(--bg);line-height:1.6}
+  .wrap{max-width:1400px;margin:0 auto;padding:32px 24px 64px}
+  header{background:linear-gradient(120deg,#1e3a8a,#2563eb);color:#fff;border-radius:14px;padding:28px 32px;box-shadow:0 8px 24px rgba(30,58,138,.18)}
+  header h1{margin:0 0 6px;font-size:26px;letter-spacing:.5px}
+  header p{margin:0;opacity:.9;font-size:14px}
+  .toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:20px 0 14px}
+  .toolbar .grp{display:flex;gap:6px;flex-wrap:wrap;background:#fff;padding:6px;border-radius:10px;
+    border:1px solid var(--line);box-shadow:0 1px 3px rgba(0,0,0,.04)}
+  .toolbar button{border:1px solid var(--line);background:#fff;color:var(--txt);padding:6px 14px;border-radius:7px;
+    cursor:pointer;font-size:13px;transition:.15s}
+  .toolbar button:hover{border-color:var(--p1);color:var(--p1)}
+  .toolbar button.on{background:var(--p1);border-color:var(--p1);color:#fff}
+  .legend{margin-left:auto;font-size:13px;color:var(--sub)}
+  .card{background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,.04)}
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  thead th{position:sticky;top:0;background:#111827;color:#fff;font-weight:600;padding:12px 14px;text-align:left;z-index:2}
+  thead th.phase-h{background:#1e3a8a;font-size:14px;letter-spacing:1px}
+  tbody td{padding:10px 14px;border-top:1px solid var(--line);vertical-align:top}
+  tbody td.sub{font-weight:600;color:#1e3a8a;background:#fafbfe;border-right:1px solid var(--line);white-space:nowrap}
+  tbody td.desc{min-width:420px}
+  tbody td.role{min-width:110px}
+  tbody td.note{color:var(--sub);min-width:220px}
+  .row-alt{background:#fafcff}
+  .badge{display:inline-block;padding:2px 9px;border-radius:20px;font-size:12px;font-weight:600;white-space:nowrap}
+  .b-employee{background:var(--emp);color:#1e40af}
+  .b-mgr{background:var(--mgr);color:#166534}
+  .b-hr{background:var(--hr);color:#9d174d}
+  .b-pres{background:var(--pres);color:#92400e}
+  .b-both{background:#ede9fe;color:#5b21b6}
+  .b-na{background:var(--na);color:#9ca3af}
+  .roles{display:flex;gap:4px;flex-wrap:wrap}
+  .phase{display:inline-block;padding:3px 12px;border-radius:20px;font-size:12px;font-weight:700;margin-right:8px}
+  .p1{background:#dbeafe;color:#1e40af}.p2{background:#fef3c7;color:#92400e}
+  .sec-title{display:flex;align-items:center;gap:10px;margin:26px 0 10px;font-size:16px;font-weight:700;color:#111827}
+  .sec-title::before{content:"";width:5px;height:18px;border-radius:3px;background:var(--p1)}
+  .sec-title.p2::before{background:var(--p2)}
+  .count{font-size:12px;color:var(--sub);font-weight:400}
+  footer{margin-top:28px;color:var(--sub);font-size:12.5px;text-align:center}
+  @media print{body{background:#fff}.toolbar{display:none}.card{box-shadow:none}thead th{position:static}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>员工模块 · 功能矩阵</h1>
+    <p>按模块 / 子模块 / 功能点三级拆解，横向标注一期（本期上线）与二期（后续规划）的角色覆盖，一眼看清功能归属与迭代节奏</p>
+  </header>
+
+  <div class="toolbar">
+    <div class="grp" id="phaseGrp">
+      <button data-f="phase" data-v="all" class="on">全部阶段</button>
+      <button data-f="phase" data-v="一期">仅一期</button>
+      <button data-f="phase" data-v="二期">仅二期</button>
+    </div>
+    <div class="grp" id="roleGrp">
+      <button data-f="role" data-v="E" class="on">员工</button>
+      <button data-f="role" data-v="M" class="on">管理层</button>
+      <button data-f="role" data-v="HR">人事(二期)</button>
+      <button data-f="role" data-v="P">总裁</button>
+    </div>
+    <span class="legend">
+<span class="phase p1">一期 · 本期上线</span>
+<span class="phase p2">二期 · 后续规划</span>
+　角色标签：蓝=普通员工　绿=管理层(经理/总裁)　粉=人事(二期)　黄=总裁　紫=员工+管理层　灰=不涉及</span>
+  </div>
+
+  <div class="sec-block sec-block" data-phase="一期">
+<div class="sec-title ">主页面（登录后首页）<span class="count"></span></div>
+<div class="card"><table>
+<thead><tr>
+<th class="phase-h" style="width:150px">一期</th>
+<th>功能点 / 业务规则</th>
+<th style="width:110px">一期 · 普通员工</th>
+<th style="width:110px">一期 · 管理层</th>
+<th style="width:220px">关键规则 / 备注</th>
+</tr></thead>
+<tbody><tr data-roles="EM"><td class="sub" rowspan="4">工作台概览</td><td class="desc">今日待办（待办主动推送：投诉反馈跟进处理、客户跟进提醒、待审批事项，点击跳转相应页面）</td><td class="role"><span class="roles"><span class="badge b-employee">员工</span></span></td><td class="role"><span class="roles"><span class="badge b-mgr">管理层</span></span></td><td class="note">Agent 推送；登录时拉取 + 关键动作后实时推送</td></tr><tr data-roles="EM"><td class="desc">客户跟进提醒（点击跳转 + 调取历史跟进记录）</td><td class="role"><span class="roles"><span class="badge b-employee">员工</span></span></td><td class="role"><span class="roles"><span class="badge b-mgr">管理层</span></span></td><td class="note">同员工数据隔离</td></tr><tr data-roles="M"><td class="desc">业绩概览：新增意向数、转化率、签约金额、在办学生数、投诉率</td><td class="role"><span class="roles"><span class="badge b-na">不涉及</span></span></td><td class="role"><span class="roles"><span class="badge b-mgr">管理层</span></span></td><td class="note">经营看板</td></tr><tr data-roles="M"><td class="desc">全域客户数据 / 销售漏斗数据</td><td class="role"><span class="roles"><span class="badge b-na">不涉及</span></span></td><td class="role"><span class="roles"><span class="badge b-mgr">管理层</span></span></td><td class="note">实时同步漏斗</td></tr></tbody>
+</table></div></div>
+<div class="sec-block sec-block" data-phase="一期">
+<div class="sec-title ">导航页 · 客户经营<span class="count"></span></div>
+<div class="card"><table>
+<thead><tr>
+<th class="phase-h" style="width:150px">一期</th>
+<th>功能点 / 业务规则</th>
+<th style="width:110px">一期 · 普通员工</th>
+<th style="width:110px">一期 · 管理层</th>
+<th style="width:220px">关键规则 / 备注</th>
+</tr></thead>
+<tbody><tr data-roles="EM"><td class="sub" rowspan="2">意向客户录入</td><td class="desc">多格式录入（文字 / PDF / 照片 / Word / Excel），系统自动解析并结构化流转至研判模块</td><td class="role"><span class="roles"><span class="badge b-employee">员工</span></span></td><td class="role"><span class="roles"><span class="badge b-mgr">管理层</span></span></td><td class="note">文件大小与页数需明确上限</td></tr><tr data-roles="EM"><td class="desc">Agent 指令式录入（二次确认后执行）</td><td class="role"><span class="roles"><span class="badge b-employee">员工</span></span></td><td class="role"><span class="roles"><span class="badge b-mgr">管理层</span></span></td><td class="note">语音依赖 ASR，离线降级手动输入</td></tr><tr data-roles="EM"><td class="sub" rowspan="3">意向客户查询（员工仅看自己名下）</td><td class="desc">调取意向客户档案，查看研判结果（匹配度评分、推荐产品）</td><td class="role"><span class="roles"><span class="badge b-employee">员工</span></span></td><td class="role"><span class="roles"><span class="badge b-mgr">管理层</span></span></td><td class="note">管理层可查全域</td></tr><tr data-roles="EM"><td class="desc">筛选：按状态 / 匹配度 / 最后跟进时间 / 来源渠道；排序：匹配度 / 更新时间</td><td class="role"><span class="roles"><span class="badge b-employee">员工</span></span></td><td class="role"><span class="roles"><span class="badge b-mgr">管理层</span></span></td><td class="note">—</td></tr><tr data-roles="EM"><td class="desc">调取历史跟进记录</td><td class="role"><span class="roles"><span class="badge b-employee">员工</span></span></td><td class="role"><span class="roles"><span class="badge b-mgr">管理层</span></span></td><td class="note">—</td></tr><tr data-roles="M"><td class="sub" rowspan="1">全部客户查询（管理层）</td><td class="desc">查看所有员工的客户数据，按员工 / 经理（负责团队）下钻</td><td class="role"><span class="roles"><span class="badge b-na">不涉及</span></span></td><td class="role"><span class="roles"><span class="badge b-mgr">管理层</span></span></td><td class="note">数据隔离对管理层放开</td></tr><tr data-roles="EM"><td class="sub" rowspan="2">客户状态更新</td><td class="desc">一键更新流转状态：新录入 → 跟进中 → 意向强烈 → 已签约 → 已入学 → 已流失（含状态机约束条件）</td><td class="role"><span class="roles"><span class="badge b-employee">员工</span></span></td><td class="role"><span class="roles"><span class="badge b-mgr">管理层</span></span></td><td class="note">状态变更写入操作日志</td></tr><tr data-roles="EM"><td class="desc">实时同步销售漏斗数据</td><td class="role"><span class="roles"><span class="badge b-employee">员工</span></span></td><td class="role"><span class="roles"><span class="badge b-mgr">管理层</span></span></td><td class="note">—</td></tr><tr data-roles="M"><td class="sub" rowspan="1">全域客户研判（管理层）</td><td class="desc">查看全部客户研判结果（匹配度评分、推荐产品）</td><td class="role"><span class="roles"><span class="badge b-na">不涉及</span></span></td><td class="role"><span class="roles"><span class="badge b-mgr">管理层</span></span></td><td class="note">—</td></tr><tr data-roles="M"><td class="sub" rowspan="1">客户再分配（管理层）</td><td class="desc">离职员工名下客户批量转移给其他员工；CRM 内变更跟进归属</td><td class="role"><span class="roles"><span class="badge b-na">不涉及</span></span></td><td class="role"><span class="roles"><span class="badge b-mgr">管理层</span></span></td><td class="note">—</td></tr></tbody>
+</table></div></div>
+<div class="sec-block sec-block" data-phase="一期">
+<div class="sec-title ">导航页 · 日报<span class="count"></span></div>
+<div class="card"><table>
+<thead><tr>
+<th class="phase-h" style="width:150px">一期</th>
+<th>功能点 / 业务规则</th>
+<th style="width:110px">一期 · 普通员工</th>
+<th style="width:110px">一期 · 管理层</th>
+<th style="width:220px">关键规则 / 备注</th>
+</tr></thead>
+<tbody><tr data-roles="EM"><td class="sub" rowspan="3">日报提交与查看（员工）</td><td class="desc">仅查看自己名下日报；管理层快速查询与汇总团队成员日报</td><td class="role"><span class="roles"><span class="badge b-employee">员工</span></span></td><td class="role"><span class="roles"><span class="badge b-mgr">管理层</span></span></td><td class="note">—</td></tr><tr data-roles="E"><td class="desc">当日工作进展提报；支持保存草稿；次日 0 点前可补提，之后需提交补报申请（经理审批）</td><td class="role"><span class="roles"><span class="badge b-employee">员工</span></span></td><td class="role"><span class="roles"><span class="badge b-na">不涉及</span></span></td><td class="note">—</td></tr><tr data-roles="EM"><td class="desc">口述日报：语音转文字 → AI 整理为结构化格式 → 确认 → 提交</td><td class="role"><span class="roles"><span class="badge b-employee">员工</span></span></td><td class="role"><span class="roles"><span class="badge b-mgr">管理层</span></span></td><td class="note">结构化模板：今日工作 / 明日计划 / 问题与反馈</td></tr><tr data-roles="M"><td class="sub" rowspan="2">日报查阅（管理层）</td><td class="desc">员工日报汇总报告（日 / 周）</td><td class="role"><span class="roles"><span class="badge b-na">不涉及</span></span></td><td class="role"><span class="roles"><span class="badge b-mgr">管理层</span></span></td><td class="note">—</td></tr><tr data-roles="M"><td class="desc">对普通员工周报、日报进行批示 / 注释（经理批示仅该员工 + 上级可见）</td><td class="role"><span class="roles"><span class="badge b-na">不涉及</span></span></td><td class="role"><span class="roles"><span class="badge b-mgr">管理层</span></span></td><td class="note">二期权限拆分后按部门隔离</td></tr></tbody>
+</table></div></div>
+<div class="sec-block sec-block" data-phase="一期">
+<div class="sec-title ">导航页 · 学生业务综管<span class="count"></span></div>
+<div class="card"><table>
+<thead><tr>
+<th class="phase-h" style="width:150px">一期</th>
+<th>功能点 / 业务规则</th>
+<th style="width:110px">一期 · 普通员工</th>
+<th style="width:110px">一期 · 管理层</th>
+<th style="width:220px">关键规则 / 备注</th>
+</tr></thead>
+<tbody><tr data-roles="EM"><td class="sub" rowspan="1">代意向客户申请留学生（需经理审批）</td><td class="desc">user_type：PROSPECT → STUDENT；通知链路：审批结果 → 站内信 + Agent 推送 → 学生端状态变更 → 员工端待办消除</td><td class="role"><span class="roles"><span class="badge b-employee">员工</span></span></td><td class="role"><span class="roles"><span class="badge b-mgr">管理层</span></span></td><td class="note">支持批量通过</td></tr><tr data-roles="EM"><td class="sub" rowspan="1">学生成绩录入与查询</td><td class="desc">负责员工维护，学生端可读</td><td class="role"><span class="roles"><span class="badge b-employee">员工</span></span></td><td class="role"><span class="roles"><span class="badge b-mgr">管理层</span></span></td><td class="note">—</td></tr><tr data-roles="EM"><td class="sub" rowspan="1">学生请假申请在线审批</td><td class="desc">同一学生同一时间段已有请假记录时提示「已有请假申请审批中 / 已通过」</td><td class="role"><span class="roles"><span class="badge b-employee">员工</span></span></td><td class="role"><span class="roles"><span class="badge b-mgr">管理层</span></span></td><td class="note">售后反馈联动</td></tr><tr data-roles="EM"><td class="sub" rowspan="3">学生信息健康 · 心理关怀</td><td class="desc">Agent 对话式情绪疏导 + 情绪标签与评分写入心理画像（一期不做标准化量表）</td><td class="role"><span class="roles"><span class="badge b-employee">员工</span></span></td><td class="role"><span class="roles"><span class="badge b-mgr">管理层</span></span></td><td class="note">二期引入专业心理测评量表</td></tr><tr data-roles="EM"><td class="desc">预警 → 员工端生成「心理关怀待办」→ 标记已沟通 / 已转介 / 已解决 → 形成关怀记录</td><td class="role"><span class="roles"><span class="badge b-employee">员工</span></span></td><td class="role"><span class="roles"><span class="badge b-mgr">管理层</span></span></td><td class="note">—</td></tr><tr data-roles="M"><td class="desc">学生信息健康周报（情绪异常学生列表、趋势图、建议动作）</td><td class="role"><span class="roles"><span class="badge b-na">不涉及</span></span></td><td class="role"><span class="roles"><span class="badge b-mgr">管理层</span></span></td><td class="note">—</td></tr><tr data-roles="EM"><td class="sub" rowspan="2">学生投诉与反馈的跟进处理</td><td class="desc">工单状态：待处理 → 处理中 → 已反馈；处理结果回流学生端</td><td class="role"><span class="roles"><span class="badge b-employee">员工</span></span></td><td class="role"><span class="roles"><span class="badge b-mgr">管理层</span></span></td><td class="note">—</td></tr><tr data-roles="M"><td class="desc">投诉处理周报：本周投诉量、分类（服务 / 质量 / 其他）、处理率、平均处理时长、典型案例</td><td class="role"><span class="roles"><span class="badge b-na">不涉及</span></span></td><td class="role"><span class="roles"><span class="badge b-mgr">管理层</span></span></td><td class="note">—</td></tr><tr data-roles="EM"><td class="sub" rowspan="1">留学申请进度追踪</td><td class="desc">材料审核 → 申请提交 → 收到 Offer → 签证办理 → 行前准备 → 已入学，含备注与更新时间</td><td class="role"><span class="roles"><span class="badge b-employee">员工</span></span></td><td class="role"><span class="roles"><span class="badge b-mgr">管理层</span></span></td><td class="note">由负责员工在后台更新</td></tr></tbody>
+</table></div></div>
+<div class="sec-block sec-block" data-phase="一期">
+<div class="sec-title ">导航页 · 组织与指引<span class="count"></span></div>
+<div class="card"><table>
+<thead><tr>
+<th class="phase-h" style="width:150px">一期</th>
+<th>功能点 / 业务规则</th>
+<th style="width:110px">一期 · 普通员工</th>
+<th style="width:110px">一期 · 管理层</th>
+<th style="width:220px">关键规则 / 备注</th>
+</tr></thead>
+<tbody><tr data-roles="EM"><td class="sub" rowspan="2">组织架构查询</td><td class="desc">内置最新组织架构图，查询各部门职能及同事联系方式；按姓名 / 部门搜索</td><td class="role"><span class="roles"><span class="badge b-employee">员工</span></span></td><td class="role"><span class="roles"><span class="badge b-mgr">管理层</span></span></td><td class="note">架构层级见《公司新人指南.md》</td></tr><tr data-roles="EM"><td class="desc">联系方式脱敏显示，二次确认后才展示完整电话</td><td class="role"><span class="roles"><span class="badge b-employee">员工</span></span></td><td class="role"><span class="roles"><span class="badge b-mgr">管理层</span></span></td><td class="note">—</td></tr><tr data-roles="EM"><td class="sub" rowspan="1">新人入职指引（知识库 + 引导式流程）</td><td class="desc">新老员工即时入职指南、规章制度解答、业务流程指引</td><td class="role"><span class="roles"><span class="badge b-employee">员工</span></span></td><td class="role"><span class="roles"><span class="badge b-mgr">管理层</span></span></td><td class="note">Agent 以 RAG 检索新人手册回答</td></tr></tbody>
+</table></div></div>
+<div class="sec-block sec-block" data-phase="一期">
+<div class="sec-title ">企业智能助手 Agent 窗口（右下角置顶，全站可见）<span class="count"></span></div>
+<div class="card"><table>
+<thead><tr>
+<th class="phase-h" style="width:150px">一期</th>
+<th>功能点 / 业务规则</th>
+<th style="width:110px">一期 · 普通员工</th>
+<th style="width:110px">一期 · 管理层</th>
+<th style="width:220px">关键规则 / 备注</th>
+</tr></thead>
+<tbody><tr data-roles="EM"><td class="sub" rowspan="3">核心策略</td><td class="desc">主动提醒：未达成任务、待跟进客户、待审批事项</td><td class="role"><span class="roles"><span class="badge b-employee">员工</span></span></td><td class="role"><span class="roles"><span class="badge b-mgr">管理层</span></span></td><td class="note">登录拉取 + 实时推送</td></tr><tr data-roles="EM"><td class="desc">权限感知 + 数据隔离：员工只看自己名下，管理层可查全域</td><td class="role"><span class="roles"><span class="badge b-employee">员工</span></span></td><td class="role"><span class="roles"><span class="badge b-mgr">管理层</span></span></td><td class="note">—</td></tr><tr data-roles="EM"><td class="desc">指令式业务处理（二次确认卡片：即将执行 XX，[确认][取消]）</td><td class="role"><span class="roles"><span class="badge b-employee">员工</span></span></td><td class="role"><span class="roles"><span class="badge b-mgr">管理层</span></span></td><td class="note">—</td></tr><tr data-roles="E"><td class="sub" rowspan="2">员工端能力</td><td class="desc">客户信息查询 / 录入 / 跟进记录、待办提醒、组织架构查询、新人指引</td><td class="role"><span class="roles"><span class="badge b-employee">员工</span></span></td><td class="role"><span class="roles"><span class="badge b-na">不涉及</span></span></td><td class="note">多轮上下文：一期支持 5 轮以内</td></tr><tr data-roles="E"><td class="desc">意图识别边界：薪资、人事任免等非授权指令返回「权限不足 / 请联系 HR」</td><td class="role"><span class="roles"><span class="badge b-employee">员工</span></span></td><td class="role"><span class="roles"><span class="badge b-na">不涉及</span></span></td><td class="note">—</td></tr><tr data-roles="M"><td class="sub" rowspan="1">管理层额外能力</td><td class="desc">全域客户查询、经营状况查询与分析、流程审批、员工管理、日报汇总查看、智能报告查询</td><td class="role"><span class="roles"><span class="badge b-na">不涉及</span></span></td><td class="role"><span class="roles"><span class="badge b-mgr">管理层</span></span></td><td class="note">—</td></tr></tbody>
+</table></div></div>
+<div class="sec-block sec-block" data-phase="一期">
+<div class="sec-title ">个人信息 / 消息 / 日志<span class="count"></span></div>
+<div class="card"><table>
+<thead><tr>
+<th class="phase-h" style="width:150px">一期</th>
+<th>功能点 / 业务规则</th>
+<th style="width:110px">一期 · 普通员工</th>
+<th style="width:110px">一期 · 管理层</th>
+<th style="width:220px">关键规则 / 备注</th>
+</tr></thead>
+<tbody><tr data-roles="E"><td class="sub" rowspan="3">个人信息页面（员工）</td><td class="desc">基本信息查看修改（姓名、联系方式、部门）并跳转组织架构</td><td class="role"><span class="roles"><span class="badge b-employee">员工</span></span></td><td class="role"><span class="roles"><span class="badge b-na">不涉及</span></span></td><td class="note">—</td></tr><tr data-roles="E"><td class="desc">密码修改</td><td class="role"><span class="roles"><span class="badge b-employee">员工</span></span></td><td class="role"><span class="roles"><span class="badge b-na">不涉及</span></span></td><td class="note">—</td></tr><tr data-roles="E"><td class="desc">我的客户统计（本月新增 / 跟进中 / 已转化）</td><td class="role"><span class="roles"><span class="badge b-employee">员工</span></span></td><td class="role"><span class="roles"><span class="badge b-na">不涉及</span></span></td><td class="note">—</td></tr><tr data-roles="M"><td class="sub" rowspan="1">个人信息页面（管理层）</td><td class="desc">基本信息查看修改、密码修改、我的审批待办统计</td><td class="role"><span class="roles"><span class="badge b-na">不涉及</span></span></td><td class="role"><span class="roles"><span class="badge b-mgr">管理层</span></span></td><td class="note">—</td></tr><tr data-roles="M"><td class="sub" rowspan="1">消息中心（管理层）</td><td class="desc">站内信汇总：审批结果、预警通知、系统公告；Agent 不可用时兜底</td><td class="role"><span class="roles"><span class="badge b-na">不涉及</span></span></td><td class="role"><span class="roles"><span class="badge b-mgr">管理层</span></span></td><td class="note">—</td></tr><tr data-roles="M"><td class="sub" rowspan="1">操作日志</td><td class="desc">关键操作留痕：客户状态变更、审批、权限调整</td><td class="role"><span class="roles"><span class="badge b-na">不涉及</span></span></td><td class="role"><span class="roles"><span class="badge b-mgr">管理层</span></span></td><td class="note">—</td></tr></tbody>
+</table></div></div>
+<div class="sec-block sec-block" data-phase="一期">
+<div class="sec-title ">公共能力 · 数据<span class="count"></span></div>
+<div class="card"><table>
+<thead><tr>
+<th class="phase-h" style="width:150px">一期</th>
+<th>功能点 / 业务规则</th>
+<th style="width:110px">一期 · 普通员工</th>
+<th style="width:110px">一期 · 管理层</th>
+<th style="width:220px">关键规则 / 备注</th>
+</tr></thead>
+<tbody><tr data-roles="EM"><td class="sub" rowspan="1">数据初始化</td><td class="desc">数据库直接录入足量测试数据，可立即进入测试</td><td class="role"><span class="roles"><span class="badge b-employee">员工</span><span class="badge b-mgr">管理层</span></span></td><td class="role"><span class="roles"><span class="badge b-employee">员工</span><span class="badge b-mgr">管理层</span></span></td><td class="note">一期交付前提</td></tr><tr data-roles="EM"><td class="sub" rowspan="1">数据导出</td><td class="desc">客户列表、日报、投诉记录支持 Excel 导出</td><td class="role"><span class="roles"><span class="badge b-employee">员工</span></span></td><td class="role"><span class="roles"><span class="badge b-mgr">管理层</span></span></td><td class="note">字段口径需对齐</td></tr></tbody>
+</table></div></div>
+<div class="sec-block sec-block p2" data-phase="二期">
+<div class="sec-title p2">管理层权限拆分<span class="count"></span></div>
+<div class="card"><table>
+<thead><tr>
+<th class="phase-h" style="width:150px">二期</th>
+<th>功能点 / 业务规则</th>
+<th style="width:110px">一期 · 普通员工</th>
+<th style="width:110px">一期 · 管理层</th>
+<th style="width:220px">关键规则 / 备注</th>
+</tr></thead>
+<tbody><tr data-roles="—"><td class="sub" rowspan="2">人事</td><td class="desc">可操作：新增员工、员工权限调整、员工日报提交监控、员工信息查询、员工流程审批（人事批完经理 / 总裁再批）</td><td class="role"><span class="roles"><span class="badge b-na">不涉及</span></span></td><td class="role"><span class="roles"><span class="badge b-na">不涉及</span></span></td><td class="note">HR；不可查看客户信息、公司经营状况、学生信息</td></tr><tr data-roles="—"><td class="desc">可查看全员日报但不可看客户</td><td class="role"><span class="roles"><span class="badge b-na">不涉及</span></span></td><td class="role"><span class="roles"><span class="badge b-na">不涉及</span></span></td><td class="note">HR</td></tr><tr data-roles="—"><td class="sub" rowspan="1">业务经理</td><td class="desc">仅可见自己团队内容</td><td class="role"><span class="roles"><span class="badge b-na">不涉及</span></span></td><td class="role"><span class="roles"><span class="badge b-na">不涉及</span></span></td><td class="note">M；受部门数据隔离约束</td></tr><tr data-roles="—"><td class="sub" rowspan="1">总裁</td><td class="desc">公司所有信息均可查看与操作</td><td class="role"><span class="roles"><span class="badge b-na">不涉及</span></span></td><td class="role"><span class="roles"><span class="badge b-na">不涉及</span></span></td><td class="note">P；全域口径</td></tr><tr data-roles="—"><td class="sub" rowspan="1">日报权限</td><td class="desc">经理只看本部门；总裁可看全域；人事可看全员日报但不可看客户</td><td class="role"><span class="roles"><span class="badge b-na">不涉及</span></span></td><td class="role"><span class="roles"><span class="badge b-na">不涉及</span></span></td><td class="note">HR/M/P</td></tr><tr data-roles="—"><td class="sub" rowspan="1">心理关怀增强</td><td class="desc">引入专业心理测评量表（一期为对话式评估）</td><td class="role"><span class="roles"><span class="badge b-na">不涉及</span></span></td><td class="role"><span class="roles"><span class="badge b-na">不涉及</span></span></td><td class="note">HR/M/P</td></tr></tbody>
+</table></div></div>
+
+  <footer>角色标记：E 普通员工 · M 管理层（经理/总裁） · HR 人事（二期） · P 总裁 · “/” 表示该能力在对应角色上均具备　|　数据隔离：员工仅看自己名下客户，管理层可查全域</footer>
+</div>
+
+<script>
+const state = {phase:'all', roles:new Set(['E','M'])};
+const sections = Array.from(document.querySelectorAll('.sec-block'));
+
+function matchRole(rolesStr){
+  if(state.roles.size===0) return false;
+  const tokens = rolesStr.split('/').filter(Boolean);
+  if(tokens.includes('—')) return state.roles.has('E') || state.roles.has('M'); // 不涉及行
+  return tokens.some(t=>state.roles.has(t));
+}
+
+function render(){
+  sections.forEach(sec=>{
+    const phaseOk = state.phase==='all' || sec.dataset.phase===state.phase;
+    const rows = Array.from(sec.querySelectorAll('tbody tr'));
+    let visible = 0;
+    rows.forEach(tr=>{
+      const ok = phaseOk && matchRole(tr.dataset.roles);
+      tr.style.display = ok ? '' : 'none';
+      if(ok) visible++;
+    });
+    sec.style.display = visible ? '' : 'none';
+    const cnt = sec.querySelector('.count');
+    if(cnt) cnt.textContent = visible ? '（' + visible + ' 项功能）' : '';
+  });
+}
+
+document.querySelectorAll('.toolbar button').forEach(b=>{
+  b.addEventListener('click',()=>{
+    const f=b.dataset.f, v=b.dataset.v;
+    if(f==='phase'){
+      state.phase = v;
+      document.querySelectorAll('#phaseGrp button').forEach(x=>x.classList.toggle('on',x===b));
+    }else{
+      if(state.roles.has(v)) state.roles.delete(v); else state.roles.add(v);
+      b.classList.toggle('on');
+    }
+    render();
+  });
+});
+render();
+</script>
+</body>
+</html>

@@ -1,0 +1,1779 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>粤教留学项目 · 交互式演示稿</title>
+<style>
+/* ---------- Reset & Base ---------- */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --navy:#0f2c52; --navy-d:#091c38; --blue:#1a5fb4; --blue-l:#3584e4;
+  --teal:#2a9d8f; --gold:#e9a23b; --red:#d94f4f; --green:#2e9e5b;
+  --ink:#1c2530; --ink2:#4a5866; --ink3:#8a97a3; --line:#e3e8ee;
+  --bg:#f4f6f9; --card:#ffffff; --radius:10px; --shadow:0 1px 3px rgba(15,44,82,.08),0 8px 24px rgba(15,44,82,.06);
+  --shadow-lg:0 2px 8px rgba(15,44,82,.1),0 20px 48px rgba(15,44,82,.14);
+}
+html{scroll-behavior:smooth}
+body{
+  font-family:"PingFang SC","Microsoft YaHei","Hiragino Sans GB","WenQuanYi Micro Hei",sans-serif;
+  background:var(--bg); color:var(--ink); line-height:1.65; -webkit-font-smoothing:antialiased;
+}
+button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+input,textarea,select{font-family:inherit}
+
+/* ---------- Layout ---------- */
+.app{display:flex; min-height:100vh}
+.side{
+  width:250px; flex:0 0 250px; background:linear-gradient(175deg,var(--navy) 0%,var(--navy-d) 100%);
+  color:#fff; padding:22px 0; position:sticky; top:0; height:100vh; overflow-y:auto;
+}
+.side .brand{padding:0 20px 18px; border-bottom:1px solid rgba(255,255,255,.12); margin-bottom:12px}
+.side .brand b{display:block; font-size:15px; letter-spacing:.5px}
+.side .brand span{display:block; font-size:11.5px; color:#93b4d6; margin-top:5px; letter-spacing:.3px}
+.side .grp{padding:14px 20px 6px; font-size:10.5px; color:#7d9cbd; letter-spacing:1.4px; text-transform:uppercase}
+.side .navbtn{
+  width:100%; text-align:left; padding:8px 20px 8px 18px; font-size:13px; color:#cfe0f0;
+  display:flex; align-items:center; gap:9px; position:relative; transition:.16s;
+}
+.side .navbtn i{
+  width:17px; height:17px; border-radius:4px; background:rgba(255,255,255,.1); flex:0 0 17px;
+  display:flex; align-items:center; justify-content:center; font-size:9.5px; font-style:normal; color:#a9c6e2; font-weight:700;
+}
+.side .navbtn:hover{background:rgba(255,255,255,.07); color:#fff}
+.side .navbtn.on{background:rgba(53,132,228,.24); color:#fff}
+.side .navbtn.on::before{content:""; position:absolute; left:0; top:4px; bottom:4px; width:3px; background:var(--blue-l); border-radius:0 3px 3px 0}
+.side .navbtn.on i{background:var(--blue-l); color:#fff}
+.side .navbtn small{display:block; font-size:10.5px; color:#7d9cbd; margin-top:1px}
+.side .navbtn.on small{color:#bcd4ee}
+.stage{flex:1; padding:26px 30px 60px; min-width:0}
+
+/* ---------- Topbar ---------- */
+.topbar{display:flex; align-items:center; gap:14px; margin-bottom:20px; flex-wrap:wrap}
+.crumb{display:flex; align-items:center; gap:8px; font-size:12.5px; color:var(--ink3)}
+.crumb b{color:var(--ink2); font-weight:600}
+.pill{font-size:11px; padding:3px 9px; border-radius:20px; background:#e8f0fb; color:var(--blue); border:1px solid #cfe0f6; font-weight:600}
+.pill.gold{background:#fdf3e2; color:#b5721a; border-color:#f2dfbd}
+.pill.teal{background:#e5f5f2; color:#1c7d71; border-color:#bfe3dd}
+.pill.grey{background:#eef1f4; color:#6b7884; border-color:#e0e5ea}
+.progress{flex:1; min-width:180px; height:6px; background:#e4e9ef; border-radius:6px; overflow:hidden; margin-left:auto}
+.progress i{display:block; height:100%; width:0; background:linear-gradient(90deg,var(--blue-l),var(--teal)); border-radius:6px; transition:width .5s cubic-bezier(.4,0,.2,1)}
+
+/* ---------- Frame (the "screen") ---------- */
+.framewrap{background:#fff; border:1px solid var(--line); border-radius:14px; box-shadow:var(--shadow-lg); overflow:hidden}
+.bar{display:flex; align-items:center; gap:8px; padding:10px 14px; background:#fbfcfd; border-bottom:1px solid var(--line)}
+.bar .dots{display:flex; gap:6px}
+.bar .dots s{width:10px; height:10px; border-radius:50%; background:#e2e7ec; text-decoration:none}
+.bar .dots s:nth-child(1){background:#ff5f57} .bar .dots s:nth-child(2){background:#febc2e} .bar .dots s:nth-child(3){background:#28c840}
+.bar .url{flex:1; font-size:11.5px; color:#8a97a3; background:#fff; border:1px solid var(--line); border-radius:5px; padding:3px 10px; margin-left:6px}
+.frame{position:relative; height:640px; overflow:hidden; background:#fff}
+.panel{position:absolute; inset:0; opacity:0; transform:translateX(14px); pointer-events:none; transition:opacity .28s,transform .28s; overflow-y:auto}
+.panel.on{opacity:1; transform:none; pointer-events:auto}
+.panel::-webkit-scrollbar{width:7px} .panel::-webkit-scrollbar-thumb{background:#cfd7e0; border-radius:7px}
+
+/* ---------- Common UI bits ---------- */
+.tag{display:inline-block; font-size:10.5px; padding:2px 8px; border-radius:4px; font-weight:600; vertical-align:middle}
+.tag.navy{background:#e8effa; color:var(--navy)}
+.tag.teal{background:#e5f5f2; color:#1c7d71}
+.tag.gold{background:#fdf3e2; color:#b5721a}
+.tag.red{background:#fdecec; color:#b33434}
+.tag.grey{background:#eef1f4; color:#6b7884}
+.tag.green{background:#e6f5ec; color:#1c7d66}
+.avatar{width:34px; height:34px; border-radius:50%; background:var(--blue); color:#fff; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; flex:0 0 34px}
+.avatar.sm{width:28px; height:28px; font-size:11px; flex:0 0 28px}
+.avatar.teal{background:var(--teal)} .avatar.gold{background:var(--gold)} .avatar.red{background:var(--red)} .avatar.navy{background:var(--navy)}
+.card{background:#fff; border:1px solid var(--line); border-radius:var(--radius); padding:16px}
+.card h4{font-size:14px; margin-bottom:10px; display:flex; align-items:center; gap:7px}
+.card h4::before{content:""; width:3px; height:13px; background:var(--blue); border-radius:2px}
+.grid2{display:grid; grid-template-columns:1fr 1fr; gap:12px}
+.grid3{display:grid; grid-template-columns:repeat(3,1fr); gap:12px}
+.grid4{display:grid; grid-template-columns:repeat(4,1fr); gap:12px}
+.muted{color:var(--ink3); font-size:12px}
+.hintbar{position:absolute; left:0; right:0; bottom:0; padding:9px 14px; font-size:11.5px; color:#6b7884; background:#fafbfc; border-top:1px dashed var(--line); display:flex; align-items:center; gap:8px}
+.hintbar b{color:var(--blue)}
+
+/* buttons */
+.btn{display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:7px 14px; font-size:12.5px; font-weight:600; border-radius:6px; border:1px solid var(--line); background:#fff; color:var(--ink2); transition:.15s}
+.btn:hover{border-color:var(--blue-l); color:var(--blue)}
+.btn.pri{background:var(--blue); border-color:var(--blue); color:#fff}
+.btn.pri:hover{background:var(--blue-l); color:#fff}
+.btn.teal{background:var(--teal); border-color:var(--teal); color:#fff}
+.btn.sm{padding:4px 10px; font-size:11.5px}
+.btn.ghost{background:transparent}
+.tip{position:relative; cursor:help; border-bottom:1px dashed #b9c6d3}
+.tip .tipbox{
+  visibility:hidden; opacity:0; position:absolute; z-index:60; left:0; bottom:132%; width:280px;
+  background:#12233c; color:#e8effa; font-size:11.5px; line-height:1.6; padding:10px 12px; border-radius:8px;
+  font-weight:400; box-shadow:0 10px 30px rgba(9,28,56,.28); transition:.18s; transform:translateY(4px);
+}
+.tip .tipbox::after{content:""; position:absolute; left:16px; bottom:-6px; border:6px solid transparent; border-top-color:#12233c}
+.tip:hover .tipbox{visibility:visible; opacity:1; transform:none}
+
+/* ---------- Screen: public home (P01) ---------- */
+.pubhead{display:flex; align-items:center; justify-content:space-between; padding:12px 26px; border-bottom:1px solid var(--line)}
+.logo{display:flex; align-items:center; gap:9px; font-size:15px; font-weight:700; color:var(--navy)}
+.logo .mark{width:26px; height:26px; border-radius:6px; background:linear-gradient(135deg,var(--blue),var(--teal)); color:#fff; display:flex; align-items:center; justify-content:center; font-size:12px}
+.pubnav{display:flex; gap:22px; font-size:12.5px; color:var(--ink2)}
+.pubnav span{cursor:pointer; padding:4px 0}
+.pubnav span:hover{color:var(--blue)}
+.pubnav .act{color:var(--blue); font-weight:600; box-shadow:0 2px 0 var(--blue)}
+.hero{background:linear-gradient(120deg,#0f2c52,#1a5fb4 60%,#2a9d8f); color:#fff; padding:30px 26px 26px}
+.hero .kicker{font-size:11.5px; letter-spacing:2.5px; color:#a9d8d1; text-transform:uppercase}
+.hero h1{font-size:25px; line-height:1.35; margin:9px 0 10px; font-weight:700}
+.hero p{font-size:12.5px; color:#d6e6f5; max-width:560px}
+.hero .cta{margin-top:16px; display:flex; gap:10px}
+.biz{display:grid; grid-template-columns:repeat(4,1fr); gap:12px; padding:22px 26px}
+.biz .bizcard{background:#fff; border:1px solid var(--line); border-radius:var(--radius); padding:14px; cursor:pointer; transition:.18s}
+.biz .bizcard:hover{border-color:var(--blue-l); transform:translateY(-3px); box-shadow:var(--shadow)}
+.biz .bizcard .ic{width:32px; height:32px; border-radius:8px; background:#eaf1fb; color:var(--blue); display:flex; align-items:center; justify-content:center; font-size:15px; margin-bottom:9px}
+.biz .bizcard h5{font-size:13px; margin-bottom:4px}
+.biz .bizcard p{font-size:11px; color:var(--ink3); line-height:1.55}
+.sechead{padding:4px 26px 12px; display:flex; align-items:baseline; justify-content:space-between}
+.sechead h3{font-size:15px}
+.sechead a{font-size:11.5px; color:var(--blue); cursor:pointer}
+.courses{display:grid; grid-template-columns:repeat(3,1fr); gap:12px; padding:0 26px 22px}
+.course{background:#fff; border:1px solid var(--line); border-radius:var(--radius); overflow:hidden; cursor:pointer; transition:.18s}
+.course:hover{border-color:var(--blue-l); box-shadow:var(--shadow)}
+.course .thumb{height:70px; display:flex; align-items:center; justify-content:center; color:#fff; font-size:12px; font-weight:600; letter-spacing:.5px}
+.course .body{padding:11px 12px}
+.course h5{font-size:12.5px; margin-bottom:5px}
+.course .meta{font-size:10.5px; color:var(--ink3); display:flex; gap:8px; margin-bottom:8px}
+.course .foot{display:flex; align-items:center; justify-content:space-between}
+.course .price{font-size:12px; font-weight:700; color:var(--gold)}
+
+/* ---------- Agent bubble (corner) ---------- */
+.agent{
+  position:absolute; right:16px; bottom:16px; z-index:40; display:flex; flex-direction:column; align-items:flex-end; gap:9px;
+}
+.agent .badge{
+  background:#fff; border:1px solid var(--line); border-radius:20px; padding:6px 12px; font-size:11px; color:var(--ink2);
+  box-shadow:var(--shadow); display:flex; align-items:center; gap:7px; animation:pulse 2.6s infinite;
+}
+.agent .badge i{width:7px; height:7px; border-radius:50%; background:var(--green)}
+@keyframes pulse{0%,100%{box-shadow:var(--shadow)} 50%{box-shadow:0 0 0 6px rgba(53,132,228,.1),var(--shadow)}}
+.agent .bubble{
+  width:332px; background:#fff; border:1px solid var(--line); border-radius:14px; box-shadow:var(--shadow-lg); overflow:hidden;
+  transform:translateY(8px) scale(.98); opacity:0; transition:.24s; transform-origin:bottom right;
+}
+.agent .bubble.on{transform:none; opacity:1}
+.agent .bhead{background:linear-gradient(120deg,var(--navy),var(--blue)); color:#fff; padding:10px 12px; display:flex; align-items:center; gap:9px; font-size:12.5px}
+.agent .bhead .avatar{width:26px; height:26px; font-size:10.5px; flex:0 0 26px; background:rgba(255,255,255,.2)}
+.agent .bhead small{display:block; font-size:9.5px; color:#bcd4ee}
+.agent .bhead .x{cursor:pointer; margin-left:auto; font-size:14px; opacity:.7}
+.agent .bhead .x:hover{opacity:1}
+.agent .bchat{padding:12px; height:228px; overflow-y:auto; background:#fafbfd}
+.agent .bchat .msg{font-size:11.5px; line-height:1.6; padding:7px 10px; border-radius:9px; margin-bottom:8px; max-width:88%}
+.agent .bchat .msg.bot{background:#eef3fb; color:#243244; border-bottom-left-radius:2px}
+.agent .bchat .msg.me{background:var(--blue); color:#fff; margin-left:auto; border-bottom-right-radius:2px}
+.agent .bchat .chips{display:flex; flex-wrap:wrap; gap:6px; margin-top:4px}
+.agent .bchat .chip{font-size:10.5px; padding:4px 9px; border-radius:14px; background:#fff; border:1px solid #cfdff3; color:var(--blue); cursor:pointer}
+.agent .bchat .chip:hover{background:#eef4fd}
+.agent .bfoot{padding:9px 12px; border-top:1px solid var(--line); display:flex; gap:7px; background:#fff}
+.agent .bfoot .fld{flex:1; font-size:11px; color:#aab4bf; background:#f4f7fa; border-radius:16px; padding:6px 11px; border:1px solid var(--line)}
+.agent .bfoot .go{width:27px; height:27px; border-radius:50%; background:var(--blue); color:#fff; font-size:11px; display:flex; align-items:center; justify-content:center; cursor:pointer}
+.agent .fab{width:52px; height:52px; border-radius:50%; background:linear-gradient(135deg,var(--blue),var(--teal)); color:#fff; font-size:21px; box-shadow:0 4px 14px rgba(26,95,180,.4); cursor:pointer; display:flex; align-items:center; justify-content:center}
+.agent .fab:hover{transform:scale(1.06)}
+
+/* ---------- Generic list / table ---------- */
+.listitem{display:flex; align-items:center; gap:11px; padding:11px 0; border-bottom:1px solid #f0f3f6}
+.listitem:last-child{border-bottom:none}
+.mini{font-size:11.5px; color:var(--ink2)}
+.mini strong{display:block; font-size:12.5px; color:var(--ink); margin-bottom:2px}
+table.tbl{width:100%; border-collapse:collapse; font-size:11.5px}
+table.tbl th{background:#f6f8fb; text-align:left; padding:8px 10px; color:var(--ink2); font-weight:600; border-bottom:1px solid var(--line)}
+table.tbl td{padding:9px 10px; border-bottom:1px solid #f1f4f7; color:var(--ink2); vertical-align:middle}
+table.tbl tr:hover td{background:#fafcfe}
+.stat{background:#fff; border:1px solid var(--line); border-radius:var(--radius); padding:14px; cursor:pointer; transition:.18s}
+.stat:hover{border-color:var(--blue-l); box-shadow:var(--shadow)}
+.stat .num{font-size:24px; font-weight:700; color:var(--navy); line-height:1.2}
+.stat .lbl{font-size:11px; color:var(--ink3); margin-top:3px}
+.stat .sub{font-size:10.5px; color:var(--teal); margin-top:5px}
+.spark{display:flex; align-items:flex-end; gap:3px; height:26px; margin-top:8px}
+.spark s{display:block; width:6px; background:linear-gradient(180deg,var(--blue-l),#cfe0f6); border-radius:3px; text-decoration:none}
+.barh{height:7px; background:#eef1f5; border-radius:6px; overflow:hidden; margin-top:7px}
+.barh i{display:block; height:100%; border-radius:6px; background:linear-gradient(90deg,var(--blue-l),var(--teal))}
+
+/* ---------- P02 chat ---------- */
+.chatscreen{display:flex; height:100%}
+.chatmain{flex:1; display:flex; flex-direction:column; border-right:1px solid var(--line)}
+.chathead{padding:11px 18px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:10px}
+.chatlog{flex:1; overflow-y:auto; padding:18px; background:#f7f9fc}
+.chatlog .msg{font-size:12.5px; line-height:1.65; padding:9px 12px; border-radius:10px; margin-bottom:12px; max-width:76%}
+.chatlog .msg.bot{background:#fff; border:1px solid var(--line); color:#243244; border-bottom-left-radius:2px}
+.chatlog .msg.me{background:var(--blue); color:#fff; margin-left:auto; border-bottom-right-radius:2px}
+.chatlog .ts{font-size:9.5px; color:#aab4bf; margin:0 0 12px 4px}
+.chatlog .ts.me{text-align:right}
+.chiprow{display:flex; flex-wrap:wrap; gap:7px; margin:2px 0 14px}
+.chiprow .chip{font-size:11px; padding:5px 11px; border-radius:15px; background:#fff; border:1px solid #cfdff3; color:var(--blue); cursor:pointer}
+.chiprow .chip:hover{background:#eef4fd}
+.chatinput{display:flex; gap:8px; padding:11px 18px; border-top:1px solid var(--line); background:#fff}
+.chatinput .fld{flex:1; font-size:12px; color:#aab4bf; background:#f4f7fa; border-radius:18px; padding:8px 14px; border:1px solid var(--line)}
+.chatside{width:256px; flex:0 0 256px; padding:14px; background:#fbfcfd}
+.harvest{background:#eef7f5; border:1px dashed #9fd3c9; border-radius:var(--radius); padding:11px 12px; margin-top:12px}
+.harvest h6{font-size:11px; color:#1c7d71; margin-bottom:8px; display:flex; align-items:center; gap:5px}
+.harvest .row{display:flex; font-size:11px; padding:3px 0; color:var(--ink2)}
+.harvest .row span:first-child{width:66px; color:var(--ink3); flex:0 0 66px}
+.harvest .row span:last-child{font-weight:600; color:var(--ink)}
+.harvest .row span.hot{color:var(--red)}
+
+/* ---------- Form ---------- */
+.form{display:grid; grid-template-columns:1fr 1fr; gap:12px 16px; padding:20px 26px}
+.fldg{display:flex; flex-direction:column; gap:5px}
+.fldg.full{grid-column:1/-1}
+.fldg label{font-size:11.5px; color:var(--ink2); font-weight:600}
+.fldg label i{color:var(--red); font-style:normal; margin-left:2px}
+.fldg .ctrl{height:34px; border:1px solid #d7dfe8; border-radius:6px; background:#fff; display:flex; align-items:center; padding:0 10px; font-size:12px; color:#aab4bf}
+.fldg .ctrl.has{color:var(--ink)}
+.fldg .ctrl.txa{height:auto; min-height:58px; align-items:flex-start; padding:8px 10px; line-height:1.5}
+.fldg .err{font-size:10.5px; color:var(--red); min-height:14px}
+.stepper{display:flex; align-items:center; gap:10px; padding:16px 26px; border-bottom:1px solid var(--line); background:#fbfcfd}
+.step{display:flex; align-items:center; gap:6px; font-size:11px; color:var(--ink3)}
+.step .n{width:18px; height:18px; border-radius:50%; background:#e6ebf1; color:#8a97a3; display:flex; align-items:center; justify-content:center; font-size:9.5px; font-weight:700; flex:0 0 18px}
+.step.on{color:var(--blue); font-weight:600} .step.on .n{background:var(--blue); color:#fff}
+.step.ok .n{background:var(--teal); color:#fff}
+.step .n::after{content:"✓"} .step.ok .n::after{content:"✓"} .step.on .n::after{content:""}
+
+/* ---------- P06 upload ---------- */
+.drop{border:1.6px dashed #b9c8d8; border-radius:12px; padding:26px; text-align:center; cursor:pointer; transition:.18s; margin:0 26px}
+.drop:hover{border-color:var(--blue-l); background:#f5f9ff}
+.drop .ic{font-size:30px; margin-bottom:8px}
+.drop h5{font-size:13px; margin-bottom:5px}
+.drop p{font-size:11px; color:var(--ink3)}
+.ups{display:flex; flex-wrap:wrap; gap:8px; margin:14px 26px 0}
+.up{display:flex; align-items:center; gap:7px; font-size:11px; padding:6px 11px; border-radius:6px; background:#f4f7fa; border:1px solid var(--line)}
+.up .x{cursor:pointer; color:var(--ink3); font-size:12px} .up .x:hover{color:var(--red)}
+
+/* ---------- match card ---------- */
+.match{background:linear-gradient(135deg,#0f2c52,#1a5fb4); color:#fff; border-radius:12px; padding:16px 18px; position:relative; overflow:hidden}
+.match::after{content:""; position:absolute; right:-30px; top:-30px; width:130px; height:130px; border-radius:50%; background:rgba(255,255,255,.06)}
+.match .top{display:flex; justify-content:space-between; align-items:flex-start; position:relative}
+.match .score{font-size:40px; font-weight:700; line-height:1}
+.match .score small{font-size:13px; font-weight:500; color:#bcd4ee}
+.match .lab{font-size:11px; color:#a9d8d1; margin-top:3px; letter-spacing:1px}
+.match h5{font-size:13.5px; margin:13px 0 9px; position:relative}
+.match ul{list-style:none; position:relative}
+.match ul li{font-size:11.5px; padding:3px 0 3px 15px; color:#e6eefa; position:relative}
+.match ul li::before{content:"•"; position:absolute; left:2px; color:#7dd6c9}
+.match .warn{margin-top:11px; font-size:10.5px; color:#f7d98a; position:relative; display:flex; gap:5px}
+
+/* ---------- timeline ---------- */
+.tl{position:relative; padding-left:24px; margin-top:4px}
+.tl::before{content:""; position:absolute; left:6px; top:6px; bottom:6px; width:2px; background:var(--line)}
+.tl .node{position:relative; padding:0 0 16px}
+.tl .node::before{content:""; position:absolute; left:-22px; top:4px; width:12px; height:12px; border-radius:50%; background:#fff; border:2.5px solid var(--line)}
+.tl .node.ok::before{background:var(--teal); border-color:var(--teal)}
+.tl .node.cur::before{background:var(--blue); border-color:var(--blue); box-shadow:0 0 0 4px rgba(26,95,180,.16)}
+.tl .node h6{font-size:12px}
+.tl .node p{font-size:10.5px; color:var(--ink3); margin-top:2px}
+.tl .node .dt{font-size:9.5px; color:var(--ink3); margin-top:3px}
+
+/* ---------- funnel ---------- */
+.funnel{display:flex; flex-direction:column; gap:8px; align-items:center}
+.fstep{height:42px; display:flex; align-items:center; justify-content:center; color:#fff; font-size:11.5px; font-weight:600; border-radius:6px; position:relative; transition:.2s}
+.fstep span{position:absolute; right:12px; font-size:16px; font-weight:700; opacity:.9}
+
+/* ---------- voice ---------- */
+.wave{display:flex; align-items:center; justify-content:center; gap:3px; height:60px}
+.wave s{display:block; width:4px; background:linear-gradient(180deg,var(--blue-l),var(--teal)); border-radius:3px; text-decoration:none; animation:wv 1s infinite ease-in-out}
+@keyframes wv{0%,100%{height:8px} 50%{height:44px}}
+.wave s:nth-child(2){animation-delay:.08s} .wave s:nth-child(3){animation-delay:.16s} .wave s:nth-child(4){animation-delay:.24s}
+.wave s:nth-child(5){animation-delay:.32s} .wave s:nth-child(6){animation-delay:.4s} .wave s:nth-child(7){animation-delay:.48s}
+.wave s:nth-child(8){animation-delay:.56s} .wave s:nth-child(9){animation-delay:.64s} .wave s:nth-child(10){animation-delay:.72s}
+
+/* ---------- emotion card ---------- */
+.emogrid{display:grid; grid-template-columns:repeat(5,1fr); gap:8px; margin-top:10px}
+.emo{text-align:center; font-size:10.5px; padding:8px 4px; border-radius:7px; border:1px solid var(--line); background:#fcfdfe; cursor:pointer; transition:.15s}
+.emo:hover{border-color:var(--blue-l); background:#f5f9ff}
+.emo .fac{font-size:19px; display:block; margin-bottom:3px}
+.emo.on{border-color:var(--red); background:#fdecec}
+
+/* ---------- toast / notification ---------- */
+.toast{
+  position:absolute; left:50%; top:16px; transform:translate(-50%,-12px); z-index:80; min-width:300px; max-width:86%;
+  background:#12233c; color:#fff; font-size:12px; padding:11px 14px; border-radius:9px; box-shadow:0 12px 34px rgba(9,28,56,.32);
+  display:flex; align-items:center; gap:10px; opacity:0; transition:.26s; pointer-events:none;
+}
+.toast.on{opacity:1; transform:translate(-50%,0)}
+.toast .ic{width:22px; height:22px; border-radius:50%; background:var(--teal); display:flex; align-items:center; justify-content:center; font-size:11px; flex:0 0 22px}
+.toast.warn .ic{background:var(--gold)} .toast.alert .ic{background:var(--red)}
+.toast small{display:block; font-size:9.5px; color:#9fb4cc}
+
+/* ---------- Step cards under frame ---------- */
+.below{display:flex; gap:16px; margin-top:18px; align-items:stretch}
+.steps{flex:1; display:flex; flex-direction:column; gap:8px}
+.stepcard{display:flex; gap:11px; padding:10px 12px; background:#fff; border:1px solid var(--line); border-radius:9px; transition:.18s}
+.stepcard:hover{border-color:var(--blue-l); box-shadow:var(--shadow); background:#fbfdff}
+.stepcard .idx{width:21px; height:21px; border-radius:50%; background:#eaf1fb; color:var(--blue); font-size:10.5px; font-weight:700; display:flex; align-items:center; justify-content:center; flex:0 0 21px; margin-top:2px}
+.stepcard.on .idx{background:var(--blue); color:#fff}
+.stepcard .ttl{font-size:12.5px; font-weight:600}
+.stepcard .dsc{font-size:11px; color:var(--ink3); margin-top:2px; line-height:1.55}
+.script{flex:0 0 340px; background:linear-gradient(160deg,#fff7e8,#fdf1da); border:1px solid #f0dcae; border-radius:12px; padding:14px 15px}
+.script h5{font-size:12.5px; color:#8a5a12; margin-bottom:9px; display:flex; align-items:center; gap:6px}
+.script .bubble{background:#fff; border-radius:9px; padding:10px 12px; font-size:11.5px; line-height:1.7; color:#4a3a22; box-shadow:0 2px 6px rgba(138,90,18,.08)}
+.script .bubble b{color:var(--red)}
+.script .note{font-size:10.5px; color:#a7864c; margin-top:8px; line-height:1.6}
+
+/* ---------- Section intro banner ---------- */
+.intro{background:linear-gradient(120deg,var(--navy),var(--blue)); color:#fff; border-radius:14px; padding:20px 24px; margin-bottom:18px; display:flex; gap:18px; align-items:center}
+.intro .big{font-size:30px; font-weight:700; line-height:1.1; flex:0 0 auto}
+.intro .tx h3{font-size:15px; margin-bottom:5px}
+.intro .tx p{font-size:11.5px; color:#cfe0f2; line-height:1.65; max-width:640px}
+.intro .tx .tags{display:flex; gap:7px; margin-top:9px; flex-wrap:wrap}
+.intro .tx .tags span{font-size:10.5px; padding:3px 9px; border-radius:12px; background:rgba(255,255,255,.16); color:#e6eefa}
+
+/* ---------- overlay modal ---------- */
+.mask{position:absolute; inset:0; background:rgba(15,44,82,.46); z-index:50; display:flex; align-items:center; justify-content:center; opacity:0; pointer-events:none; transition:.22s}
+.mask.on{opacity:1; pointer-events:auto}
+.modal{background:#fff; border-radius:12px; width:400px; max-width:92%; box-shadow:var(--shadow-lg); overflow:hidden; transform:translateY(10px); transition:.22s}
+.mask.on .modal{transform:none}
+.modal .hd{padding:12px 16px; background:#fbfcfd; border-bottom:1px solid var(--line); font-size:13px; font-weight:700; display:flex; align-items:center; justify-content:space-between}
+.modal .bd{padding:18px 16px; font-size:12px; color:var(--ink2)}
+.modal .ft{padding:11px 16px; border-top:1px solid var(--line); display:flex; gap:9px; justify-content:flex-end; background:#fbfcfd}
+
+/* ---------- footer controls ---------- */
+.footctrl{display:flex; align-items:center; gap:10px; margin-top:16px; padding:12px 16px; background:#fff; border:1px solid var(--line); border-radius:12px}
+.footctrl .prv,.footctrl .nxt{font-size:12px; padding:7px 16px; border-radius:6px; border:1px solid var(--line); background:#fff; color:var(--ink2); font-weight:600}
+.footctrl .nxt{background:var(--blue); border-color:var(--blue); color:#fff}
+.footctrl .nxt:hover{background:var(--blue-l)} .footctrl .prv:hover{border-color:var(--blue-l); color:var(--blue)}
+.footctrl .prv:disabled,.footctrl .nxt:disabled{opacity:.4; cursor:not-allowed}
+.footctrl .info{flex:1; font-size:11px; color:var(--ink3); text-align:center}
+
+/* ---------- misc ---------- */
+.scrollv{overflow-y:auto}
+.scrollv::-webkit-scrollbar{width:7px} .scrollv::-webkit-scrollbar-thumb{background:#cfd7e0; border-radius:7px}
+.flexrow{display:flex; align-items:center; gap:10px}
+.between{display:flex; align-items:center; justify-content:space-between; gap:10px}
+.ring{width:76px; height:76px; border-radius:50%; background:conic-gradient(var(--red) 0 35%,#eef1f5 35% 100%); display:flex; align-items:center; justify-content:center; flex:0 0 76px; position:relative}
+.ring::after{content:""; position:absolute; inset:9px; background:#fff; border-radius:50%}
+.ring b{position:relative; font-size:19px; font-weight:700; color:var(--red)}
+.pwaver{position:absolute; inset:0; background:rgba(15,44,82,.92); z-index:70; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#fff; opacity:0; pointer-events:none; transition:.3s; text-align:center; padding:0 30px}
+.pwaver.on{opacity:1; pointer-events:auto}
+.pwaver .fac{font-size:52px; margin-bottom:12px}
+.pwaver h3{font-size:19px; margin-bottom:8px}
+.pwaver p{font-size:12px; color:#bcd4ee; line-height:1.7; max-width:420px}
+</style>
+</head>
+<body>
+<div class="app">
+
+/* ============================================================
+   p0_shell.js  —  侧边栏导航 + 顶部进度条 + 控制条
+   ============================================================ */
+const SHELL = `
+<!-- ============ 侧边栏 ============ -->
+<aside class="side">
+  <div class="brand">
+    <b>粤教留学 · 交互演示</b>
+    <span>广东教育国际交流服务中心</span>
+  </div>
+  <div class="grp">演示主线</div>
+  <button class="navbtn" data-sec="0">
+    <i>1</i><span>公开主页 + 智能客服<span class="tip" data-tip="true"><span class="tipbox">面向陌生访客。演示 Agent 如何在闲聊中自然采集客户信息，以及「有电话即有效线索」的判定规则。<br><br>共 4 步 · 约 90 秒</span></span></span>
+    <small>4 步</small>
+  </button>
+  <button class="navbtn" data-sec="1">
+    <i>2</i><span>员工端 · CRM + 企业助手<span class="tip" data-tip="true"><span class="tipbox">核心卖点段。多格式录入 → AI 提取 → 研判卡（匹配度 87%）→ 口述日报，一气呵成。<br><br>共 7 步 · 约 150 秒</span></span></span>
+    <small>7 步</small>
+  </button>
+  <button class="navbtn" data-sec="2">
+    <i>3</i><span>管理层 · 经营看板 + 审批<span class="tip" data-tip="true"><span class="tipbox">展示全域数据视野与权限差异：漏斗、智能报告、留学生转化审批。<br><br>共 4 步 · 约 100 秒</span></span></span>
+    <small>4 步</small>
+  </button>
+  <button class="navbtn" data-sec="3">
+    <i>4</i><span>留学生端 + 学生助手<span class="tip" data-tip="true"><span class="tipbox">学生侧闭环：请假 → 审批 → 心理关怀预警 → 增值转化（对外称「更多服务」）。<br><br>共 5 步 · 约 120 秒</span></span></span>
+    <small>5 步</small>
+  </button>
+  <button class="navbtn" data-sec="4">
+    <i>5</i><span>收尾 · 三端闭环 + 待确认事项<span class="tip" data-tip="true"><span class="tipbox">回到全景，串起「访客→客户→留学生→校友」全周期，并列出 5 项待客户拍板的事。<br><br>共 3 步 · 约 60 秒</span></span></span>
+    <small>3 步</small>
+  </button>
+  <div class="grp">配套材料</div>
+  <div style="padding:8px 20px;font-size:11.5px;color:#93b4d6;line-height:1.7">
+    演示总时长 <b style="color:#fff">约 8 分钟</b><br>
+    支持 ← → 方向键 / 空格翻步<br>
+    鼠标悬停 <span style="border-bottom:1px dashed #7d9cbd">虚线文字</span> 看设计说明
+  </div>
+</aside>
+
+<!-- ============ 舞台 ============ -->
+<main class="stage">
+
+  <div class="topbar">
+    <div class="crumb">
+      <span id="cr">第 1 / 23 步</span>
+      <span class="pill" id="pillA">① 访客触点</span>
+      <span class="pill gold" id="pillB">核心卖点</span>
+    </div>
+    <div class="progress"><i id="prg"></i></div>
+  </div>
+`;
+</main>
+
+/* ============================================================
+   p1_public.js  —  Section 1：公开主页 + 智能客服（4 步）
+   ============================================================ */
+const P1 = `
+<section class="framewrap" id="sec0">
+  <div class="bar">
+    <div class="dots"><s></s><s></s><s></s></div>
+    <div class="url">🇨🇳  guangdong-edu-abroad.com &nbsp;/&nbsp; 公开主页（无需登录）</div>
+    <span class="tag navy">访客视角</span>
+  </div>
+
+  <!-- ================= P01 主页 ================= -->
+  <div class="frame panel on" id="p01">
+    <div class="pubhead">
+      <div class="logo"><span class="mark">粤</span>广东教育国际交流服务中心</div>
+      <div class="pubnav">
+        <span class="act">首页</span><span>业务项目</span><span>留学政策</span><span>课程活动</span><span>关于我们</span>
+      </div>
+      <div class="flexrow">
+        <button class="btn sm">登录 / 注册</button>
+      </div>
+    </div>
+
+    <div class="hero">
+      <div class="kicker">SINCE 1981 · 广东省属教育服务机构</div>
+      <h1>让每一次留学选择，都有专业的人陪你走完</h1>
+      <p>德国双元制职业教育 · 新加坡国际本硕 · 全球院校直申 · 国际研学，四大业务线覆盖从咨询到入学的完整周期，全程由专属顾问与 AI 助手协同服务。</p>
+      <div class="cta">
+        <button class="btn pri" onclick="goStep(1)">免费评估我的适配度 →</button>
+        <button class="btn ghost" style="color:#fff;border-color:rgba(255,255,255,.5)">预约线下咨询</button>
+      </div>
+    </div>
+
+    <div class="biz">
+      <div class="bizcard" onclick="toast($('#t01'),'','🎓','德国双元制职业教育','中德精英人才共建计划 · 带薪实习 + 双证书',2400)">
+        <div class="ic">🎓</div><h5>德国双元制职业教育</h5>
+        <p>企业带薪实习 + 职业院校双证书，毕业即就业，适合技能型升学路径。</p>
+      </div>
+      <div class="bizcard" onclick="toast($('#t01'),'','🏛️','新加坡国际本硕','定向培养联合办学 · 1+2 / 2+2 学制',2400)">
+        <div class="ic">🏛️</div><h5>新加坡国际本硕升学</h5>
+        <p>定向培养联合办学，学制短、费用可控，商科与工程类优势明显。</p>
+      </div>
+      <div class="bizcard" onclick="toast($('#t01'),'','🌏','国际留学直申','全球数百所院校合作网络',2400)">
+        <div class="ic">🌏</div><h5>国际留学项目</h5>
+        <p>覆盖英、美、澳、加、日、韩等主流留学地，数百所合作院校直申。</p>
+      </div>
+      <div class="bizcard" onclick="toast($('#t01'),'','🚌','国际研学','面向中小学 / 高职 / 大学生',2400)">
+        <div class="ic">🚌</div><h5>国际研学项目</h5>
+        <p>面向中小学生、高职高专及大学生，寒暑假短期沉浸式学习营。</p>
+      </div>
+    </div>
+
+    <div class="sechead"><h3>近期热门课程与活动</h3><a>查看全部 →</a></div>
+    <div class="courses">
+      <div class="course">
+        <div class="thumb" style="background:linear-gradient(120deg,#1a5fb4,#3584e4)">德国双元制 · 机电一体化</div>
+        <div class="body">
+          <h5>德国双元制机电一体化（2027 春季班）</h5>
+          <div class="meta"><span>👥 限额 25 人</span><span>📍 广州 / 柏林</span><span>⏱ 3 年</span></div>
+          <div class="foot"><span class="price">¥ 0 学费</span><span class="tag teal">报名中</span></div>
+        </div>
+      </div>
+      <div class="course">
+        <div class="thumb" style="background:linear-gradient(120deg,#2a9d8f,#52b7a8)">新加坡本硕 · 工商管理</div>
+        <div class="body">
+          <h5>新加坡 Kaplan 工商管理硕士（1+1）</h5>
+          <div class="meta"><span>👥 限额 30 人</span><span>📍 新加坡</span><span>⏱ 16 个月</span></div>
+          <div class="foot"><span class="price">¥ 18.6 万起</span><span class="tag gold">仅剩 6 席</span></div>
+        </div>
+      </div>
+      <div class="course">
+        <div class="thumb" style="background:linear-gradient(120deg,#0f2c52,#2a4a7a)">研学 · 寒假营</div>
+        <div class="body">
+          <h5>新加坡国立大学寒假研学营（7 天）</h5>
+          <div class="meta"><span>👥 限额 40 人</span><span>📍 新加坡</span><span>⏱ 7 天</span></div>
+          <div class="foot"><span class="price">¥ 1.28 万</span><span class="tag grey">即将开放</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 悬浮 Agent -->
+    <div class="agent">
+      <div class="badge"><i></i>在线顾问 · 小粤 正在接待</div>
+      <div class="bubble" id="ab01">
+        <div class="bhead">
+          <div class="avatar">粤</div>
+          <div><div>小粤 · 智能留学顾问</div><small>2 秒内响应 · 基于官方知识库回答</small></div>
+          <span class="x" onclick="hide('ab01')">✕</span>
+        </div>
+        <div class="bchat">
+          <div class="msg bot">你好呀 👋 我是小粤，粤教留学的智能顾问。看你在看新加坡项目，是给自己还是家人了解呢？</div>
+          <div class="msg me">给我妹妹看，她大专刚毕业</div>
+          <div class="msg bot">明白～大专学历走新加坡本硕是最省时间的路径之一。方便留个电话吗？我让顾问把适配方案发你，也能随时帮你查进度。</div>
+          <div class="chips">
+            <span class="chip" onclick="toast($('#t01'),'','✓','信息采集成功','姓名/学历/意向已提取，等待补充电话',2200)">留下电话 138****2266</span>
+            <span class="chip" onclick="goStep(1)">先看看适配度评估</span>
+            <span class="chip" onclick="toast($('#t01'),'','✓','已记录','你稍后随时回来继续聊',2000)">先随便逛逛</span>
+          </div>
+        </div>
+        <div class="bfoot"><span class="fld">输入你的问题…</span><span class="go">↑</span></div>
+      </div>
+      <button class="fab" onclick="show('ab01')">💬</button>
+    </div>
+    <div class="hintbar"><b>演示要点</b>Agent 置顶常驻，7 大场景应答；在闲聊中自然采集信息，而非弹出冷冰冰的表单。</div>
+    <div class="toast" id="t01"></div>
+  </div>
+
+  <!-- ================= P02 Agent 七场景 ================= -->
+  <div class="frame panel" id="p02">
+    <div class="chatscreen">
+      <div class="chatmain">
+        <div class="chathead">
+          <div class="avatar">粤</div>
+          <div><div style="font-size:12.5px;font-weight:600">小粤 · 智能留学顾问</div><div class="muted">会话已持续 6 分 12 秒 · 已识别 5 个字段</div></div>
+          <span class="tag teal" style="margin-left:auto">匹配度预评估 72%</span>
+        </div>
+        <div class="chatlog">
+          <div class="ts">今天 14:02</div>
+          <div class="msg bot">你好，我是小粤～想了解哪方面？我可以直接帮你查官方信息。</div>
+          <div class="ts me">新加坡的学制和费用大概多少？</div>
+          <div class="msg me">还有我家条件一般，有没有省钱点的路径</div>
+          <div class="msg bot">新加坡本硕常见是「1+1」或「2+2」：国内 1 年预科 + 新加坡 1 年硕士，总费用 18–26 万。你家条件一般的话，我更推荐 <b>德国双元制</b>——企业带薪实习，学费基本为零，每月还能拿 900–1200 欧补贴。</div>
+          <div class="msg bot">你妹妹大专是什么专业？如果偏工科或医护，双元制的适配度会很高。</div>
+          <div class="ts me">护理专业，德语零基础</div>
+          <div class="msg bot">护理在德国是紧缺工种，零基础也没关系，国内有 6–9 个月的语言班。我帮你算一下：<br>① 国内语言班 6 个月 ≈ 4.5 万<br>② 抵德后带薪实习，月补贴约 1000 欧<br>③ 2.5–3 年获职业资格 + 可转永居<br><br>这条路径的适配度我估在 <b>80% 以上</b>，要不要我让顾问出一份完整测算？</div>
+          <div class="chiprow">
+            <span class="chip" onclick="toast($('#t02'),'','✓','需求已确认','推荐方案：德国双元制护理 · 顾问将在 2 小时内联系',2400)">出一份测算方案</span>
+            <span class="chip" onclick="goStep(1)">看看护理专业详情</span>
+            <span class="chip" onclick="toast($('#t02'),'','✓','已保存','后续可在「我的咨询」里继续',2000)">先记下来</span>
+          </div>
+          <div class="ts">今天 14:05</div>
+          <div class="msg bot">顺便说一句，留下电话后我能把方案直接发你，也能在你妹妹申请每个阶段主动推送进度，不用自己反复来问 👇</div>
+        </div>
+        <div class="chatinput"><span class="fld">输入你的问题…</span><button class="btn pri sm">发送</button></div>
+      </div>
+
+      <div class="chatside">
+        <div class="card">
+          <h4>Agent 的 7 大场景</h4>
+          <div class="listitem"><div class="avatar sm navy">1</div><div class="mini"><strong>公司信息咨询</strong>成立背景、资质、成功案例</div></div>
+          <div class="listitem"><div class="avatar sm sm sm sm" style="background:#eaf1fb;color:var(--blue)">2</div><div class="mini"><strong>公司业务查询</strong>四大业务线、学制、费用</div></div>
+          <div class="listitem"><div class="avatar sm teal">3</div><div class="mini"><strong>海外留学政策查询</strong>签证、打工、永居政策</div></div>
+          <div class="listitem"><div class="avatar sm gold">4</div><div class="mini"><strong>课程与项目推荐</strong>基于画像的个性化推荐</div></div>
+          <div class="listitem"><div class="avatar sm red">5</div><div class="mini"><strong>活动与讲座报名</strong>需登录，未登录自动跳转</div></div>
+          <div class="listitem"><div class="avatar sm" style="background:#eef1f4;color:var(--ink3)">6</div><div class="mini"><strong>常见问题自助解答</strong>37 个标准问答对</div></div>
+          <div class="listitem"><div class="avatar sm" style="background:#eef1f4;color:var(--ink3)">7</div><div class="mini"><strong>日常闲聊互动</strong>年轻化人设 + 个性化推荐</div></div>
+        </div>
+        <div class="harvest">
+          <h6>📥 对话中已自动提取的信息</h6>
+          <div class="row"><span>姓名</span><span class="hot">待补充</span></div>
+          <div class="row"><span>性别</span><span>女（妹妹）</span></div>
+          <div class="row"><span>年龄</span><span class="hot">待补充</span></div>
+          <div class="row"><span>联系方式</span><span class="hot">未提供</span></div>
+          <div class="row"><span>学历</span><span>大专</span></div>
+          <div class="row"><span>家庭经济基础</span><span>一般</span></div>
+          <div class="row"><span>职业需求</span><span>护理 / 医护</span></div>
+          <div class="row"><span>德语能力</span><span>零基础</span></div>
+          <div class="row"><span>客户意向</span><span>德国双元制</span></div>
+        </div>
+        <button class="btn teal" style="width:100%;margin-top:12px" onclick="toast($('#t02'),'','✓','已录入 CRM 候选池','当前仅作咨询记录（无电话），待补充电话后升级为有效线索',2800)">生成咨询摘要 →</button>
+      </div>
+    </div>
+    <div class="hintbar"><b>演示要点</b>同一用户反复沟通不重复建卡，只做信息增量更新；所有回答来自 Dify 知识库（RAG），可溯源到《公司信息》《FAQ 问答对》。</div>
+    <div class="toast" id="t02"></div>
+  </div>
+
+  <!-- ================= P03 注册 ================= -->
+  <div class="frame panel" id="p03">
+    <div class="stepper">
+      <div class="step ok"><span class="n"></span>账户信息</div>
+      <div class="step on"><span class="n">2</span>个人画像</div>
+      <div class="step"><span class="n">3</span>意向确认</div>
+      <div class="step"><span class="n">4</span>提交审核</div>
+    </div>
+    <div class="between" style="padding:14px 26px 0">
+      <div><div style="font-size:16px;font-weight:700">注册账号 · 开启留学规划</div><div class="muted">注册后状态为「待开通」，需员工审核开通完整功能权限</div></div>
+      <span class="tag grey">此页仅 3 个必填项</span>
+    </div>
+    <div class="form">
+      <div class="fldg"><label>姓名 <i>*</i></label><div class="ctrl has">赵六</div><div class="err"></div></div>
+      <div class="fldg"><label>性别 <i>*</i></label><div class="ctrl has">女</div><div class="err"></div></div>
+      <div class="fldg"><label>年龄 <i>*</i></label><div class="ctrl has">22</div><div class="err"></div></div>
+      <div class="fldg"><label>联系方式（手机） <i>*</i><span class="tag red" style="margin-left:6px">唯一有效性标准</span></label><div class="ctrl has">138 2626 8891</div><div class="err"></div></div>
+      <div class="fldg"><label>最高学历 <i>*</i></label><div class="ctrl has">大专</div><div class="err"></div></div>
+      <div class="fldg"><label>意向业务线 <i>*</i></label><div class="ctrl has">德国双元制职业教育</div><div class="err"></div></div>
+      <div class="fldg"><label>家庭经济状况 <span class="tag grey">选填</span></label><div class="ctrl">一般</div><div class="err"></div></div>
+      <div class="fldg"><label>职业 / 专业需求 <span class="tag grey">选填</span></label><div class="ctrl has">护理</div><div class="err"></div></div>
+      <div class="fldg full"><label>德语能力 <span class="tag grey">选填</span></label><div class="ctrl">零基础</div><div class="err"></div></div>
+      <div class="fldg full"><label>补充说明 <span class="tag grey">选填</span></label><div class="ctrl txa">希望 2027 年春季入学，预算控制在 10 万以内</div><div class="err"></div></div>
+    </div>
+    <div class="card" style="margin:14px 26px 0;background:#f7f9fc">
+      <div class="flexrow" style="gap:9px;font-size:11.5px;color:var(--ink2);line-height:1.6">
+        <span style="font-size:16px">🔒</span>
+        <div>信息仅用于留学方案匹配与进度通知，不会用于其他用途。提交即表示同意《隐私条款》。<br>已有账号？<a style="color:var(--blue);cursor:pointer">直接登录</a></div>
+      </div>
+    </div>
+    <div class="flexrow" style="padding:16px 26px">
+      <button class="btn" onclick="goStep(-1)">← 上一步</button>
+      <button class="btn pri" onclick="goStep(1)">提交注册 →</button>
+    </div>
+    <div class="hintbar"><b>演示要点</b>电话是唯一有效性标准——有电话即有效线索，无电话仅记咨询日志；员工端可按电话去重，先录入者获得跟进权。</div>
+    <div class="toast" id="t03"></div>
+  </div>
+
+  <!-- ================= P04 活动报名拦截 ================= -->
+  <div class="frame panel" id="p04">
+    <div style="height:100%;display:flex;align-items:center;justify-content:center;background:#f7f9fc;padding:0 40px">
+      <div style="width:100%;max-width:640px">
+        <div class="card">
+          <div class="between">
+            <div class="flexrow"><span style="font-size:26px">🎤</span><div><div style="font-size:15px;font-weight:700">新加坡国立大学研学营 · 家长说明会</div><div class="muted">2026-11-08（周日）14:00 · 广州天河校区 · 限额 40 组家庭</div></div></div>
+            <span class="tag teal">免费</span>
+          </div>
+          <div class="grid3" style="margin-top:14px">
+            <div class="stat"><div class="num" style="font-size:18px">40</div><div class="lbl">限额组数</div></div>
+            <div class="stat"><div class="num" style="font-size:18px">12</div><div class="lbl">剩余席位</div></div>
+            <div class="stat"><div class="num" style="font-size:18px">7 天</div><div class="lbl">研学时长</div></div>
+          </div>
+          <div style="margin-top:16px;height:150px;background:linear-gradient(120deg,#fdf1da,#fdecc8);border-radius:10px;display:flex;align-items:center;justify-content:center;color:#8a6a2a;font-size:12px;border:1px dashed #e6cf9c">
+            [ 活动详情图文区 ]
+          </div>
+          <button class="btn pri" style="width:100%;margin-top:16px;padding:11px" onclick="show('mSign')">立即报名（需登录）</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 登录拦截弹层 -->
+    <div class="mask" id="mSign">
+      <div class="modal">
+        <div class="hd"><span>需要登录后才能报名</span><span class="x" style="cursor:pointer" onclick="hide('mSign')">✕</span></div>
+        <div class="bd">
+          <div class="flexrow" style="gap:10px;margin-bottom:14px">
+            <div class="avatar">赵</div>
+            <div><div style="font-size:12.5px;font-weight:600">赵六，你已注册成功</div><div class="muted">账号状态：<span class="tag gold">待员工开通</span></div></div>
+          </div>
+          <div class="fldg" style="margin-bottom:12px"><label>手机号</label><div class="ctrl has">138 2626 8891</div></div>
+          <div class="fldg"><label>密码</div><div class="ctrl">••••••••</div></div>
+          <p class="muted" style="margin-top:12px;font-size:11px">登录后自动跳回本活动页继续报名；如尚未开通权限，报名信息会先进入待确认队列。</p>
+        </div>
+        <div class="ft">
+          <button class="btn" onclick="hide('mSign')">取消</button>
+          <button class="btn pri" onclick="hide('mSign');toast($('#t04'),'','✓','报名成功','已锁定 1 个席位，顾问将联系你确认细节',2600)">登录并报名</button>
+        </div>
+      </div>
+    </div>
+    <div class="hintbar"><b>演示要点</b>活动报名强制登录，未登录弹层拦截并跳转回原页——这是把「浏览流量」转成「可跟进线索」的关键闸门。</div>
+    <div class="toast" id="t04"></div>
+  </div>
+
+  <div class="below">
+    <div class="steps">
+      <div class="stepcard on"><div class="idx">1</div><div><div class="ttl">主页：公司业务与课程一览</div><div class="dsc">访客无需登录即可浏览公司介绍、四大业务线、课程与活动；右下角 Agent 全程置顶接待。</div></div></div>
+      <div class="stepcard"><div class="idx">2</div><div><div class="ttl">智能客服 Agent：7 大场景 + 信息采集</div><div class="dsc">Agent 主动询问意向，在对话中自然提取姓名/学历/意向等字段，写入侧栏「已提取信息」卡。</div></div></div>
+      <div class="stepcard"><div class="idx">3</div><div><div class="ttl">注册：5 必填 + 4 选填</div><div class="dsc">电话是唯一有效性标准。提交后账号进入「待开通」状态，需员工审核。</div></div></div>
+      <div class="stepcard"><div class="idx">4</div><div><div class="ttl">报名拦截：未登录 → 登录 → 回跳</div><div class="dsc">活动报名需登录，形成「浏览→注册→留资→跟进」的转化闸门。</div></div></div>
+    </div>
+    <div class="script">
+      <h5>🎤 讲解话术</h5>
+      <div class="bubble" id="sc0">「这是公开主页，任何访客不用登录就能看我们的业务和课程。注意右下角这个 AI 顾问——它不管访客在哪个页面都挂着，会主动搭话、在聊天里自然把信息问出来，而不是一上来就甩一张冷冰冰的表单。」</div>
+      <div class="note">💡 客户常问：信息采集合不合规？答：只采留学方案必需的字段，页面有隐私条款勾选，且员工端可随时删除单条记录。</div>
+    </div>
+  </div>
+</section>
+`;
+
+/* ============================================================
+   p2_employee.js  —  Section 2：员工端（7 步）
+   ============================================================ */
+const P2 = `
+<section class="framewrap" id="sec1">
+  <div class="bar">
+    <div class="dots"><s></s><s></s><s></s></div>
+    <div class="url">🔒  crm.yuejiao-edu.com &nbsp;/&nbsp; 员工工作台 · 陈顾问（新加坡事业部）</div>
+    <span class="tag gold">仅显示本人名下客户</span>
+  </div>
+
+  <!-- ================= P05 工作台 ================= -->
+  <div class="frame panel on" id="p05">
+    <div style="padding:16px 22px 12px;border-bottom:1px solid var(--line);background:#fbfcfd">
+      <div class="between">
+        <div class="flexrow">
+          <div class="avatar">陈</div>
+          <div><div style="font-size:13.5px;font-weight:700">陈顾问，上午好 ☀️</div><div class="muted">新加坡事业部 · 在职 3 年 · 本月转化 4 人</div></div>
+        </div>
+        <div class="flexrow">
+          <button class="btn sm">📅 今日日程</button>
+          <button class="btn sm">🔔 3 条待办</button>
+          <button class="btn pri sm" onclick="goStep(1)">+ 录入新客户</button>
+        </div>
+      </div>
+    </div>
+    <div class="scrollv" style="padding:16px 22px">
+      <div class="grid4" style="margin-bottom:14px">
+        <div class="stat" onclick="toast($('#t05'),'','👥','我的客户','本月新增 6 名 · 跟进中 14 名 · 已转化 4 名',2400)"><div class="num">23</div><div class="lbl">名下客户总数</div><div class="sub">↑ 6 本月新增</div></div>
+        <div class="stat"><div class="num">14</div><div class="lbl">跟进中</div><div class="sub">3 条今日提醒</div></div>
+        <div class="stat"><div class="num">4</div><div class="lbl">本月已转化</div><div class="sub">转化率 17.4%</div></div>
+        <div class="stat"><div class="num">2</div><div class="lbl">待审批流程</div><div class="sub">请假 / 转留学申请</div></div>
+      </div>
+
+      <div class="grid2" style="margin-bottom:14px">
+        <div class="card">
+          <div class="between" style="margin-bottom:12px"><h4 style="margin:0">今日待办</h4><span class="tag red">3 条</span></div>
+          <div class="listitem"><div class="avatar sm red">!</div><div class="mini"><strong>跟进赵六 · 德国双元制方案</strong>上次沟通 2 天前，已发送测算表</div></div>
+          <div class="listitem"><div class="avatar sm gold">!</div><div class="mini"><strong>审批：李娜 的请假申请</strong>2026-10-18 至 10-20，缺课 3 节</div></div>
+          <div class="listitem"><div class="avatar sm navy">!</div><div class="mini"><strong>补充王五的费用沟通记录</strong>客户对费用有疑虑，需二次沟通</div></div>
+          <div class="listitem"><div class="avatar sm teal">✓</div><div class="mini"><strong>录入展会新增线索 2 条</strong>已分配，等待首触</div></div>
+        </div>
+        <div class="card">
+          <div class="between" style="margin-bottom:4px"><h4 style="margin:0">跟进提醒</h4><span class="muted">最近 7 天</span></div>
+          <div style="font-size:12px;color:var(--ink2);margin:8px 0 4px">客户跟进频次（次/周）</div>
+          <div class="spark">
+            <s style="height:30%"></s><s style="height:55%"></s><s style="height:42%"></s><s style="height:70%"></s><s style="height:48%"></s><s style="height:88%"></s><s style="height:64%"></s>
+          </div>
+          <div class="muted" style="margin-top:6px;font-size:10.5px">周一 至 周日 · 目标 ≥ 5 次/客户/周</div>
+          <div class="barh"><i style="width:78%"></i></div>
+          <div class="muted" style="margin-top:5px;font-size:10.5px">本周目标达成率 78%</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="between" style="margin-bottom:12px"><h4 style="margin:0">快速入口</h4><span class="muted">11 项导航功能</span></div>
+        <div class="grid4">
+          <div class="bizcard" onclick="goStep(1)" style="padding:11px"><div class="ic" style="width:26px;height:26px;font-size:12px">＋</div><h5 style="font-size:11.5px">意向客户录入</h5></div>
+          <div class="bizcard" onclick="toast($('#t05'),'','🔍','我的客户','仅显示你名下的客户，防止业务恶性竞争',2200)" style="padding:11px"><div class="ic" style="width:26px;height:26px;font-size:12px">🔍</div><h5 style="font-size:11.5px">意向客户查询</h5></div>
+          <div class="bizcard" onclick="toast($('#t05'),'','🔄','状态已更新','客户状态：咨询中 → 方案确认中',2000)" style="padding:11px"><div class="ic" style="width:26px;height:26px;font-size:12px">🔄</div><h5 style="font-size:11.5px">客户状态更新</h5></div>
+          <div class="bizcard" onclick="toast($('#t05'),'','🎓','申请已提交','代客户申请留学生，等待经理审批',2200)" style="padding:11px"><div class="ic" style="width:26px;height:26px;font-size:12px">🎓</div><h5 style="font-size:11.5px">代客申请留学生</h5></div>
+          <div class="bizcard" onclick="toast($('#t05'),'','✓','审批通过','李娜请假已批准，通知已推送',2000)" style="padding:11px"><div class="ic" style="width:26px;height:26px;font-size:12px">✓</div><h5 style="font-size:11.5px">审批学生流程</h5></div>
+          <div class="bizcard" onclick="toast($('#t05'),'','📝','成绩已录入','3 名学生成绩更新完成',2000)" style="padding:11px"><div class="ic" style="width:26px;height:26px;font-size:12px">📝</div><h5 style="font-size:11.5px">成绩录入</h5></div>
+          <div class="bizcard" onclick="toast($('#t05'),'','🎙️','日报已生成','口述内容自动整理为结构化日报',2200)" style="padding:11px"><div class="ic" style="width:26px;height:26px;font-size:12px">🎙️</div><h5 style="font-size:11.5px">口述日报</h5></div>
+          <div class="bizcard" onclick="toast($('#t05'),'','📖','日报查看','仅可查看本人日报',2000)" style="padding:11px"><div class="ic" style="width:26px;height:26px;font-size:12px">📖</div><h5 style="font-size:11.5px">日报查看</h5></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="agent">
+      <div class="bubble" id="ab05">
+        <div class="bhead"><div class="avatar">企</div><div><div>企助 · 企业智能助手</div><small>已感知你的权限：普通员工</small></div><span class="x" onclick="hide('ab05')">✕</span></div>
+        <div class="bchat">
+          <div class="msg bot">陈顾问，你有 <b>3 项待办</b>未处理，其中「赵六·德国双元制方案」已 2 天未跟进，建议今天联系。</div>
+          <div class="chips">
+            <span class="chip" onclick="toast($('#t05'),'','✓','已标记','已加入今日跟进清单',2000)">加入今日清单</span>
+            <span class="chip" onclick="toast($('#t05'),'','✓','已起草','短信草稿：赵女士您好，方案已备好…',2400)">帮我起草一条跟进短信</span>
+            <span class="chip" onclick="toast($('#t05'),'','⚠','权限受限','经营看板为管理层权限，你无法查看',2600)">查看经营看板</span>
+          </div>
+        </div>
+        <div class="bfoot"><span class="fld">说点什么，例如：帮我给赵六加跟进记录</span><span class="go">↑</span></div>
+      </div>
+      <button class="fab" onclick="show('ab05')">💼</button>
+    </div>
+    <div class="hintbar"><b>演示要点</b>数据隔离：员工只能看到自己名下的客户；Agent 会主动提醒未达成任务，且能感知当前账号权限。</div>
+    <div class="toast" id="t05"></div>
+  </div>
+
+  <!-- ================= P06 CRM 录入 ================= -->
+  <div class="frame panel" id="p06">
+    <div class="between" style="padding:13px 22px;border-bottom:1px solid var(--line);background:#fbfcfd">
+      <div class="flexrow"><span style="font-size:15px">＋</span><div><div style="font-size:13.5px;font-weight:700">录入意向客户</div><div class="muted">支持文字 / PDF / 照片 / Word / Excel 五种方式</div></div></div>
+      <div class="flexrow">
+        <button class="btn sm" onclick="goStep(1)">从对话提取 →</button>
+        <button class="btn pri sm">保存并研判</button>
+      </div>
+    </div>
+    <div class="scrollv" style="padding:16px 22px">
+      <div class="tabs" style="display:flex;gap:4px;margin-bottom:14px;border-bottom:1px solid var(--line);padding-bottom:-1px">
+        <button class="btn sm pri" style="border-radius:6px 6px 0 0">手动填写</button>
+        <button class="btn sm" onclick="toast($('#t06'),'','📄','已解析','从 展会名单.xlsx 提取 12 条记录',2200)" style="border-radius:6px 6px 0 0">Excel 批量导入</button>
+        <button class="btn sm" onclick="toast($('#t06'),'','🖼️','OCR 完成','从名片照片识别 6 个字段',2200)" style="border-radius:6px 6px 0 0">照片识别</button>
+        <button class="btn sm" onclick="toast($('#t06'),'','📑','已解析','PDF 宣传单提取 3 条意向',2200)" style="border-radius:6px 6px 0 0">PDF / Word</button>
+        <button class="btn sm" onclick="toast($('#t06'),'','💼','企助已录入','通过对话完成，可在此核对',2200)" style="border-radius:6px 6px 0 0">企助对话录入</button>
+      </div>
+
+      <div class="drop" onclick="toast($('#t06'),'','✓','文件已上传','展会名单.xlsx · 12 条记录 · 点击「从文件提取」自动填充',2600)">
+        <div class="ic">📥</div>
+        <h5>拖拽文件到此处，或点击选择</h5>
+        <p>支持 .xlsx / .docx / .pdf / .jpg .png，单文件 ≤ 20MB</p>
+      </div>
+      <div class="ups">
+        <div class="up">📄 展会名单.xlsx <span class="x">✕</span></div>
+        <div class="up">🖼️ 名片_赵六.jpg <span class="x">✕</span></div>
+        <div class="up">📑 咨询记录.pdf <span class="x">✕</span></div>
+      </div>
+
+      <div class="grid2" style="margin-top:16px">
+        <div class="card">
+          <h4>客户基本信息</h4>
+          <div class="grid2" style="gap:10px">
+            <div class="fldg"><label>姓名 <i>*</i></label><div class="ctrl has">赵六</div></div>
+            <div class="fldg"><label>性别 <i>*</i></label><div class="ctrl has">女</div></div>
+            <div class="fldg"><label>年龄 <i>*</i></label><div class="ctrl has">22</div></div>
+            <div class="fldg"><label>联系方式 <i>*</i></label><div class="ctrl has">138 2626 8891</div></div>
+            <div class="fldg full"><label>学历 <i>*</i></label><div class="ctrl has">大专（护理专业）</div></div>
+          </div>
+        </div>
+        <div class="card">
+          <h4>画像与意向 <span class="tag teal">AI 已预填 4 项</span></h4>
+          <div class="grid2" style="gap:10px">
+            <div class="fldg"><label>家庭经济基础</label><div class="ctrl has">一般</div></div>
+            <div class="fldg"><label>职业 / 专业需求</label><div class="ctrl has">护理</div></div>
+            <div class="fldg"><label>德语能力</label><div class="ctrl has">零基础</div></div>
+            <div class="fldg"><label>意向业务线</label><div class="ctrl has">德国双元制</div></div>
+            <div class="fldg full"><label>预算与入学时间</label><div class="ctrl has">预算 ≤ 10 万，期望 2027 春入学</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:14px">
+        <div class="between" style="margin-bottom:10px"><h4 style="margin:0">跟进归属与状态</h4><span class="tag gold">电话去重 · 先录先得</span></div>
+        <div class="grid3" style="gap:12px">
+          <div class="fldg"><label>跟进员工</label><div class="ctrl has">陈顾问（本人）</div></div>
+          <div class="fldg"><label>客户状态</label><div class="ctrl has">咨询中</div></div>
+          <div class="fldg"><label>信息完整度</label><div class="ctrl has">8 / 9 项</div></div>
+        </div>
+        <div class="barh" style="margin-top:12px"><i style="width:89%"></i></div>
+        <div class="muted" style="margin-top:6px;font-size:10.5px">缺失字段：紧急联系人 —— 员工端可随时补录，管理层可变更跟进归属</div>
+      </div>
+    </div>
+    <div class="hintbar"><b>演示要点</b>五入口统一进同一张 CRM 表；电话去重保障「先录入者获得跟进权」，避免抢单。</div>
+    <div class="toast" id="t06"></div>
+  </div>
+
+  <!-- ================= P07 客户详情 + 研判 ================= -->
+  <div class="frame panel" id="p07">
+    <div class="scrollv" style="padding:16px 22px">
+      <div class="between" style="margin-bottom:14px">
+        <div class="flexrow">
+          <div class="avatar" style="width:42px;height:42px;font-size:15px">赵</div>
+          <div>
+            <div style="font-size:16px;font-weight:700">赵六 <span class="tag teal" style="margin-left:6px">有效线索</span><span class="tag gold">信息待补充</span></div>
+            <div class="muted">编号 C-20261015-0071 · 跟进人 陈顾问 · 首次接触 2026-10-13</div>
+          </div>
+        </div>
+        <div class="flexrow">
+          <button class="btn sm" onclick="toast($('#t07'),'','📞','已拨打','通话 4 分 12 秒，已自动生成跟进记录',2200)">📞 拨打</button>
+          <button class="btn sm" onclick="toast($('#t07'),'','✉️','短信已发','方案链接 + 时间建议已发送',2000)">✉️ 发方案</button>
+          <button class="btn pri sm" onclick="toast($('#t07'),'','🎓','申请已提交','代申请留学生，等待经理审批',2400)">🎓 申请转留学生</button>
+        </div>
+      </div>
+
+      <!-- 研判卡 -->
+      <div class="match" style="margin-bottom:14px">
+        <div class="top">
+          <div>
+            <div class="lab">AI 客户研判结果</div>
+            <div class="score">87<small> / 100 匹配度</small></div>
+            <h5>推荐产品：德国双元制职业教育 · 护理方向</h5>
+          </div>
+          <div class="ring"><b>87</b></div>
+        </div>
+        <ul>
+          <li>学历匹配：大专护理 → 德国护理双元制准入条件吻合</li>
+          <li>经济适配：带薪实习月补贴 900–1200 欧，契合「预算 ≤ 10 万」诉求</li>
+          <li>时间匹配：2027 春入学窗口开放，语言班可提前启动</li>
+          <li>风险点：德语零基础，需 6–9 个月语言班（已纳入方案）</li>
+        </ul>
+        <div class="warn">⚠️ 研判结论仅供跟进参考，最终以顾问人工确认与材料审核为准。此页员工与管理层可见，客户与学生端不可见。</div>
+      </div>
+
+      <div class="grid2">
+        <div class="card">
+          <h4>客户画像</h4>
+          <table class="tbl">
+            <tr><td style="width:90px">姓名 / 性别</td><td>赵六 / 女</td><td style="width:90px">年龄</td><td>22</td></tr>
+            <tr><td>联系方式</td><td>138 2626 8891</td><td>学历</td><td>大专 · 护理</td></tr>
+            <tr><td>家庭基础</td><td>一般</td><td>德语</td><td>零基础</td></tr>
+            <tr><td>职业需求</td><td>护理 / 医护</td><td>意向业务</td><td>德国双元制</td></tr>
+            <tr><td>预算</td><td>≤ 10 万</td><td>期望入学</td><td>2027 春季</td></tr>
+          </table>
+        </div>
+        <div class="card">
+          <h4>跟进时间轴</h4>
+          <div class="tl">
+            <div class="node ok"><h6>官网注册留资</h6><p>填写 5 项必填 + 3 项选填</p><div class="dt">2026-10-13 16:42</div></div>
+            <div class="node ok"><h6>Agent 首轮对话</h6><p>采集意向、推荐德国双元制</p><div class="dt">2026-10-13 16:45</div></div>
+            <div class="node ok"><h6>员工首次跟进</h6><p>电话沟通 4 分 12 秒，确认需求</p><div class="dt">2026-10-14 10:20</div></div>
+            <div class="node cur"><h6>方案确认中</h6><p>已发送测算表，等待客户反馈</p><div class="dt">2026-10-15 09:11</div></div>
+            <div class="node"><h6>待：申请转化</h6><p>客户确认后提交留学生申请</p><div class="dt">预计 10-18</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:14px">
+        <div class="between" style="margin-bottom:10px"><h4 style="margin:0">跟进记录</h4><button class="btn sm" onclick="toast($('#t07'),'','✓','记录已保存','新增一条跟进记录，客户状态同步更新',2200)">＋ 添加记录</button></div>
+        <div class="listitem"><div class="avatar sm teal">陈</div><div class="mini"><strong>电话沟通 · 4 分 12 秒</strong>客户对费用仍有疑虑，已发送测算表；下次沟通重点：语言班安排与住宿</div><div class="muted" style="white-space:nowrap">10-14</div></div>
+        <div class="listitem"><div class="avatar sm blue" style="background:#eaf1fb;color:var(--blue)">粤</div><div class="mini"><strong>Agent 自动记录</strong>对话中客户主动提及「希望 2027 春入学」，已更新意向字段</div><div class="muted" style="white-space:nowrap">10-13</div></div>
+        <div class="listitem"><div class="avatar sm gold">系</div><div class="mini"><strong>系统</strong>客户完成注册，线索进入 CRM，分配给陈顾问</div><div class="muted" style="white-space:nowrap">10-13</div></div>
+      </div>
+    </div>
+    <div class="hintbar"><b>演示要点</b>这是全场最核心的一屏：录入即研判，匹配度 87% + 推荐产品一目了然，员工无需专业判断即可精准跟进。</div>
+    <div class="toast" id="t07"></div>
+  </div>
+
+  <!-- ================= P08 口述日报 ================= -->
+  <div class="frame panel" id="p08">
+    <div class="grid2" style="height:100%">
+      <div style="background:#12233c;padding:22px;display:flex;flex-direction:column;color:#e6eefa">
+        <div class="flexrow" style="margin-bottom:18px">
+          <div class="avatar" style="background:rgba(255,255,255,.18)">🎙️</div>
+          <div><div style="font-size:13px;font-weight:600">口述日报 · 录音中</div><div style="font-size:10.5px;color:#93b4d6">2026-10-15 · 陈顾问 · 新加坡事业部</div></div>
+          <span class="tag" style="background:rgba(255,255,255,.14);color:#fff;border-color:transparent;margin-left:auto">00:42</span>
+        </div>
+        <div class="wave" style="margin-bottom:6px">
+          <s></s><s></s><s></s><s></s><s></s><s></s><s></s><s></s><s></s><s></s>
+        </div>
+        <div style="font-size:10.5px;color:#7d9cbd;text-align:center;margin-bottom:18px">● 正在录音 —— 说完后点击「停止并整理」</div>
+        <div style="background:rgba(255,255,255,.06);border-radius:10px;padding:12px 14px;font-size:11.5px;line-height:1.8;color:#cfe0f0;flex:1">
+          「今天跟了两个意向客户，赵六那个德国项目的方案发出去了，<br>她还在犹豫费用，我约了周六再聊一次。<br>然后王五那边是新加坡本硕，材料基本齐了，明天提交申请。<br>下午开了部门周会，主要是讲新的话术模板。<br>明天计划把培训材料准备好，还有两个新线索要首触。」
+        </div>
+        <button class="btn" style="margin-top:14px;background:var(--teal);color:#fff;border-color:var(--teal)" onclick="goStep(1)">⏹ 停止并整理为日报</button>
+      </div>
+      <div class="scrollv" style="padding:18px 20px">
+        <div class="between" style="margin-bottom:12px"><div style="font-size:14px;font-weight:700">日报预览</div><span class="tag teal">AI 已结构化</span></div>
+        <div class="card" style="border-color:#bfe3dd;background:#f3fbf9">
+          <div class="muted" style="font-size:10.5px">日期：2026-10-15 &nbsp;|&nbsp; 姓名：陈顾问 &nbsp;|&nbsp; 部门：新加坡事业部</div>
+          <div style="font-size:12.5px;line-height:1.85;margin-top:10px">
+            <div style="font-weight:700;color:var(--navy);margin:8px 0 3px">一、今日工作</div>
+            1. 跟进意向客户 2 名（赵六-德国双元制方案沟通、王五-新加坡本硕材料整理）<br>
+            2. 完成 1 份项目方案（赵六·德国护理双元制测算表）<br>
+            3. 参加部门周会（新话术模板培训）
+            <div style="font-weight:700;color:var(--navy);margin:8px 0 3px">二、明日计划</div>
+            1. 继续跟进客户赵六（周六二次沟通，重点：费用与语言班安排）<br>
+            2. 准备培训材料<br>
+            3. 新线索 2 条首触
+            <div style="font-weight:700;color:var(--navy);margin:8px 0 3px">三、问题与反馈</div>
+            - 客户赵六对费用有疑虑，需进一步沟通
+          </div>
+        </div>
+        <div class="flexrow" style="margin-top:12px;gap:8px">
+          <button class="btn sm" onclick="toast($('#t08'),'','✓','日报已提交','可在「日报查看」中检索，管理层可见汇总',2400)">提交日报</button>
+          <button class="btn sm" onclick="toast($('#t08'),'','✓','已复制','已复制到剪贴板，可粘贴到 IM',2000)">复制</button>
+          <button class="btn sm" onclick="toast($('#t08'),'','✏️','可继续编辑','点击段落直接修改措辞',2000)">修改</button>
+        </div>
+      </div>
+    </div>
+    <div class="hintbar"><b>演示要点</b>员工说完即出结构化日报，格式统一、直接可提交；这是一线反馈「每天最省事的功能」。</div>
+    <div class="toast" id="t08"></div>
+  </div>
+
+  <!-- ================= P09 企助指令式 ================= -->
+  <div class="frame panel" id="p09">
+    <div class="chatscreen" style="height:100%">
+      <div class="chatmain" style="border-right:none">
+        <div class="chathead">
+          <div class="avatar" style="background:var(--navy)">企</div>
+          <div><div style="font-size:12.5px;font-weight:600">企助 · 企业智能助手</div><div class="muted">当前权限：普通员工 · 数据范围：仅本人名下</div></div>
+          <span class="tag gold" style="margin-left:auto">指令式操作已开启</span>
+        </div>
+        <div class="chatlog">
+          <div class="ts">今天 17:20</div>
+          <div class="msg bot">我可以帮你查客户、加跟进记录、整理日报、提醒待办。<b>涉及写操作时会先二次确认</b>，确认后才执行。</div>
+          <div class="ts me">帮我给赵六加一条跟进记录：10 月 18 日周六上午电话沟通，重点聊费用和语言班</div>
+          <div class="card" style="margin:0 0 12px;max-width:76%;border-color:#bfe3dd;background:#f3fbf9">
+            <div style="font-size:11px;color:#1c7d71;font-weight:600;margin-bottom:6px">⚙️ 待你确认的操作</div>
+            <div style="font-size:11.5px;line-height:1.7">
+              · 客户：<b>赵六（C-20261015-0071）</b><br>
+              · 类型：电话沟通<br>
+              · 时间：2026-10-18 10:00<br>
+              · 内容：重点聊费用方案与语言班安排<br>
+              · 跟进人：陈顾问（本人）
+            </div>
+            <div class="flexrow" style="margin-top:10px;gap:8px">
+              <button class="btn pri sm" onclick="toast($('#t09'),'','✓','已执行','跟进记录已写入，客户时间轴同步更新',2600)">确认执行</button>
+              <button class="btn sm" onclick="toast($('#t09'),'','✓','已取消','本次操作未执行',2000)">取消</button>
+              <button class="btn sm" onclick="toast($('#t09'),'','✓','已调整','时间改为 10 月 18 日 14:00',2000)">改为下午 2 点</button>
+            </div>
+          </div>
+          <div class="ts me">查一下我名下跟进超过 3 天没联系的客户</div>
+          <div class="msg bot">共 2 名：<br>① <b>赵六</b> — 最后联系 10-13，距今天 2 天（临界）<br>② <b>孙女士</b> — 最后联系 10-09，距今天 6 天，意向：新加坡本硕<br><br>需要我帮你起草两条跟进短信吗？</div>
+          <div class="chiprow">
+            <span class="chip" onclick="toast($('#t09'),'','✉️','草稿已生成','2 条跟进短信，可直接发送',2200)">起草跟进短信</span>
+            <span class="chip" onclick="toast($('#t09'),'','⚠️','权限不足','经营看板为管理层权限',2600)">给我看经营看板</span>
+            <span class="chip" onclick="toast($('#t09'),'','⚠️','无权查看','组织架构查询仅返回本部门',2200)">查全部员工名单</span>
+          </div>
+        </div>
+        <div class="chatinput"><span class="fld">输入指令，例如：帮我把王五的申请提交了</span><button class="btn pri sm">发送</button></div>
+      </div>
+      <div class="chatside">
+        <div class="card">
+          <h4>能力清单（按权限）</h4>
+          <div class="listitem"><div class="avatar sm navy">✓</div><div class="mini"><strong>客户信息查询</strong>仅本人名下</div></div>
+          <div class="listitem"><div class="avatar sm navy">✓</div><div class="mini"><strong>客户信息录入</strong>多格式</div></div>
+          <div class="listitem"><div class="avatar sm navy">✓</div><div class="mini"><strong>跟进记录</strong>读 / 写</div></div>
+          <div class="listitem"><div class="avatar sm navy">✓</div><div class="mini"><strong>口述日报</strong>自动结构化</div></div>
+          <div class="listitem"><div class="avatar sm navy">✓</div><div class="mini"><strong>待办提醒</strong>主动推送</div></div>
+          <div class="listitem"><div class="avatar sm navy">✓</div><div class="mini"><strong>组织架构</strong>仅本部门</div></div>
+          <div class="listitem"><div class="avatar sm" style="background:#fdecec;color:var(--red)">✕</div><div class="mini"><strong>经营看板 / 智能报告</strong>管理层</div></div>
+          <div class="listitem"><div class="avatar sm" style="background:#fdecec;color:var(--red)">✕</div><div class="mini"><strong>全域客户 / 员工管理</strong>管理层</div></div>
+        </div>
+        <div class="harvest" style="background:#fdf1da;border-color:#f0dcae">
+          <h6 style="color:#8a6a2a">⚙️ 指令式处理的安全机制</h6>
+          <div class="row"><span style="flex:1">查询类</span><span>直接返回</span></div>
+          <div class="row"><span style="flex:1">写入类</span><span style="color:var(--red);font-weight:700">二次确认</span></div>
+          <div class="row"><span style="flex:1">越权类</span><span style="color:var(--red);font-weight:700">拒绝并说明</span></div>
+          <div class="row"><span style="flex:1">敏感操作</span><span>留痕审计</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="hintbar"><b>演示要点</b>写操作一律二次确认，越权请求明确拒绝——这是客户 IT 部门最关心的可控性证明。</div>
+    <div class="toast" id="t09"></div>
+  </div>
+
+  <div class="below">
+    <div class="steps">
+      <div class="stepcard on"><div class="idx">1</div><div><div class="ttl">员工工作台：待办 + 跟进提醒</div><div class="dsc">今日待办、客户跟进提醒、待审批事项一屏看全；数据仅限本人名下。</div></div></div>
+      <div class="stepcard"><div class="idx">2</div><div><div class="ttl">CRM 录入：五入口统一入库</div><div class="dsc">文字 / PDF / 照片 / Word / Excel，AI 自动提取字段，电话去重。</div></div></div>
+      <div class="stepcard"><div class="idx">3</div><div><div class="ttl">客户详情：研判卡 87 分</div><div class="dsc">匹配度评分 + 推荐产品 + 风险点，员工直接拿去谈客。</div></div></div>
+      <div class="stepcard"><div class="idx">4</div><div><div class="ttl">口述日报：说完即出稿</div><div class="dsc">录音 → AI 结构化 → 一键提交，格式统一。</div></div></div>
+      <div class="stepcard"><div class="idx">5</div><div><div class="ttl">企助：指令式 + 二次确认</div><div class="dsc">说一句话完成写操作，越权请求被拒绝并说明原因。</div></div></div>
+    </div>
+    <div class="script">
+      <h5>🎤 讲解话术</h5>
+      <div class="bubble" id="sc1">「这是员工每天打开的第一屏。左边是待办和提醒，右边是跟进节奏——谁快掉出跟进周期，一眼就看到。<br><br>重点看第三屏这个研判卡：客户信息一录进来，系统立刻算出 87 分匹配度，还告诉员工该推哪个产品、客户可能卡在哪。以前这个判断要靠三年以上经验的顾问，现在新人也能照着跟。」</div>
+      <div class="note">💡 若客户问「匹配度怎么算」：依据是《用户画像研判规则》的字段权重模型，具体权重需要你们业务方确认后固化。</div>
+    </div>
+  </div>
+</section>
+`;
+
+/* ============================================================
+   p3_manager.js  —  Section 3：管理层（4 步）
+   ============================================================ */
+const P3 = `
+<section class="framewrap" id="sec2">
+  <div class="bar">
+    <div class="dots"><s></s><s></s><s></s></div>
+    <div class="url">🔒  crm.yuejiao-edu.com &nbsp;/&nbsp; 经营看板 · 王经理（管理层）</div>
+    <span class="tag teal">全域数据 · 不受隔离限制</span>
+  </div>
+
+  <!-- ================= P10 经营看板 ================= -->
+  <div class="frame panel on" id="p10">
+    <div style="padding:14px 22px;border-bottom:1px solid var(--line);background:#fbfcfd">
+      <div class="between">
+        <div><div style="font-size:14px;font-weight:700">经营看板</div><div class="muted">全域客户数据 · 转化漏斗 · 业绩概览 · 数据每 30 分钟刷新</div></div>
+        <div class="flexrow">
+          <button class="btn sm">本月</button><button class="btn sm">本季</button><button class="btn sm">全年</button>
+          <button class="btn pri sm" onclick="goStep(3)">📊 智能报告</button>
+        </div>
+      </div>
+    </div>
+    <div class="scrollv" style="padding:16px 22px">
+      <div class="grid4" style="margin-bottom:14px">
+        <div class="stat"><div class="num">1,286</div><div class="lbl">全域客户总数</div><div class="sub">↑ 8.2% 环比</div></div>
+        <div class="stat"><div class="num">347</div><div class="lbl">跟进中</div><div class="sub">占 27.0%</div></div>
+        <div class="stat"><div class="num">183</div><div class="lbl">本月新增</div><div class="sub">↑ 12.4%</div></div>
+        <div class="stat"><div class="num">21.4%</div><div class="lbl">整体转化率</div><div class="sub">↑ 1.8pt</div></div>
+      </div>
+
+      <div class="grid2" style="margin-bottom:14px">
+        <div class="card">
+          <div class="between" style="margin-bottom:12px"><h4 style="margin:0">转化漏斗</h4><span class="muted">2026 年 10 月</span></div>
+          <div class="funnel">
+            <div class="fstep" style="width:100%;background:linear-gradient(90deg,#0f2c52,#1a5fb4)">访客 <span>3,842</span></div>
+            <div class="fstep" style="width:76%;background:linear-gradient(90deg,#1a5fb4,#3584e4)">注册留资 <span>2,915</span></div>
+            <div class="fstep" style="width:52%;background:linear-gradient(90deg,#2a9d8f,#52b7a8)">有效线索 <span>1,998</span></div>
+            <div class="fstep" style="width:33%;background:linear-gradient(90deg,#e9a23b,#f0bd5e)">跟进中 <span>1,286</span></div>
+            <div class="fstep" style="width:18%;background:linear-gradient(90deg,#d94f4f,#e57272)">已转化留学生 <span>689</span></div>
+          </div>
+          <div class="muted" style="margin-top:10px;font-size:10.5px">漏斗各环节均可下钻到客户名单；异常环节标红并触发预警。</div>
+        </div>
+        <div class="card">
+          <div class="between" style="margin-bottom:4px"><h4 style="margin:0">各事业部业绩</h4><span class="tag gold">本月</span></div>
+          <div style="font-size:11px;color:var(--ink3);margin:8px 0 4px">转化人数 / 目标</div>
+          <div style="margin-bottom:9px"><div class="between" style="font-size:11.5px;margin-bottom:3px"><span>德国双元制事业部</span><b>38 / 40</b></div><div class="barh"><i style="width:95%"></i></div></div>
+          <div style="margin-bottom:9px"><div class="between" style="font-size:11.5px;margin-bottom:3px"><span>新加坡事业部</span><b>31 / 35</b></div><div class="barh"><i style="width:89%"></i></div></div>
+          <div style="margin-bottom:9px"><div class="between" style="font-size:11.5px;margin-bottom:3px"><span>国际留学事业部</span><b>24 / 30</b></div><div class="barh"><i style="width:80%"></i></div></div>
+          <div style="margin-bottom:9px"><div class="between" style="font-size:11.5px;margin-bottom:3px"><span>国际研学事业部</span><b>17 / 25</b></div><div class="barh"><i style="width:68%"></i></div></div>
+          <div style="margin-bottom:9px"><div class="between" style="font-size:11.5px;margin-bottom:3px"><span>综合转化部</span><b>9 / 20</b></div><div class="barh"><i style="width:45%;background:linear-gradient(90deg,#d94f4f,#e57272)"></i></div></div>
+        </div>
+      </div>
+
+      <div class="grid2">
+        <div class="card">
+          <h4>业务线分布</h4>
+          <div class="grid2" style="gap:12px;margin-top:6px">
+            <div style="text-align:center"><div class="ring" style="width:66px;height:66px;flex:0 0 66px;background:conic-gradient(#1a5fb4 0 42%,#eef1f5 42% 100%);margin:0 auto"><b style="font-size:16px">42%</b></div><div class="muted" style="font-size:10.5px;margin-top:5px">德国双元制</div></div>
+            <div style="text-align:center"><div class="ring" style="width:66px;height:66px;flex:0 0 66px;background:conic-gradient(#2a9d8f 0 31%,#eef1f5 31% 100%);margin:0 auto"><b style="font-size:16px">31%</b></div><div class="muted" style="font-size:10.5px;margin-top:5px">新加坡本硕</div></div>
+            <div style="text-align:center"><div class="ring" style="width:66px;height:66px;flex:0 0 66px;background:conic-gradient(#e9a23b 0 18%,#eef1f5 18% 100%);margin:0 auto"><b style="font-size:16px">18%</b></div><div class="muted" style="font-size:10.5px;margin-top:5px">国际留学</div></div>
+            <div style="text-align:center"><div class="ring" style="width:66px;height:66px;flex:0 0 66px;background:conic-gradient(#8a7ad0 0 9%,#eef1f5 9% 100%);margin:0 auto"><b style="font-size:16px">9%</b></div><div class="muted" style="font-size:10.5px;margin-top:5px">国际研学</div></div>
+          </div>
+        </div>
+        <div class="card">
+          <h4>近期预警</h4>
+          <div class="listitem"><div class="avatar sm red">!</div><div class="mini"><strong>综合转化部 业绩偏低</strong>完成率 45%，连续 2 周低于均值</div></div>
+          <div class="listitem"><div class="avatar sm gold">!</div><div class="mini"><strong>5 名客户超 7 天未跟进</strong>涉及 3 个事业部，已通知负责人</div></div>
+          <div class="listitem"><div class="avatar sm teal">!</div><div class="mini"><strong>心理预警 2 例</strong>学生情绪评分低于阈值，已通知负责员工</div></div>
+          <div class="listitem"><div class="avatar sm navy">!</div><div class="mini"><strong>投诉周报已生成</strong>本周 3 起，均在 24h 内闭环</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="hintbar"><b>演示要点</b>管理层不受员工数据隔离限制，可看全域；漏斗+预警让问题自动浮出，不用等月底汇报。</div>
+    <div class="toast" id="t10"></div>
+  </div>
+
+  <!-- ================= P11 全部客户 ================= -->
+  <div class="frame panel" id="p11">
+    <div style="padding:13px 22px;border-bottom:1px solid var(--line);background:#fbfcfd">
+      <div class="between">
+        <div class="flexrow"><div style="font-size:13.5px;font-weight:700">全部客户</div><span class="tag teal">1,286 条</span></div>
+        <div class="flexrow" style="gap:8px">
+          <div class="ctrl" style="height:30px;width:180px;font-size:11px">🔍 搜索姓名 / 电话 / 编号</div>
+          <button class="btn sm">筛选</button>
+          <button class="btn sm" onclick="toast($('#t11'),'','✓','已导出','1,286 条客户数据已导出 Excel',2200)">导出</button>
+        </div>
+      </div>
+    </div>
+    <div style="padding:0 22px">
+      <table class="tbl">
+        <thead><tr><th style="width:34px">#</th><th>客户</th><th>意向业务</th><th>匹配度</th><th>状态</th><th>跟进员工</th><th>最后跟进</th><th style="width:90px">操作</th></tr></thead>
+      </table>
+    </div>
+    <div class="scrollv" style="padding:0 22px;flex:1">
+      <table class="tbl">
+        <tbody>
+          <tr onclick="goStep(2)" style="cursor:pointer"><td>1</td><td><div class="flexrow" style="gap:8px"><div class="avatar sm">赵</div><div class="mini"><strong>赵六</strong>C-20261015-0071</div></div></td><td>德国双元制</td><td><span class="tag teal">87 分</span></td><td><span class="tag gold">方案确认中</span></td><td>陈顾问</td><td>2 天前</td><td><button class="btn sm">详情</button></td></tr>
+          <tr onclick="toast($('#t11'),'','✓','已变更','客户「孙女士」跟进人：陈顾问 → 李经理',2600)" style="cursor:pointer"><td>2</td><td><div class="flexrow" style="gap:8px"><div class="avatar sm gold">孙</div><div class="mini"><strong>孙女士</strong>C-20261009-0032</div></div></td><td>新加坡本硕</td><td><span class="tag teal">79 分</span></td><td><span class="tag navy">跟进中</span></td><td>陈顾问</td><td>6 天前</td><td><button class="btn sm">改归属</button></td></tr>
+          <tr style="cursor:pointer"><td>3</td><td><div class="flexrow" style="gap:8px"><div class="avatar sm teal">王</div><div class="mini"><strong>王五</strong>C-20261011-0055</div></div></td><td>新加坡本硕</td><td><span class="tag gold">68 分</span></td><td><span class="tag red">费用疑虑</span></td><td>李经理</td><td>1 天前</td><td><button class="btn sm">详情</button></td></tr>
+          <tr style="cursor:pointer"><td>4</td><td><div class="flexrow" style="gap:8px"><div class="avatar sm red">周</div><div class="mini"><strong>周同学</strong>C-20260928-0018</div></div></td><td>国际留学</td><td><span class="tag teal">91 分</span></td><td><span class="tag green">已转化</span></td><td>张顾问</td><td>3 天前</td><td><button class="btn sm">详情</button></td></tr>
+          <tr style="cursor:pointer"><td>5</td><td><div class="flexrow" style="gap:8px"><div class="avatar sm navy">吴</div><div class="mini"><strong>吴先生</strong>C-20261014-0068</div></div></td><td>德国双元制</td><td><span class="tag gold">72 分</span></td><td><span class="tag grey">待核实</span></td><td>待分配</td><td>—</td><td><button class="btn sm">分配</button></td></tr>
+          <tr style="cursor:pointer"><td>6</td><td><div class="flexrow" style="gap:8px"><div class="avatar sm" style="background:#eef1f4;color:var(--ink3)">林</div><div class="mini"><strong>林同学</strong>C-20261015-0070</div></div></td><td>国际研学</td><td><span class="tag grey">待评估</span></td><td><span class="tag navy">咨询中</span></td><td>陈顾问</td><td>今天</td><td><button class="btn sm">详情</button></td></tr>
+        </tbody>
+      </table>
+      <div class="flexrow" style="padding:14px 0;justify-content:center;gap:6px">
+        <button class="btn sm">‹</button><button class="btn sm pri">1</button><button class="btn sm">2</button><button class="btn sm">3</button><button class="btn sm">…</button><button class="btn sm">215</button><button class="btn sm">›</button>
+      </div>
+    </div>
+    <div class="hintbar"><b>演示要点</b>管理层可查看并调整所有客户的跟进归属；「待核实」状态即 AI 检出矛盾信息（如年龄与学历不符）。</div>
+    <div class="toast" id="t11"></div>
+  </div>
+
+  <!-- ================= P12 审批中心 ================= -->
+  <div class="frame panel" id="p12">
+    <div style="padding:13px 22px;border-bottom:1px solid var(--line);background:#fbfcfd">
+      <div class="between">
+        <div class="flexrow"><div style="font-size:13.5px;font-weight:700">审批中心</div><span class="tag red">3 条待审批</span></div>
+        <div class="flexrow">
+          <button class="btn sm pri">待审批 3</button><button class="btn sm">已处理 28</button>
+        </div>
+      </div>
+    </div>
+    <div class="scrollv" style="padding:16px 22px">
+      <div class="card" style="border-color:#bfe3dd;background:#f3fbf9">
+        <div class="between">
+          <div class="flexrow"><div class="avatar teal">陈</div><div><div style="font-size:12.5px;font-weight:600">陈顾问 申请将「赵六」转化为留学生</div><div class="muted">2026-10-15 09:24 · 新加坡事业部</div></div></div>
+          <span class="tag red">待审批</span>
+        </div>
+        <table class="tbl" style="margin-top:12px">
+          <tr><td style="width:110px">客户编号</td><td>C-20261015-0071</td><td style="width:110px">当前角色</td><td>意向客户（PROSPECT）</td></tr>
+          <tr><td>拟转化角色</td><td>留学生（STUDENT）</td><td>匹配度</td><td><span class="tag teal">87 分</span></td></tr>
+          <tr><td>目标项目</td><td>德国双元制 · 护理方向</td><td>期望入学</td><td>2027 春季</td></tr>
+          <tr><td>申请理由</td><td colspan="3">客户已确认方案，费用疑虑已通过分期方案化解，语言班位置已预留</td></tr>
+        </table>
+        <div class="flexrow" style="margin-top:14px;gap:8px">
+          <button class="btn pri" onclick="goStep(3)">✓ 批准</button>
+          <button class="btn sm" onclick="toast($('#t12'),'','↺','已驳回','已填写驳回原因：缺少紧急联系人信息',2400)">↺ 驳回</button>
+          <button class="btn sm" onclick="toast($('#t12'),'','✓','已转交','已转交总裁审批',2000)">转交上级</button>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:12px">
+        <div class="between">
+          <div class="flexrow"><div class="avatar gold">李</div><div><div style="font-size:12.5px;font-weight:600">李娜 的请假申请</div><div class="muted">2026-10-15 08:41 · 学生端提交</div></div></div>
+          <span class="tag red">待审批</span>
+        </div>
+        <div class="grid3" style="margin-top:12px;gap:12px">
+          <div class="fldg"><label>请假类型</label><div class="ctrl has">病假</div></div>
+          <div class="fldg"><label>起止时间</label><div class="ctrl has">10-18 至 10-20</div></div>
+          <div class="fldg"><label>缺课节数</label><div class="ctrl has">3 节</div></div>
+        </div>
+        <div class="fldg full" style="margin-top:10px"><label>事由</label><div class="ctrl txa" style="height:auto">身体不适需就医，已与任课老师沟通补课安排</div></div>
+        <div class="flexrow" style="margin-top:12px;gap:8px">
+          <button class="btn pri sm" onclick="toast($('#t12'),'','✓','已批准','通知已推送给李娜及其负责员工',2400)">✓ 批准</button>
+          <button class="btn sm" onclick="toast($('#t12'),'','↺','已驳回','请补充就医证明',2000)">↺ 驳回</button>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:12px;opacity:.85">
+        <div class="between">
+          <div class="flexrow"><div class="avatar navy">张</div><div><div style="font-size:12.5px;font-weight:600">张顾问 提交员工转正申请</div><div class="muted">2026-10-14 17:02 · 人事流程</div></div></div>
+          <span class="tag green">已批准</span>
+        </div>
+        <div class="muted" style="font-size:11px;margin-top:8px">一期人事功能并入 MANAGER，此类流程同样在此处理；二期拆分独立人事角色后，将自动转入人事模块。</div>
+      </div>
+    </div>
+    <div class="hintbar"><b>演示要点</b>员工提交的转化申请、学生请假、人事流程统一在此审批；一键操作后系统自动通知相关方。</div>
+    <div class="toast" id="t12"></div>
+  </div>
+
+  <!-- ================= P13 智能报告 ================= -->
+  <div class="frame panel" id="p13">
+    <div style="padding:14px 22px;border-bottom:1px solid var(--line);background:#fbfcfd">
+      <div class="between">
+        <div><div style="font-size:14px;font-weight:700">智能报告</div><div class="muted">由 AI 基于全域数据自动生成，支持日 / 周维度</div></div>
+        <button class="btn pri sm" onclick="toast($('#t13'),'','✓','已生成','经营分析报告已生成，耗时 12 秒',2400)">＋ 生成新报告</button>
+      </div>
+    </div>
+    <div class="scrollv" style="padding:16px 22px">
+      <div class="grid2" style="margin-bottom:14px">
+        <div class="card" onclick="toast($('#t13'),'','📈','报告已打开','经营分析报告 · 2026 年 10 月（半月）',2200)" style="cursor:pointer">
+          <div class="flexrow" style="gap:10px"><div class="avatar navy" style="width:38px;height:38px;flex:0 0 38px;font-size:15px">📈</div><div><div style="font-size:12.5px;font-weight:600">经营分析报告</div><div class="muted">全域客户 + 转化漏斗 + 业绩归因</div></div></div>
+          <div class="between" style="margin-top:10px"><span class="tag teal">日更</span><span class="muted" style="font-size:10.5px">更新于 06:00</span></div>
+        </div>
+        <div class="card" onclick="toast($('#t13'),'','📝','报告已打开','员工日报汇总 · 日度版',2000)" style="cursor:pointer">
+          <div class="flexrow" style="gap:10px"><div class="avatar teal" style="width:38px;height:38px;flex:0 0 38px;font-size:15px">📝</div><div><div style="font-size:12.5px;font-weight:600">员工日报汇总（日）</div><div class="muted">全员日报合并 + 异常项标红</div></div></div>
+          <div class="between" style="margin-top:10px"><span class="tag teal">日更</span><span class="muted" style="font-size:10.5px">更新于 22:00</span></div>
+        </div>
+        <div class="card" onclick="toast($('#t13'),'','📅','报告已打开','员工日报汇总 · 周度版',2000)" style="cursor:pointer">
+          <div class="flexrow" style="gap:10px"><div class="avatar gold" style="width:38px;height:38px;flex:0 0 38px;font-size:15px">📅</div><div><div style="font-size:12.5px;font-weight:600">员工日报汇总（周）</div><div class="muted">周度工作量分布 + 个人对比</div></div></div>
+          <div class="between" style="margin-top:10px"><span class="tag gold">周更</span><span class="muted" style="font-size:10.5px">更新于 10-12</span></div>
+        </div>
+        <div class="card" onclick="toast($('#t13'),'','❤️','报告已打开','学生信息健康周报 · 含情绪预警名单',2200)" style="cursor:pointer">
+          <div class="flexrow" style="gap:10px"><div class="avatar red" style="width:38px;height:38px;flex:0 0 38px;font-size:15px">❤️</div><div><div style="font-size:12.5px;font-weight:600">学生信息健康周报</div><div class="muted">学业进度 + 情绪状态 + 预警名单</div></div></div>
+          <div class="between" style="margin-top:10px"><span class="tag gold">周更</span><span class="tag red">本周 2 项预警</span></div>
+        </div>
+        <div class="card" onclick="toast($('#t13'),'','🛡️','报告已打开','投诉处理周报 · 闭环率 100%',2000)" style="cursor:pointer">
+          <div class="flexrow" style="gap:10px"><div class="avatar" style="width:38px;height:38px;background:#8a7ad0;flex:0 0 38px;font-size:15px">🛡️</div><div><div style="font-size:12.5px;font-weight:600">投诉处理周报</div><div class="muted">工单来源 + 响应时长 + 闭环情况</div></div></div>
+          <div class="between" style="margin-top:10px"><span class="tag gold">周更</span><span class="muted" style="font-size:10.5px">更新于 10-13</span></div>
+        </div>
+        <div class="card" style="background:#fbfcfd">
+          <div class="flexrow" style="gap:10px"><div class="avatar" style="width:38px;height:38px;background:#eef1f4;color:var(--ink3);flex:0 0 38px;font-size:15px">＋</div><div><div style="font-size:12.5px;font-weight:600">自定义报告</div><div class="muted">按维度组合生成专属分析</div></div></div>
+          <div class="muted" style="margin-top:9px;font-size:10.5px">支持导出 PDF / Word / Excel</div>
+        </div>
+      </div>
+      <div class="card">
+        <h4>报告核心结论预览（经营分析 · 10 月半月）</h4>
+        <div class="grid3" style="margin-top:8px;gap:14px">
+          <div><div class="muted" style="font-size:10.5px">新增客户</div><div style="font-size:20px;font-weight:700;color:var(--navy)">183 <span style="font-size:11px;color:var(--teal)">↑12.4%</span></div></div>
+          <div><div class="muted" style="font-size:10.5px">转化率</div><div style="font-size:20px;font-weight:700;color:var(--navy)">21.4% <span style="font-size:11px;color:var(--teal)">↑1.8pt</span></div></div>
+          <div><div class="muted" style="font-size:10.5px">平均首响</div><div style="font-size:20px;font-weight:700;color:var(--navy)">4.2h <span style="font-size:11px;color:var(--red)">↑0.6h</span></div></div>
+        </div>
+        <div class="muted" style="margin-top:12px;font-size:11px;line-height:1.75">
+          · 德国双元制贡献新增客户的 42%，是本月主增长引擎；<br>
+          · 综合转化部完成率 45%，低于均值 22pt，建议本周专项复盘；<br>
+          · 平均首响时长上升 0.6h，主因夜间接待量上升，建议扩充值班排班。
+        </div>
+      </div>
+    </div>
+    <div class="hintbar"><b>演示要点</b>5 类智能报告自动产出，管理层不用等月底汇报就能拿到结论；这是决策效率的核心差异。</div>
+    <div class="toast" id="t13"></div>
+  </div>
+
+  <div class="below">
+    <div class="steps">
+      <div class="stepcard on"><div class="idx">1</div><div><div class="ttl">经营看板：全域 + 漏斗 + 业绩</div><div class="dsc">所有员工客户、转化漏斗、各事业部业绩一屏呈现，异常自动预警。</div></div></div>
+      <div class="stepcard"><div class="idx">2</div><div><div class="ttl">全部客户：跨员工查询与归属调整</div><div class="dsc">可按员工、状态、匹配度筛选；管理层可直接变更跟进归属。</div></div></div>
+      <div class="stepcard"><div class="idx">3</div><div><div class="ttl">审批中心：三类流程一站处理</div><div class="dsc">员工转化申请、学生请假、人事流程统一入口，一键批准即通知全员。</div></div></div>
+      <div class="stepcard"><div class="idx">4</div><div><div class="ttl">智能报告：5 类自动报告</div><div class="dsc">经营分析、日报汇总（日/周）、学生健康周报、投诉周报。</div></div></div>
+    </div>
+    <div class="script">
+      <h5>🎤 讲解话术</h5>
+      <div class="bubble" id="sc2">「管理层看到的是全域数据，不受员工那种数据隔离的限制。漏斗这一栏最关键——哪一环掉了，系统直接标红，不用等月底汇报才发现。<br><br>审批这一屏，员工提的转化申请、学生请的假、甚至人事流程都在这。点一下批准，系统自动通知学生和负责员工，全程不用再发微信催。」</div>
+      <div class="note">💡 需与客户确认：一期经理与总裁是否同为 MANAGER、权限完全一致？二期拆分方案（经理只看下属、总裁看全部、人事独立）需同步确认。</div>
+    </div>
+  </div>
+</section>
+`;
+
+/* ============================================================
+   p4_student.js  —  Section 4：留学生端（5 步）
+   ============================================================ */
+const P4 = `
+<section class="framewrap" id="sec3">
+  <div class="bar">
+    <div class="dots"><s></s><s></s><s></s></div>
+    <div class="url">🔒  student.yuejiao-edu.com &nbsp;/&nbsp; 学生工作台 · 李娜（德国双元制 · 护理）</div>
+    <span class="tag teal">学生视角</span>
+  </div>
+
+  <!-- ================= P14 学生工作台 ================= -->
+  <div class="frame panel on" id="p14">
+    <div style="padding:15px 22px;border-bottom:1px solid var(--line);background:linear-gradient(120deg,#f7fbfd,#eef6f4)">
+      <div class="between">
+        <div class="flexrow">
+          <div class="avatar teal" style="width:44px;height:44px;font-size:16px">李</div>
+          <div>
+            <div style="font-size:14px;font-weight:700">李娜，欢迎回来 👋</div>
+            <div class="muted">德国双元制 · 护理方向 · 语言班第 3 个月 · 负责顾问：陈顾问</div>
+          </div>
+        </div>
+        <div class="flexrow">
+          <span class="tag teal">心理状态：良好</span>
+          <span class="tag navy">在学</span>
+        </div>
+      </div>
+    </div>
+    <div class="scrollv" style="padding:16px 22px">
+      <div class="grid3" style="margin-bottom:14px">
+        <div class="stat"><div class="num" style="font-size:19px">3</div><div class="lbl">待办事项</div><div class="sub">1 项今日截止</div></div>
+        <div class="stat"><div class="num" style="font-size:19px">2</div><div class="lbl">待缴作业</div><div class="sub">德语 B1 作文</div></div>
+        <div class="stat"><div class="num" style="font-size:19px">78<span style="font-size:12px;color:var(--ink3);font-weight:400">/100</span></div><div class="lbl">情绪评分</div><div class="sub">近 7 日均值</div></div>
+      </div>
+
+      <div class="grid2" style="margin-bottom:14px">
+        <div class="card">
+          <div class="between" style="margin-bottom:12px"><h4 style="margin:0">近期课程与 DDL</h4><span class="tag red">1 项紧急</span></div>
+          <div class="listitem"><div class="avatar sm teal">📚</div><div class="mini"><strong>德语 B1 写作课</strong>今天 14:00 · A 栋 302</div></div>
+          <div class="listitem"><div class="avatar sm red">⏰</div><div class="mini"><strong>德语 B1 单元作文</strong>截止 <b style="color:var(--red)">今天 23:59</b> · 剩余 9 小时</div></div>
+          <div class="listitem"><div class="avatar sm gold">📝</div><div class="mini"><strong>护理专业术语测验</strong>10-18 10:00 · 已报名</div></div>
+          <div class="listitem"><div class="avatar sm navy">🎧</div><div class="mini"><strong>听力训练作业</strong>截止 10-20 · 剩余 5 天</div></div>
+        </div>
+        <div class="card">
+          <h4>留学申请进度</h4>
+          <div class="tl" style="margin-top:6px">
+            <div class="node ok"><h6>材料审核</h6><p>学历公证 + 语言证明已通过</p><div class="dt">2026-08-22</div></div>
+            <div class="node ok"><h6>申请提交</h6><p>双元制合作院校 B 校</p><div class="dt">2026-09-05</div></div>
+            <div class="node ok"><h6>收到 Offer</h6><p>护理方向 · 带薪实习岗位已定</p><div class="dt">2026-09-18</div></div>
+            <div class="node cur"><h6>签证办理</h6><p>材料递交中，预计 3 周出结果</p><div class="dt">进行中</div></div>
+            <div class="node"><h6>行前准备</h6><p>住宿、保险、机票</p><div class="dt">待启动</div></div>
+            <div class="node"><h6>已入学</h6><p>预计 2027-03 开学</p><div class="dt">2027-03</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="between" style="margin-bottom:12px"><h4 style="margin:0">7 项服务入口</h4><span class="muted">也可直接问右下角的学助</span></div>
+        <div class="grid4">
+          <div class="bizcard" onclick="goStep(1)" style="padding:11px;text-align:center"><div class="ic" style="width:28px;height:28px;margin:0 auto 7px;font-size:13px">📋</div><h5 style="font-size:11.5px">行政服务</h5></div>
+          <div class="bizcard" onclick="goStep(2)" style="padding:11px;text-align:center"><div class="ic" style="width:28px;height:28px;margin:0 auto 7px;font-size:13px">❤️</div><h5 style="font-size:11.5px">心理关怀</h5></div>
+          <div class="bizcard" onclick="toast($('#t14'),'','🛠️','工单已提交','售后工单 #SR-20261015-011，负责员工将在 2 小时内响应',2600)" style="padding:11px;text-align:center"><div class="ic" style="width:28px;height:28px;margin:0 auto 7px;font-size:13px">🛠️</div><h5 style="font-size:11.5px">售后反馈</h5></div>
+          <div class="bizcard" style="padding:11px;text-align:center"><div class="ic" style="width:28px;height:28px;margin:0 auto 7px;font-size:13px">📅</div><h5 style="font-size:11.5px">学业考务</h5></div>
+          <div class="bizcard" style="padding:11px;text-align:center"><div class="ic" style="width:28px;height:28px;margin:0 auto 7px;font-size:13px">📈</div><h5 style="font-size:11.5px">进度追踪</h5></div>
+          <div class="bizcard" style="padding:11px;text-align:center"><div class="ic" style="width:28px;height:28px;margin:0 auto 7px;font-size:13px">🏠</div><h5 style="font-size:11.5px">生活支持</h5></div>
+          <div class="bizcard" onclick="goStep(4)" style="padding:11px;text-align:center"><div class="ic" style="width:28px;height:28px;margin:0 auto 7px;font-size:13px">✨</div><h5 style="font-size:11.5px">更多服务</h5></div>
+          <div class="bizcard" style="padding:11px;text-align:center;opacity:.6"><div class="ic" style="width:28px;height:28px;margin:0 auto 7px;font-size:13px">👤</div><h5 style="font-size:11.5px">个人信息</h5></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="agent">
+      <div class="bubble" id="ab14">
+        <div class="bhead"><div class="avatar">学</div><div><div>学助 · 学生智能助手</div><small>提示：不提供医疗级建议，不承诺退费/转学</small></div><span class="x" onclick="hide('ab14')">✕</span></div>
+        <div class="bchat">
+          <div class="msg bot">李娜你好～你今天有一件事快到截止时间了：<b>德语 B1 单元作文今晚 23:59</b>，还要 2 小时写完吗？需要我帮你列个提纲？</div>
+          <div class="chips">
+            <span class="chip" onclick="toast($('#t14'),'','✓','提纲已生成','德语 B1 作文提纲已发送',2200)">帮我列提纲</span>
+            <span class="chip" onclick="goStep(1)">我要请个假</span>
+            <span class="chip" onclick="toast($('#t14'),'','📚','已推送','3 篇高分范文 + 常用句式已发送',2200)">推荐点学习资料</span>
+          </div>
+        </div>
+        <div class="bfoot"><span class="fld">问我作业、请假、生活任何事…</span><span class="go">↑</span></div>
+      </div>
+      <button class="fab" onclick="show('ab14')">🎓</button>
+    </div>
+    <div class="hintbar"><b>演示要点</b>学生登录即看到「待办 + 进度 + 情绪」三合一工作台；Agent 主动推送 DDL 与审批结果。</div>
+    <div class="toast" id="t14"></div>
+  </div>
+
+  <!-- ================= P15 请假 ================= -->
+  <div class="frame panel" id="p15">
+    <div class="grid2" style="height:100%">
+      <div class="scrollv" style="padding:18px 20px;border-right:1px solid var(--line)">
+        <div style="font-size:14px;font-weight:700;margin-bottom:4px">提交请假申请</div>
+        <div class="muted" style="font-size:11px;margin-bottom:16px">也可直接对学助说「我想请个假」，由它代你填写</div>
+        <div class="fldg" style="margin-bottom:12px"><label>请假类型</label><div class="ctrl has">病假</div></div>
+        <div class="grid2" style="gap:12px;margin-bottom:12px">
+          <div class="fldg"><label>开始日期</label><div class="ctrl has">2026-10-18</div></div>
+          <div class="fldg"><label>结束日期</label><div class="ctrl has">2026-10-20</div></div>
+        </div>
+        <div class="fldg" style="margin-bottom:12px"><label>预计缺课</label><div class="ctrl has">3 节（德语写作 / 听力 / 护理术语）</div></div>
+        <div class="fldg" style="margin-bottom:12px"><label>事由</label><div class="ctrl txa" style="height:auto">身体不适需就医，已与任课老师沟通补课安排，返校后补齐笔记</div></div>
+        <div class="fldg" style="margin-bottom:16px"><label>附件（就医证明，可选）</label><div class="ctrl">📎 就诊单_李娜.pdf</div></div>
+        <button class="btn pri" style="width:100%;padding:10px" onclick="goStep(2)">提交申请 →</button>
+        <div class="muted" style="font-size:10.5px;margin-top:9px;line-height:1.6">提交后系统自动通知负责员工审批；结果通过站内消息 + 学助推送告知你，无需反复来问。</div>
+      </div>
+      <div style="padding:18px 20px;background:#f7f9fc">
+        <div style="font-size:13px;font-weight:700;margin-bottom:12px">审批进度</div>
+        <div class="card" style="background:#fff">
+          <div class="tl">
+            <div class="node ok"><h6>申请已提交</h6><p>李娜 · 2026-10-15 08:41</p><div class="dt">08:41</div></div>
+            <div class="node ok"><h6>通知已送达</h6><p>负责员工 陈顾问 收到审批任务</p><div class="dt">08:41</div></div>
+            <div class="node cur"><h6>等待审批</h6><p>预计 2 小时内出结果</p><div class="dt">进行中</div></div>
+            <div class="node"><h6>结果通知</h6><p>站内消息 + 学助主动推送</p><div class="dt">待完成</div></div>
+          </div>
+        </div>
+        <div class="card" style="margin-top:12px;background:#eef7f5;border-color:#bfe3dd">
+          <h4>💡 学助代办示例</h4>
+          <div class="muted" style="font-size:11px;line-height:1.7;margin-top:4px">「学助，我明天发烧想请个假」<br>→ 自动识别类型、时间、事由<br>→ 生成草稿供你确认<br>→ 一键提交，全程 20 秒</div>
+        </div>
+      </div>
+    </div>
+    <div class="hintbar"><b>演示要点</b>请假可页面提交也可 Agent 对话代办；提交后状态实时更新，学生不用反复追问进度。</div>
+    <div class="toast" id="t15"></div>
+  </div>
+
+  <!-- ================= P16 心理关怀 ================= -->
+  <div class="frame panel" id="p16">
+    <div class="grid2" style="height:100%">
+      <div class="scrollv" style="padding:18px 20px;border-right:1px solid var(--line)">
+        <div class="flexrow" style="margin-bottom:14px"><span style="font-size:16px;font-weight:700">心理关怀</span><span class="tag gold">一期：AI 对话式评估</span></div>
+        <div class="card" style="background:#fdf6f6;border-color:#f3d4d4">
+          <div class="between">
+            <div class="flexrow"><div class="ring" style="width:62px;height:62px;flex:0 0 62px"><b style="font-size:16px">35</b></div>
+            <div><div style="font-size:12.5px;font-weight:600;color:var(--red)">情绪评分 35 / 100</div><div class="muted">标签：焦虑 · 压力过载</div></div></div>
+            <span class="tag red">已触发预警</span>
+          </div>
+          <div class="barh" style="margin-top:12px"><i style="width:35%;background:linear-gradient(90deg,#d94f4f,#e57272)"></i></div>
+          <div class="muted" style="font-size:10.5px;margin-top:6px">近 7 日趋势：78 → 62 → 51 → 44 → 38 → 35</div>
+        </div>
+
+        <div class="card" style="margin-top:14px">
+          <h4>情绪自评</h4>
+          <div class="emogrid">
+            <div class="emo"><span class="fac">😄</span>愉悦</div>
+            <div class="emo"><span class="fac">🙂</span>平静</div>
+            <div class="emo"><span class="fac">😐</span>一般</div>
+            <div class="emo"><span class="fac">😟</span>焦虑</div>
+            <div class="emo on"><span class="fac">😢</span>低落</div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:14px">
+          <h4>近期疏导记录</h4>
+          <div class="listitem"><div class="avatar sm red">学</div><div class="mini"><strong>2026-10-14 21:03</strong>「最近考试压力好大，经常睡不着」→ 引导呼吸放松 + 时间管理建议</div></div>
+          <div class="listitem"><div class="avatar sm red">学</div><div class="mini"><strong>2026-10-12 19:41</strong>「想家了，一个人在语言班好孤独」→ 推荐华人互助群 + 校内心理咨询预约</div></div>
+          <div class="listitem"><div class="avatar sm teal">系</div><div class="mini"><strong>系统</strong>评分跌破阈值，已通知负责员工 陈顾问</div></div>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;height:100%;background:#fffdf9">
+        <div class="bhead" style="background:linear-gradient(120deg,#d94f4f,#e57272);color:#fff;padding:11px 14px;display:flex;align-items:center;gap:9px;font-size:12.5px">
+          <div class="avatar" style="width:26px;height:26px;font-size:10.5px;flex:0 0 26px;background:rgba(255,255,255,.2)">学</div>
+          <div><div>学助 · 学生智能助手</div><small>遇到严重心理问题，我会引导你联系专业咨询师</small></div>
+        </div>
+        <div class="chatlog" style="flex:1;background:#fffdf9">
+          <div class="msg bot" style="background:#fdecec;border-color:#f3d4d4">李娜，看你最近几次聊到考试都挺紧绷的。这周德语 B1 作文 + 护理术语测验挤在一起，是不是有点扛不住？</div>
+          <div class="ts me">嗯…这几天几乎没睡好，一闭眼就想起明天要交的作文</div>
+          <div class="msg bot" style="background:#fdecec;border-color:#f3d4d4">我听到两个信号：睡眠变差、反复担忧。我们先做一件小事——今晚把作文拆成「三段各 80 词」，先写最容易的那段，好不好？</div>
+          <div class="ts me">可是我怕写不好，影响后面申请</div>
+          <div class="msg bot" style="background:#fdecec;border-color:#f3d4d4">这个担心很真实。说句实在话：一次作文不会决定申请结果，你的 Offer 已经拿到了。但如果你连续一周都睡不好、吃不下，我建议你预约学校的心理咨询中心，这是专业的帮助，比我能给的更到位。要我把预约链接发你吗？</div>
+          <div class="chiprow">
+            <span class="chip" onclick="toast($('#t16'),'','✓','已发送','心理咨询中心预约链接 + 热线已发送',2400)">发我预约链接</span>
+            <span class="chip" onclick="toast($('#t16'),'','✓','已记录','分段写作计划已加入你的待办',2200)">帮我拆写作计划</span>
+            <span class="chip" onclick="toast($('#t16'),'','✓','已联系','已通知负责员工 陈顾问主动关怀',2600)">让顾问找我聊聊</span>
+          </div>
+        </div>
+        <div class="bfoot" style="border-top:1px solid #f0e0e0"><span class="fld">随时说，我在听…</span><span class="go">↑</span></div>
+      </div>
+    </div>
+    <div class="hintbar"><b>演示要点</b>预警触发后，负责员工收到通知并可主动介入；学助不越界承诺医疗建议、退费或转学。</div>
+    <div class="toast" id="t16"></div>
+  </div>
+
+  <!-- ================= P17 更多服务 ================= -->
+  <div class="frame panel" id="p17">
+    <div class="scrollv" style="padding:16px 22px">
+      <div class="between" style="margin-bottom:4px"><div style="font-size:15px;font-weight:700">更多服务</div><span class="tag teal">基于你的画像推荐</span></div>
+      <div class="muted" style="font-size:11px;margin-bottom:16px">根据你的专业（护理）、当前阶段（语言班）和兴趣，为你挑选了以下机会。点击了解详情或咨询顾问。</div>
+
+      <div class="grid2" style="margin-bottom:14px">
+        <div class="card" style="border-color:#bfdff5;background:#f4faff">
+          <div class="flexrow" style="gap:10px"><div class="avatar blue" style="background:#1a5fb4">📚</div><div><div style="font-size:12.5px;font-weight:600">德语 B2 强化班（课程升级）</div><div class="muted">推荐理由：语言班进度超前，可提前进入 B2</div></div></div>
+          <div class="flexrow" style="margin-top:12px;gap:8px">
+            <span class="tag gold">¥ 4,800</span><span class="tag teal">节省 3 个月入学时间</span>
+            <button class="btn pri sm" style="margin-left:auto" onclick="toast($('#t17'),'','✓','已咨询','课程顾问将在 1 小时内联系你',2400)">咨询顾问</button>
+          </div>
+        </div>
+        <div class="card" style="border-color:#bfe3dd;background:#f4fbf9">
+          <div class="flexrow" style="gap:10px"><div class="avatar teal">🎓</div><div><div style="font-size:12.5px;font-weight:600">护理硕士衔接项目（新项目）</div><div class="muted">推荐理由：护理方向深造，毕业后可留德工作</div></div></div>
+          <div class="flexrow" style="margin-top:12px;gap:8px">
+            <span class="tag gold">2027 秋季入学</span><span class="tag navy">可提前锁定名额</span>
+            <button class="btn pri sm" style="margin-left:auto" onclick="toast($('#t17'),'','✓','已加入','已加入我的意向清单',2200)">加入意向</button>
+          </div>
+        </div>
+        <div class="card" style="border-color:#f0dcae;background:#fdf8ee">
+          <div class="flexrow" style="gap:10px"><div class="avatar gold">🌍</div><div><div style="font-size:12.5px;font-weight:600">海外实习背景提升（背景提升）</div><div class="muted">推荐理由：德国养老院实习经历，提升简历竞争力</div></div></div>
+          <div class="flexrow" style="margin-top:12px;gap:8px">
+            <span class="tag gold">6 周 · 带薪</span><span class="tag teal">可抵扣实习学时</span>
+            <button class="btn pri sm" style="margin-left:auto" onclick="toast($('#t17'),'','✓','已报名','实习机会已锁定，顾问将联系确认',2400)">了解详情</button>
+          </div>
+        </div>
+        <div class="card" style="border-color:#d9d2f0;background:#f8f6ff">
+          <div class="flexrow" style="gap:10px"><div class="avatar" style="background:#8a7ad0">🗺️</div><div><div style="font-size:12.5px;font-weight:600">学业规划建议</div><div class="muted">语言班 → 入学 → 实习 → 深造，一条时间线给你</div></div></div>
+          <div class="flexrow" style="margin-top:12px;gap:8px">
+            <span class="tag navy">个性化</span>
+            <button class="btn pri sm" style="margin-left:auto" onclick="toast($('#t17'),'','✓','已生成','你的 3 年学业规划图已生成',2400)">生成规划图</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="background:#fbfcfd">
+        <div class="between" style="margin-bottom:8px"><h4 style="margin:0">为什么叫「更多服务」而不是「增值转化」</h4></div>
+        <div class="muted" style="font-size:11px;line-height:1.75">
+          这一屏面向的是学生，我们不把业务术语暴露给他们。推荐逻辑与员工端完全一致（同一套画像匹配规则），只是换了名称与表达：<br>
+          · 课程升级 → 德语 B2 强化班<br>
+          · 新项目推荐 → 护理硕士衔接项目<br>
+          · 背景提升 → 海外实习机会<br>
+          · 增值转化 → 更多服务（内部口径）
+        </div>
+      </div>
+    </div>
+    <div class="hintbar"><b>演示要点</b>同一套画像匹配规则，学生端只看到「更多服务」这个温和名称，业务术语不外露。</div>
+    <div class="toast" id="t17"></div>
+  </div>
+
+  <!-- ================= P18 审批结果 + 推送 ================= -->
+  <div class="frame panel" id="p18">
+    <div class="scrollv" style="padding:16px 22px">
+      <div class="card" style="border-color:#bfe3dd;background:#f3fbf9">
+        <div class="flexrow" style="gap:12px">
+          <div class="avatar teal" style="width:42px;height:42px;flex:0 0 42px;font-size:16px">✓</div>
+          <div style="flex:1">
+            <div style="font-size:14px;font-weight:700;color:#1c7d71">请假申请已批准</div>
+            <div class="muted">2026-10-15 10:26 · 审批人：陈顾问</div>
+          </div>
+          <span class="tag green">已通过</span>
+        </div>
+        <table class="tbl" style="margin-top:14px">
+          <tr><td style="width:100px">类型</td><td>病假</td><td style="width:100px">时间</td><td>10-18 至 10-20（3 天）</td></tr>
+          <tr><td>缺课</td><td>3 节</td><td>审批意见</td><td>已与任课老师确认补课安排，注意休息</td></tr>
+        </table>
+        <div class="muted" style="font-size:10.5px;margin-top:10px">该结果已通过站内消息 + 学助主动推送同步送达。</div>
+      </div>
+
+      <div style="font-size:13px;font-weight:700;margin:18px 0 10px">学助的主动推送记录</div>
+      <div class="card" style="margin-bottom:12px">
+        <div class="flexrow" style="gap:10px"><div class="avatar red" style="width:30px;height:30px;flex:0 0 30px;font-size:11px">学</div>
+        <div style="flex:1"><div style="font-size:12px;font-weight:600">⏰ 你的德语 B1 作文今晚 23:59 截止</div><div class="muted">10 分钟前 · 来自学业提醒</div></div></div>
+      </div>
+      <div class="card" style="margin-bottom:12px">
+        <div class="flexrow" style="gap:10px"><div class="avatar teal" style="width:30px;height:30px;flex:0 0 30px;font-size:11px">学</div>
+        <div style="flex:1"><div style="font-size:12px;font-weight:600">✅ 请假已批准 · 10-18 至 10-20</div><div class="muted">8 分钟前 · 来自审批结果</div></div></div>
+      </div>
+      <div class="card" style="margin-bottom:12px;opacity:.85">
+        <div class="flexrow" style="gap:10px"><div class="avatar gold" style="width:30px;height:30px;flex:0 0 30px;font-size:11px">学</div>
+        <div style="flex:1"><div style="font-size:12px;font-weight:600">📚 为你整理了 3 篇高分作文范文</div><div class="muted">1 小时前 · 来自你的提问</div></div></div>
+      </div>
+      <div class="card" style="background:#fbfcfd">
+        <div class="between" style="margin-bottom:8px"><h4 style="margin:0">消息通知机制一览</h4></div>
+        <table class="tbl">
+          <thead><tr><th>触发场景</th><th>通知方式</th><th>接收人</th></tr></thead>
+          <tbody>
+            <tr><td>审批结果</td><td>站内消息 + Agent 主动推送</td><td>学生</td></tr>
+            <tr><td>待办 / 待审批</td><td>站内消息 + Agent 主动推送</td><td>员工 / 管理层</td></tr>
+            <tr><td>DDL 临近 / 考试安排</td><td>站内消息 + Agent 主动推送</td><td>学生</td></tr>
+            <tr><td>心理预警</td><td>站内消息</td><td>负责员工</td></tr>
+            <tr><td>客户状态变更</td><td>站内消息</td><td>相关员工</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="hintbar"><b>演示要点</b>闭环收口：学生提交 → 员工审批 → 结果推送，全过程无需反复追问；五类通知机制一屏说清。</div>
+    <div class="toast" id="t18"></div>
+  </div>
+
+  <div class="below">
+    <div class="steps">
+      <div class="stepcard on"><div class="idx">1</div><div><div class="ttl">学生工作台：待办 + 进度 + 情绪</div><div class="dsc">近期课程、DDL、申请阶段进度、情绪评分四合一，Agent 主动推送提醒。</div></div></div>
+      <div class="stepcard"><div class="idx">2</div><div><div class="ttl">行政服务：请假可页面可对话</div><div class="dsc">页面填写或学助代办，提交后状态实时更新。</div></div></div>
+      <div class="stepcard"><div class="idx">3</div><div><div class="ttl">心理关怀：对话评估 + 预警</div><div class="dsc">一期 AI 对话式评估，评分低于阈值通知负责员工；不越界承诺医疗建议。</div></div></div>
+      <div class="stepcard"><div class="idx">4</div><div><div class="ttl">更多服务：温和的增值转化</div><div class="dsc">课程升级、新项目、背景提升，学生端只看到「更多服务」。</div></div></div>
+      <div class="stepcard"><div class="idx">5</div><div><div class="ttl">审批结果 + 五类通知机制</div><div class="dsc">闭环收口，一屏说清所有消息通知规则。</div></div></div>
+    </div>
+    <div class="script">
+      <h5>🎤 讲解话术</h5>
+      <div class="bubble" id="sc3">「这是学生端。登录就能看到待办、申请进度和情绪状态。学助会主动推 DDL——学生不用自己记。<br><br>第三屏的心理关怀是我们特别强调的：它不假装是心理医生，不会承诺治疗或退费；一旦评分掉到阈值以下，系统立刻通知负责顾问去关怀。最后一屏「更多服务」其实是增值转化，只是对学生我们不这么说。」</div>
+      <div class="note">💡 待确认：心理测评一期用对话式评估，二期再引入专业量表；「更多服务」这个命名是否已获客户认可。</div>
+    </div>
+  </div>
+</section>
+`;
+
+/* ============================================================
+   p5_close.js  —  Section 5：收尾（3 步）
+   ============================================================ */
+const P5 = `
+<section class="framewrap" id="sec4">
+  <div class="bar">
+    <div class="dots"><s></s><s></s><s></s></div>
+    <div class="url">🎬  演示收尾 · 业务闭环总览 + 待客户确认事项</div>
+    <span class="tag gold">最后一段</span>
+  </div>
+
+  <!-- ================= P19 三端闭环 ================= -->
+  <div class="frame panel on" id="p19">
+    <div style="padding:18px 22px 14px">
+      <div style="font-size:15px;font-weight:700;margin-bottom:4px">一个客户的完整旅程：访客 → 客户 → 留学生 → 校友</div>
+      <div class="muted" style="font-size:11px">三个 AI Agent 贯穿全程，每一环都有人负责、有系统留痕</div>
+    </div>
+    <div class="scrollv" style="padding:0 22px 18px">
+      <div class="tl" style="padding-left:30px;margin-top:6px">
+        <div class="node ok"><h6>① 访客触点 · 智能客服 Agent</h6><p>主页浏览 → Agent 主动搭话 → 自然采集信息 → 注册留资<br><span class="tag teal">触点：官网 / 活动 / 展会</span></p><div class="dt">day 0</div></div>
+        <div class="node ok"><h6>② 有效线索判定 · CRM</h6><p>电话为唯一有效性标准 → 录入即研判 → 匹配度 + 推荐产品<br><span class="tag teal">规则：有电话=有效 / 无电话=咨询日志</span></p><div class="dt">day 0–1</div></div>
+        <div class="node ok"><h6>③ 员工跟进 · 企业助手 Agent</h6><p>跟进提醒 → 口述日报 → 方案确认 → 申请转留学生<br><span class="tag teal">数据隔离：仅本人名下</span></p><div class="dt">day 1–14</div></div>
+        <div class="node ok"><h6>④ 管理层审批 · 经营看板</h6><p>转化申请审批 → 全域数据监控 → 智能报告<br><span class="tag teal">权限：不受隔离限制</span></p><div class="dt">day 14</div></div>
+        <div class="node cur"><h6>⑤ 学生服务 · 学生助手 Agent</h6><p>请假 / 考务 / 心理关怀 / 进度追踪 / 生活支持<br><span class="tag teal">增值转化对外称「更多服务」</span></p><div class="dt">month 1–24</div></div>
+        <div class="node"><h6>⑥ 校友运营（二期）</h6><p>口碑转介绍 → 新访客触点，形成自增长闭环</p><div class="dt">二期</div></div>
+      </div>
+      <div class="grid3" style="margin-top:8px">
+        <div class="card" style="border-color:#bfdff5;background:#f4faff">
+          <div class="flexrow" style="gap:9px"><div class="avatar" style="background:#1a5fb4">💬</div><div><div style="font-size:12px;font-weight:600">智能客服 Agent</div><div class="muted" style="font-size:10.5px">7 大场景 · RAG 知识库</div></div></div>
+        </div>
+        <div class="card" style="border-color:#d9d2f0;background:#f8f6ff">
+          <div class="flexrow" style="gap:9px"><div class="avatar" style="background:#8a7ad0">💼</div><div><div style="font-size:12px;font-weight:600">企业助手 Agent</div><div class="muted" style="font-size:10.5px">权限感知 · 指令式</div></div></div>
+        </div>
+        <div class="card" style="border-color:#bfe3dd;background:#f4fbf9">
+          <div class="flexrow" style="gap:9px"><div class="avatar teal">🎓</div><div><div style="font-size:12px;font-weight:600">学生助手 Agent</div><div class="muted" style="font-size:10.5px">心理关怀 · 行政代办</div></div></div>
+        </div>
+      </div>
+    </div>
+    <div class="hintbar"><b>演示要点</b>把前面 4 段串成一条线：客户不流失在任何一环，因为每个触点都有 Agent 兜底。</div>
+    <div class="toast" id="t19"></div>
+  </div>
+
+  <!-- ================= P20 待确认 ================= -->
+  <div class="frame panel" id="p20">
+    <div style="padding:16px 22px 12px">
+      <div class="flexrow" style="gap:10px"><span style="font-size:15px;font-weight:700">5 项待客户拍板</span><span class="tag gold">演示结束前请确认</span></div>
+      <div class="muted" style="font-size:11px;margin-top:4px">以下事项当前按建议方案写入需求文档 v4.0.0，需客户确认后正式生效</div>
+    </div>
+    <div class="scrollv" style="padding:0 22px 18px">
+      <div class="card" style="margin-bottom:12px">
+        <div class="flexrow" style="gap:10px"><div class="avatar red" style="width:26px;height:26px;flex:0 0 26px;font-size:11px">1</div><div style="flex:1"><div style="font-size:12.5px;font-weight:600">客户有效性判定标准</div></div><span class="tag gold">建议：电话为准</span></div>
+        <div class="muted" style="font-size:11px;line-height:1.7;margin-top:6px">建议：电话号码作为唯一有效性标准，有电话即有效线索，无联系方式仅作咨询记录。<br><b>备选方案</b>：姓名 + 电话双重校验 / 微信 ID 也可作为有效凭证。</div>
+      </div>
+      <div class="card" style="margin-bottom:12px">
+        <div class="flexrow" style="gap:10px"><div class="avatar red" style="width:26px;height:26px;flex:0 0 26px;font-size:11px">2</div><div style="flex:1"><div style="font-size:12.5px;font-weight:600">客户研判结果是否页面可见</div></div><span class="tag gold">建议：可见</span></div>
+        <div class="muted" style="font-size:11px;line-height:1.7;margin-top:6px">建议：员工与管理层可在 CRM 客户详情页直接查看匹配度与推荐产品。<br><b>备选方案</b>：仅输出数据供导出，不在页面展示（避免员工过度依赖算法）。</div>
+      </div>
+      <div class="card" style="margin-bottom:12px">
+        <div class="flexrow" style="gap:10px"><div class="avatar red" style="width:26px;height:26px;flex:0 0 26px;font-size:11px">3</div><div style="flex:1"><div style="font-size:12.5px;font-weight:600">心理测评形式</div></div><span class="tag gold">建议：对话式评估</span></div>
+        <div class="muted" style="font-size:11px;line-height:1.7;margin-top:6px">建议：一期用 AI 对话式情绪评估（情绪标签 + 评分），不做标准化量表；二期引入专业量表。<br><b>备选方案</b>：一期即接入 PHQ-9 / GAD-7 等标准量表。</div>
+      </div>
+      <div class="card" style="margin-bottom:12px">
+        <div class="flexrow" style="gap:10px"><div class="avatar red" style="width:26px;height:26px;flex:0 0 26px;font-size:11px">4</div><div style="flex:1"><div style="font-size:12.5px;font-weight:600">学生端「增值转化」的命名</div></div><span class="tag gold">建议：更多服务</span></div>
+        <div class="muted" style="font-size:11px;line-height:1.7;margin-top:6px">建议：学生界面改称「更多服务」，避免业务术语暴露。<br><b>备选方案</b>：学业规划 / 成长服务 / 进阶推荐。</div>
+      </div>
+      <div class="card">
+        <div class="flexrow" style="gap:10px"><div class="avatar red" style="width:26px;height:26px;flex:0 0 26px;font-size:11px">5</div><div style="flex:1"><div style="font-size:12.5px;font-weight:600">人事角色一期归属</div></div><span class="tag gold">建议：并入经理</span></div>
+        <div class="muted" style="font-size:11px;line-height:1.7;margin-top:6px">建议：一期人事功能并入 MANAGER 角色；二期拆为独立人事模块（无法查看客户信息与经营状况）。<br><b>备选方案</b>：一期即拆分为独立人事角色。</div>
+      </div>
+    </div>
+    <div class="hintbar"><b>演示要点</b>这 5 项直接影响字段设计、权限结构与算法口径，建议演示现场逐条确认并留痕。</div>
+    <div class="toast" id="t20"></div>
+  </div>
+
+  <!-- ================= P21 架构 ================= -->
+  <div class="frame panel" id="p21">
+    <div style="padding:16px 22px 12px">
+      <div style="font-size:15px;font-weight:700;margin-bottom:4px">技术架构与交付节奏</div>
+      <div class="muted" style="font-size:11px">Vue 3 + FastAPI + MySQL + Dify · 三段式 Agent 架构 · 知识库 RAG</div>
+    </div>
+    <div class="scrollv" style="padding:0 22px 18px">
+      <div class="card" style="margin-bottom:14px">
+        <div class="grid4" style="gap:10px;text-align:center">
+          <div style="padding:12px 8px;background:#f4faff;border-radius:8px;border:1px solid #bfdff5"><div style="font-size:11px;color:var(--ink3)">前端</div><div style="font-size:12.5px;font-weight:700;color:var(--navy)">Vue 3 + TS</div></div>
+          <div style="padding:12px 8px;background:#f8f6ff;border-radius:8px;border:1px solid #d9d2f0"><div style="font-size:11px;color:var(--ink3)">网关 / 后端</div><div style="font-size:12.5px;font-weight:700;color:var(--navy)">FastAPI</div></div>
+          <div style="padding:12px 8px;background:#f4fbf9;border-radius:8px;border:1px solid #bfe3dd"><div style="font-size:11px;color:var(--ink3)">主数据库</div><div style="font-size:12.5px;font-weight:700;color:var(--navy)">MySQL 8.0</div></div>
+          <div style="padding:12px 8px;background:#fdf8ee;border-radius:8px;border:1px solid #f0dcae"><div style="font-size:11px;color:var(--ink3)">AI 层</div><div style="font-size:12.5px;font-weight:700;color:var(--navy)">Dify 1.16</div></div>
+        </div>
+        <div class="muted" style="font-size:10.5px;margin-top:10px;line-height:1.7">
+          配套：Redis（会话/缓存）· MinIO（文件存储）· Docker Compose（容器化）· Nginx（反向代理）· Element Plus + Pinia + Vue Router
+        </div>
+      </div>
+      <div class="grid2">
+        <div class="card">
+          <h4>一期交付范围</h4>
+          <div class="listitem"><div class="avatar sm teal">✓</div><div class="mini"><strong>公开主页 + 智能客服 Agent</strong>7 大场景、注册留资、活动报名拦截</div></div>
+          <div class="listitem"><div class="avatar sm teal">✓</div><div class="mini"><strong>员工端 CRM + 企业助手</strong>多格式录入、研判卡、口述日报</div></div>
+          <div class="listitem"><div class="avatar sm teal">✓</div><div class="mini"><strong>管理层看板 + 审批 + 报告</strong>漏斗、业绩、5 类智能报告</div></div>
+          <div class="listitem"><div class="avatar sm teal">✓</div><div class="mini"><strong>留学生端 + 学生助手</strong>请假、心理关怀、进度、更多服务</div></div>
+          <div class="listitem"><div class="avatar sm gold">△</div><div class="mini"><strong>心理测评</strong>一期对话式评估，量表留二期</div></div>
+          <div class="listitem"><div class="avatar sm gold">△</div><div class="mini"><strong>人事模块</strong>一期并入 MANAGER</div></div>
+        </div>
+        <div class="card">
+          <h4>二期规划</h4>
+          <div class="listitem"><div class="avatar sm navy">2</div><div class="mini"><strong>独立人事角色</strong>可管员工，不可看客户与经营</div></div>
+          <div class="listitem"><div class="avatar sm navy">2</div><div class="mini"><strong>经理/总裁分权</strong>经理看下属，总裁看全部</div></div>
+          <div class="listitem"><div class="avatar sm teal">2</div><div class="mini"><strong>专业心理测评量表</strong>PHQ-9 / GAD-7 等</div></div>
+          <div class="listitem"><div class="avatar sm teal">2</div><div class="mini"><strong>校友运营与转介绍</strong>口碑裂变闭环</div></div>
+          <div class="listitem"><div class="avatar sm teal">2</div><div class="mini"><strong>数据大屏 / 移动端 App</strong>对外展示与移动办公</div></div>
+          <div class="listitem"><div class="avatar sm teal">2</div><div class="mini"><strong>开放 API</strong>与院校系统对接</div></div>
+        </div>
+      </div>
+      <div class="card" style="margin-top:14px;background:#f3fbf9;border-color:#bfe3dd">
+        <div class="flexrow" style="gap:10px"><div style="font-size:22px">🎯</div><div style="font-size:12.5px;line-height:1.75">
+          <b>一句话收尾</b>：这套系统解决的核心问题不是「把流程搬到线上」，而是<b>让每个客户触点都有人（员工）有 AI 兜底</b>——从第一次聊天到拿到 Offer 再到海外就读，客户不流失在任何一环，管理层也能随时看清全局。
+        </div></div>
+      </div>
+    </div>
+    <div class="hintbar"><b>演示结束</b>建议现场确认 5 项待定事项，并约定需求冻结日期与一期交付里程碑。</div>
+    <div class="toast" id="t21"></div>
+  </div>
+
+  <div class="below">
+    <div class="steps">
+      <div class="stepcard on"><div class="idx">1</div><div><div class="ttl">业务闭环总览</div><div class="dsc">访客 → 有效线索 → 员工跟进 → 管理层审批 → 学生服务，三 Agent 贯穿。</div></div></div>
+      <div class="stepcard"><div class="idx">2</div><div><div class="ttl">5 项待客户确认</div><div class="dsc">有效性标准、研判可见性、心理测评形式、命名、人事归属。</div></div></div>
+      <div class="stepcard"><div class="idx">3</div><div><div class="ttl">技术架构 + 一/二期范围</div><div class="dsc">技术栈、一期交付清单、二期规划，用于对齐排期预期。</div></div></div>
+    </div>
+    <div class="script">
+      <h5>🎤 讲解话术</h5>
+      <div class="bubble" id="sc4">「最后把整条线串起来看：访客第一次聊天就被 Agent 接住，留了电话就进 CRM，员工跟进、经理审批、学生入学后继续服务——客户不会在任何一个环节掉下去。<br><br>在开工之前，有 5 个细节需要你们拍板，特别是「有效性标准」和「心理测评形式」，会直接影响我们的字段设计和算法口径。确认完我们就可以把需求冻结、进开发排期。」</div>
+      <div class="note">💡 演示完毕建议：留下需求文档 v4.0.0 与本节 5 项确认结果，作为需求冻结依据。</div>
+    </div>
+  </div>
+</section>
+`;
+
+
+</div>
+<script>
+/* ---------- boot ---------- */
+const S={sec:0,step:0,steps:[4,7,4,5,3],last:[0,0,0,0,0]};
+const $=s=>document.querySelector(s);
+function init(){
+  document.querySelectorAll('.side .navbtn').forEach((b,i)=>b.onclick=()=>goSec(i));
+  goSec(0);
+}
+function goSec(i){
+  if(i<0||i>4)return;
+  S.sec=i; S.step=0;
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('on'));
+  const sec=document.getElementById('sec'+i);
+  if(sec)sec.querySelectorAll('.panel')[0].classList.add('on');
+  document.querySelectorAll('.side .navbtn').forEach((b,i)=>b.classList.toggle('on',i===S.sec));
+  document.querySelectorAll('.side .navbtn').forEach((b,i)=>{
+    const sub=b.querySelector('small');
+    if(sub) sub.textContent = i===S.sec ? '当前演示中' : (i<S.sec?'已演示':'点击进入');
+  });
+  refresh();
+}
+function goStep(d){
+  const sec=document.getElementById('sec'+S.sec); if(!sec)return;
+  const ps=sec.querySelectorAll('.panel');
+  let n=S.step+d;
+  if(n<0)n=0; if(n>=ps.length)n=ps.length-1;
+  if(n===S.step)return;
+  ps[S.step].classList.remove('on');
+  S.step=n;
+  ps[S.step].classList.add('on');
+  sec.scrollTop=0;
+  refresh();
+}
+function refresh(){
+  const tot=S.steps.reduce((a,b)=>a+b,0);
+  let k=0; for(let i=0;i<S.sec;i++)k+=S.steps[i]; k+=S.step+1;
+  $('#prg').style.width=(k/tot*100)+'%';
+  $('#cr').textContent='第 '+k+' / '+tot+' 步';
+  const nxt=$('#nxt'), prv=$('#prv');
+  prv.disabled=S.step===0&&S.sec===0;
+  const lastStep=(S.sec===4&&S.step===S.steps[4]-1)||(S.sec<4&&S.step===S.steps[S.sec]-1);
+  nxt.textContent = lastStep?(S.sec===4?'演示完成':'下一段 →'):'下一步';
+}
+document.addEventListener('keydown',e=>{
+  if(e.key==='ArrowRight'||e.key==='PageDown'||e.key===' ')goStep(1);
+  if(e.key==='ArrowLeft'||e.key==='PageUp')goStep(-1);
+});
+document.addEventListener('click',e=>{
+  const nav=e.target.closest('.panel-nav');
+  if(nav){ goStep(nav.dataset.d==='1'?1:-1); return; }
+  const sct=e.target.closest('.panel-sec');
+  if(sct){ goSec(parseInt(sct.dataset.s,10)); return; }
+});
+function show(id){const m=document.getElementById(id);if(m)m.classList.add('on');}
+function hide(id){const m=document.getElementById(id);if(m)m.classList.remove('on');}
+function toast(el,cls,icon,title,sub,dur){
+  el.className='toast on'+(cls?' '+cls:'');
+  el.innerHTML='<div class="ic">'+icon+'</div><div><div>'+title+'</div><small>'+sub+'</small></div>';
+  clearTimeout(el._t); el._t=setTimeout(()=>el.classList.remove('on'),dur||2600);
+}
+document.addEventListener('click',e=>{const f=e.target.closest('.pwaver');if(f)f.classList.remove('on');});
+/* tooltip for [data-tip] */
+document.addEventListener('mouseover',e=>{const t=e.target.closest('[data-tip]');if(t){const b=t.querySelector('.tipbox');if(b)b.style.visibility='visible';}});
+document.addEventListener('mouseout',e=>{const t=e.target.closest('[data-tip]');if(t){const b=t.querySelector('.tipbox');if(b)b.style.visibility='';}});
+init(); refresh();
+</script>
+</body>
+</html>
