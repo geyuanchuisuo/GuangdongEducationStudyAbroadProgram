@@ -1,0 +1,37 @@
+from pydantic_settings import BaseSettings
+
+
+class Settings(BaseSettings):
+    PROJECT_NAME: str = "粤教留学项目管理平台"
+    API_V1_PREFIX: str = "/api/v1"
+
+    DATABASE_URL: str = "mysql+aiomysql://root:password@localhost:59000/GuangdongEducationStudyAbroadProgram"
+
+    REDIS_URL: str = "redis://localhost:6379"
+
+    SECRET_KEY: str = "change-this-to-a-secure-random-string"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
+
+    DIFY_BASE_URL: str = "http://localhost:3000"
+    DIFY_VERSION: str = "1.16.0-rc1"
+    DIFY_API_PROTOCOL: str = "openai"
+    DIFY_STUDENT_AGENT_KEY: str = ""
+    DIFY_EMPLOYEE_AGENT_KEY: str = ""
+    DIFY_CUSTOMER_AGENT_KEY: str = ""
+
+    MINIO_ENDPOINT: str = "localhost:9000"
+    MINIO_ACCESS_KEY: str = "admin"
+    MINIO_SECRET_KEY: str = "password"
+    MINIO_BUCKET: str = "education"
+
+    CORS_ORIGINS: list[str] = [
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:3000",
+    ]
+
+    model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
+
+
+settings = Settings()
