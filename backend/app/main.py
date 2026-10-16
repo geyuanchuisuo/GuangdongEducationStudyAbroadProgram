@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.v1 import auth, users
+from app.api.v1 import approvals, auth, customers, users
 from app.config import settings
 from app.core.exceptions import BusinessError
 from app.core.middleware import RequestLogMiddleware
@@ -72,6 +72,8 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 app.include_router(auth.router, prefix=settings.API_V1_PREFIX)
 app.include_router(users.router, prefix=settings.API_V1_PREFIX)
+app.include_router(customers.router, prefix=settings.API_V1_PREFIX)
+app.include_router(approvals.router, prefix=settings.API_V1_PREFIX)
 
 
 @app.get("/health")

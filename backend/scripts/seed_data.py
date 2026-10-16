@@ -7,11 +7,12 @@ import asyncio
 import random
 from datetime import date, datetime, timedelta
 
-from sqlalchemy import text
+from sqlalchemy import select
 
 from app.database import async_session_factory, engine
 from app.models import Base
 from app.models.crm import AiReport, AiReportAttachment, CrmFollowUp, CrmLead, CustomerAssessment
+from app.models.customer import Customer, PendingLead
 from app.models.customer_service import CsChatMessage, CsChatSession, CsFaq, CsIntentLog
 from app.models.employee import EmployeeDailyReport, EmployeeOrg, EmployeeTodo
 from app.models.event import EventLecture, EventRegistration
@@ -24,7 +25,7 @@ from app.models.student import (
     StudentPsychProfile,
     StudentScore,
 )
-from app.models.system import SysApproval, SysEvent, SysNotification, SysOperationLog
+from app.models.system import ApprovalInstance, ApprovalTask, SysEvent, SysNotification, SysOperationLog
 from app.models.user import User
 from app.core.security import hash_password
 
@@ -45,6 +46,9 @@ COURSE_NAMES = [
 LOCATIONS = ["广州总部教室A", "广州总部教室B", "深圳分部教室", "线上直播", "东莞教学点"]
 
 INTENT_TYPES = ["course_inquiry", "event_registration", "price_consult", "study_abroad_consult", "general_chat"]
+SOURCE_CHANNELS = ["WEBSITE_REGISTER", "CS_LEAD", "EMPLOYEE_INPUT"]
+CUSTOMER_STATUSES = ["NEW", "FOLLOWING", "STRONG", "SIGNED", "ENROLLED", "LOST"]
+EDUCATION_LEVELS = ["初中", "高中", "大专", "专科", "本科", "其他"]
 
 
 async def seed():
@@ -79,35 +83,68 @@ async def seed():
         student_ids = [u.id for u in users if u.user_type == "STUDENT"]
         prospect_ids = [u.id for u in users if u.user_type == "PROSPECT"]
 
-        # ── M1: CRM ──
-        leads = []
-        statuses = ["新录入", "跟进中", "意向强烈", "已签约", "已入学", "已流失"]
+        # ── Customer 主表 ──
+        customers = []
+        for i in range(120):
+            c = Customer(
+                phone=f"138{random.randint(10000000, 99999999)}",
+                name=NAMES[i % len(NAMES)] + f"_{i}",
+                gender=random.choice(["男", "女"]),
+                age=random.randint(16, 45),
+                education=random.choice(EDUCATION_LEVELS),
+                source_channel=random.choice(SOURCE_CHANNELS),
+                owner_employee_id=random.choice(employee_ids),
+                status=random.choice(CUSTOMER_STATUSES),
+                phone_status="normal",
+                first_register_at=datetime.now() - timedelta(days=random.randint(0, 180)),
+                sys_user_id=random.choice(prospect_ids) if i < len(prospect_ids) else None,
+            )
+            session.add(c)
+            customers.append(c)
+        await session.flush()
+
+        customer_ids = [c.id for c in customers]
+
+        # ── PendingLead（待补全线索） ──
+        for i in range(15):
+            session.add(PendingLead(
+                wechat=f"wx_{i}",
+                name=NAMES[i % len(NAMES)] + f"_pending_{i}",
+                raw_info=f"原始信息_{i}",
+                status="pending",
+            ))
+
+        # ── M1: CRM 线索 ──
         for i in range(110):
             lead = CrmLead(
-                customer_name=NAMES[i % len(NAMES)] + f"_{i}",
-                contact_info=f"138{random.randint(10000000, 99999999)}",
+                customer_id=random.choice(customer_ids),
+                source=random.choice(["website", "cs", "employee"]),
+                raw_input=f"原始录入信息_{i}",
                 background_info=f"背景信息_{i}",
-                status=random.choice(statuses),
+                status=random.choice(["new", "processing", "converted", "invalid"]),
                 owner_employee_id=random.choice(employee_ids),
             )
             session.add(lead)
-            leads.append(lead)
         await session.flush()
 
         for i in range(150):
             session.add(CustomerAssessment(
-                customer_name=f"评估客户_{i}",
-                source_type=random.choice(["web", "referral", "event"]),
-                match_score=random.randint(20, 100),
-                recommendation=f"推荐方案_{i}",
-                status=random.choice(["pending", "completed", "failed"]),
-                is_valid=random.random() > 0.1,
+                customer_id=random.choice(customer_ids),
+                batch_no=f"BATCH_{i // 10}",
+                input_source=random.choice(["text", "file", "chat"]),
+                status=random.choice(["valid", "invalid_input", "invalid_phone"]),
+                sg_conclusion=random.choice(["matched", "partial", "pending", "not_matched"]),
+                de_conclusion=random.choice(["matched", "partial", "pending", "not_matched"]),
+                score=random.choice([90, 70, 50, 20]),
+                overview=f"客户速览_{i}",
+                follow_up_advice=f"跟进建议_{i}",
+                prompt_version="JUDGE-v1.0",
                 employee_id=random.choice(employee_ids),
             ))
 
         for i in range(120):
             session.add(CrmFollowUp(
-                lead_id=random.choice([l.id for l in leads]),
+                customer_id=random.choice(customer_ids),
                 employee_id=random.choice(employee_ids),
                 follow_type=random.choice(["电话", "微信", "面谈", "邮件"]),
                 content=f"跟进内容_{i}",
@@ -129,6 +166,7 @@ async def seed():
         for i in range(110):
             s = CsChatSession(
                 user_id=random.choice(prospect_ids + student_ids),
+                customer_id=random.choice(customer_ids) if random.random() > 0.3 else None,
                 agent_type=random.choice(["CUSTOMER", "STUDENT", "EMPLOYEE"]),
                 status=random.choice(["active", "closed"]),
                 title=f"会话_{i}",
@@ -142,12 +180,14 @@ async def seed():
                 session_id=random.choice([s.id for s in sessions]),
                 role=random.choice(["user", "assistant"]),
                 content=f"消息内容_{i}",
+                intent=random.choice(INTENT_TYPES) if random.random() > 0.5 else None,
             ))
 
         for i in range(100):
             session.add(CsIntentLog(
                 session_id=random.choice([s.id for s in sessions]),
                 user_id=random.choice(prospect_ids),
+                customer_id=random.choice(customer_ids) if random.random() > 0.3 else None,
                 intent_type=random.choice(INTENT_TYPES),
                 confidence=round(random.uniform(0.5, 1.0), 2),
                 converted=random.random() > 0.7,
@@ -301,14 +341,30 @@ async def seed():
                 status=random.choice(["pending", "consumed", "failed"]),
             ))
 
+        # ── 审批（双表设计） ──
+        approval_instances = []
         for i in range(100):
-            session.add(SysApproval(
-                approval_type=random.choice(["convert_student", "leave", "late_report", "complaint_handle"]),
+            inst = ApprovalInstance(
+                biz_type=random.choice(["leave", "convert", "late_report", "complaint"]),
+                biz_id=random.randint(1, 500),
+                title=f"审批标题_{i}",
                 initiator_id=random.choice(employee_ids + student_ids),
-                approver_id=random.choice(manager_ids),
-                target_id=random.randint(1, 500),
                 status=random.choice(["pending", "approved", "rejected"]),
-                remark=f"审批备注_{i}",
+                current_step=1,
+                total_steps=1,
+            )
+            session.add(inst)
+            approval_instances.append(inst)
+        await session.flush()
+
+        for inst in approval_instances:
+            session.add(ApprovalTask(
+                instance_id=inst.id,
+                approver_id=random.choice(manager_ids),
+                seq_no=1,
+                action=random.choice(["approved", "rejected"]) if inst.status != "pending" else None,
+                comment=f"审批意见_{inst.id}",
+                status="completed" if inst.status != "pending" else "pending",
             ))
 
         for i in range(100):
@@ -325,8 +381,8 @@ async def seed():
                 user_id=random.choice([u.id for u in users]),
                 module=random.choice(["auth", "crm", "cs", "employee", "student", "report"]),
                 action=random.choice(["create", "update", "delete", "login", "export"]),
-                target_type="lead",
-                target_id=random.randint(1, 200),
+                target_type="customer",
+                target_id=random.choice(customer_ids),
                 ip_address=f"192.168.1.{random.randint(1, 254)}",
             ))
 
@@ -334,6 +390,7 @@ async def seed():
 
     print("种子数据生成完成！")
     print(f"  用户: 120 (ADMIN/MANAGER/EMPLOYEE/STUDENT/PROSPECT)")
+    print(f"  客户主表: 120, 待补全线索: 15")
     print(f"  CRM线索: 110, 研判: 150, 跟进: 120")
     print(f"  FAQ: 105, 会话: 110, 消息: 200, 意图: 100")
     print(f"  活动: 20, 报名: 100, 课程: 15")
@@ -341,7 +398,7 @@ async def seed():
     print(f"  学生服务: 100, 心理画像: 100, 心理预警: 100, 反馈工单: 100")
     print(f"  学业: 100, 申请进度: 100")
     print(f"  报告: 20")
-    print(f"  系统事件: 100, 审批: 100, 通知: 100, 操作日志: 100")
+    print(f"  系统事件: 100, 审批实例: 100, 审批任务: 100, 通知: 100, 操作日志: 100")
 
 
 if __name__ == "__main__":
