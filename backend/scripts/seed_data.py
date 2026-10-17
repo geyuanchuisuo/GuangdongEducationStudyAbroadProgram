@@ -211,10 +211,11 @@ async def seed():
             events.append(ev)
         await session.flush()
 
+        reg_users = prospect_ids + student_ids
         for i in range(100):
             session.add(EventRegistration(
-                event_id=random.choice([e.id for e in events]),
-                user_id=random.choice(prospect_ids + student_ids),
+                event_id=events[i % len(events)].id,
+                user_id=reg_users[i % len(reg_users)],
                 status=random.choice(["已报名", "已签到", "已取消"]),
             ))
 
@@ -222,12 +223,12 @@ async def seed():
         from app.models.course import CourseProject
         for i in range(15):
             session.add(CourseProject(
-                name=COURSE_NAMES[i % len(COURSE_NAMES)],
+                project_name=COURSE_NAMES[i % len(COURSE_NAMES)],
                 category=random.choice(["语言培训", "学科辅导", "留学规划", "背景提升"]),
                 description=f"课程描述_{i}",
-                price=random.randint(5000, 50000),
+                tuition_fee=random.randint(5000, 50000),
                 duration=f"{random.randint(1, 12)}个月",
-                status="active",
+                status="上架",
             ))
 
         # ── M3: Employee ──
@@ -239,10 +240,11 @@ async def seed():
                 sort_order=i,
             ))
 
+        # employee_id+report_date 为唯一约束：按员工轮转、天数递增，保证组合唯一
         for i in range(120):
             session.add(EmployeeDailyReport(
-                employee_id=random.choice(employee_ids),
-                report_date=date.today() - timedelta(days=random.randint(0, 60)),
+                employee_id=employee_ids[i % len(employee_ids)],
+                report_date=date.today() - timedelta(days=i // len(employee_ids)),
                 content=f"日报内容_{i}",
             ))
 
@@ -261,9 +263,7 @@ async def seed():
                 student_id=random.choice(student_ids),
                 course_name=random.choice(COURSE_NAMES),
                 score=round(random.uniform(40, 100), 1),
-                exam_type=random.choice(["月考", "期中", "期末", "模拟考"]),
-                exam_date=date.today() - timedelta(days=random.randint(0, 90)),
-                recorded_by=random.choice(employee_ids),
+                semester=random.choice(["2026春季", "2026秋季"]),
             ))
 
         # ── M4: Student ──
@@ -271,42 +271,43 @@ async def seed():
             session.add(StudentAdminService(
                 student_id=random.choice(student_ids),
                 service_type=random.choice(["请假", "休学", "复学", "转班"]),
-                title=f"服务申请_{i}",
-                status=random.choice(["pending", "approved", "rejected"]),
-                handler_id=random.choice(employee_ids),
+                reason=f"申请原因_{i}",
+                status=random.choice(["待审批", "已批准", "已拒绝"]),
+                approver_id=random.choice(employee_ids),
             ))
 
-        for i in range(100):
+        # student_id 为唯一约束，每个学生一条画像
+        for sid in student_ids:
             session.add(StudentPsychProfile(
-                student_id=random.choice(student_ids),
-                assessment_date=date.today() - timedelta(days=random.randint(0, 180)),
-                risk_level=random.choice(["低", "中", "高"]),
+                student_id=sid,
+                latest_emotion_tag=random.choice(["平稳", "焦虑", "低落", "积极"]),
+                emotion_score=random.randint(40, 100),
             ))
 
         for i in range(100):
             session.add(StudentPsychAlert(
                 student_id=random.choice(student_ids),
                 risk_level=random.choice(["低", "中", "高"]),
-                reason=f"预警原因_{i}",
-                status=random.choice(["open", "in_progress", "closed"]),
-                handled_by=random.choice(employee_ids + manager_ids),
+                trigger_reason=f"预警原因_{i}",
+                status=random.choice(["未处理", "处理中", "已关闭"]),
+                teacher_id=random.choice(employee_ids + manager_ids),
             ))
 
         for i in range(100):
             session.add(StudentFeedbackTicket(
                 student_id=random.choice(student_ids),
-                category=random.choice(["教学", "生活", "管理", "其他"]),
-                title=f"反馈工单_{i}",
-                content=f"工单内容_{i}",
-                status=random.choice(["open", "in_progress", "resolved"]),
-                handler_id=random.choice(employee_ids),
+                content=f"反馈工单_{i}",
+                detail=f"工单内容_{i}",
+                status=random.choice(["待处理", "处理中", "已解决"]),
             ))
 
         for i in range(100):
             session.add(StudentAcademic(
                 student_id=random.choice(student_ids),
-                progress_status=random.choice(["在读", "休学", "毕业", "结业"]),
-                enroll_date=date.today() - timedelta(days=random.randint(30, 365)),
+                item_type=random.choice(["考试", "作业", "选课", "成绩"]),
+                title=f"学业事项_{i}",
+                course_name=random.choice(COURSE_NAMES),
+                due_time=datetime.now() + timedelta(days=random.randint(-30, 30)),
             ))
 
         for i in range(100):

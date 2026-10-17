@@ -2,8 +2,9 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
-from app.api.v1 import approvals, auth, customers, users
+from app.api.v1 import approvals, auth, customers, files, notifications, users
 from app.config import settings
 from app.core.exceptions import BusinessError
 from app.core.middleware import RequestLogMiddleware
@@ -54,7 +55,9 @@ async def business_error_handler(request: Request, exc: BusinessError):
         exc.code,
         exc.message,
     )
-    return error_response(code=exc.code, message=exc.message, trace_id=trace_id)
+    # 异常处理器必须返回 Response 对象，直接返回 dict 会导致 Starlette 报
+    # "'dict' object is not callable" 并退化为 500；统一按契约返回 HTTP 200 + 业务码
+    return JSONResponse(content=error_response(code=exc.code, message=exc.message, trace_id=trace_id))
 
 
 @app.exception_handler(Exception)
@@ -67,13 +70,15 @@ async def global_exception_handler(request: Request, exc: Exception):
         request.url.path,
         str(exc),
     )
-    return error_response(code=50001, message="服务器内部错误", trace_id=trace_id)
+    return JSONResponse(content=error_response(code=50001, message="服务器内部错误", trace_id=trace_id))
 
 
 app.include_router(auth.router, prefix=settings.API_V1_PREFIX)
 app.include_router(users.router, prefix=settings.API_V1_PREFIX)
 app.include_router(customers.router, prefix=settings.API_V1_PREFIX)
 app.include_router(approvals.router, prefix=settings.API_V1_PREFIX)
+app.include_router(notifications.router, prefix=settings.API_V1_PREFIX)
+app.include_router(files.router, prefix=settings.API_V1_PREFIX)
 
 
 @app.get("/health")

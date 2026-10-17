@@ -117,5 +117,23 @@ class NotificationService:
             )
             return result.scalar_one()
 
+    async def count_for_user(
+        self,
+        user_id: int,
+        type: str | None = None,
+        unread_only: bool = False,
+    ) -> int:
+        """按列表筛选条件统计通知总数（供分页 total 使用，不改变既有方法逻辑）"""
+        async with async_session_factory() as session:
+            stmt = select(sa_func.count()).select_from(SysNotification).where(
+                SysNotification.user_id == user_id
+            )
+            if type:
+                stmt = stmt.where(SysNotification.type == type)
+            if unread_only:
+                stmt = stmt.where(SysNotification.is_read == False)
+            result = await session.execute(stmt)
+            return result.scalar_one()
+
 
 notification_service = NotificationService()

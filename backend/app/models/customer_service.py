@@ -8,7 +8,7 @@ class CsChatSession(Base):
     __tablename__ = "cs_chat_session"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("sys_user.id"), nullable=False, index=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("sys_user.id"), nullable=False, index=True)
     customer_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("customer.id"), nullable=True, index=True, comment="关联客户")
     agent_type: Mapped[str] = mapped_column(String(32), nullable=False, default="CUSTOMER")
     status: Mapped[str] = mapped_column(String(20), default="active", index=True)
@@ -41,7 +41,7 @@ class CsIntentLog(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     session_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("cs_chat_session.id"), nullable=False, index=True)
-    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("sys_user.id"), nullable=False, index=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("sys_user.id"), nullable=False, index=True)
     customer_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("customer.id"), nullable=True, index=True, comment="关联客户")
     intent_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     confidence: Mapped[float | None] = mapped_column(nullable=True)

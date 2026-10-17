@@ -43,7 +43,7 @@ test('all 30 model classes import OK', lambda: None)
 # ===== Suite 2: API Endpoints =====
 print()
 print('=' * 60)
-print('Suite 2: API Endpoints (13 unique paths)')
+print('Suite 2: API Endpoints (20 unique paths)')
 print('=' * 60)
 
 from app.main import app
@@ -80,9 +80,28 @@ test('/api/v1/approvals (7 paths)',
      lambda: None if all(p in routes for p in expected_approval_paths) else
      (_ for _ in ()).throw(Exception('missing')))
 
-test(f'total paths = 13 (12 API + 1 health, got {len(routes)})',
-     lambda: None if len(routes) == 13 else
-     (_ for _ in ()).throw(Exception(f'expected 13')))
+expected_notification_paths = [
+    '/api/v1/notifications',
+    '/api/v1/notifications/unread-count',
+    '/api/v1/notifications/read-all',
+    '/api/v1/notifications/{notification_id}/read',
+]
+test('/api/v1/notifications (4 paths, contract §8.2)',
+     lambda: None if all(p in routes for p in expected_notification_paths) else
+     (_ for _ in ()).throw(Exception('missing')))
+
+expected_file_paths = [
+    '/api/v1/files/upload',
+    '/api/v1/files/download',
+    '/api/v1/files/presigned',
+]
+test('/api/v1/files (3 paths, contract §8.3)',
+     lambda: None if all(p in routes for p in expected_file_paths) else
+     (_ for _ in ()).throw(Exception('missing')))
+
+test(f'total paths = 20 (19 API + 1 health, got {len(routes)})',
+     lambda: None if len(routes) == 20 else
+     (_ for _ in ()).throw(Exception(f'expected 20')))
 
 # ===== Suite 3: MVC Layer =====
 print()
@@ -96,7 +115,8 @@ from app.schemas.customer import (CustomerCreate, CustomerOut, CustomerUpdate,
 from app.schemas.approval import (ApprovalCreate, ApprovalAction, ApprovalTaskOut,
                                    ApprovalInstanceOut, BatchApprovalRequest)
 from app.schemas.common import PageParams, PageResult, IdResponse, StatusResponse, MessageResponse
-test('schemas (4 modules, 19 classes)', lambda: None)
+from app.schemas.notification import NotificationOut
+test('schemas (5 modules, 20 classes)', lambda: None)
 
 from app.repositories.user_repo import UserRepository
 from app.repositories.customer_repo import CustomerRepository

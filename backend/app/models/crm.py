@@ -14,7 +14,7 @@ class CrmLead(Base):
     raw_input: Mapped[str | None] = mapped_column(Text, nullable=True, comment="原始录入信息")
     background_info: Mapped[str | None] = mapped_column(Text, nullable=True, comment="背景信息")
     status: Mapped[str] = mapped_column(String(20), default="new", index=True, comment="线索状态(new/processing/converted/invalid)")
-    owner_employee_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("sys_user.id"), nullable=True, index=True, comment="负责员工")
+    owner_employee_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("sys_user.id"), nullable=True, index=True, comment="负责员工")
     created_at = mapped_column(DateTime, server_default=func.now())
     updated_at = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
@@ -40,7 +40,7 @@ class CustomerAssessment(Base):
     score: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True, comment="匹配度评分(90/70/50/20)")
     prompt_version: Mapped[str | None] = mapped_column(String(20), nullable=True, comment="提示词版本")
     dify_run_id: Mapped[str | None] = mapped_column(String(64), nullable=True, comment="Dify运行ID")
-    employee_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("sys_user.id"), nullable=True, index=True, comment="操作员工")
+    employee_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("sys_user.id"), nullable=True, index=True, comment="操作员工")
     created_at = mapped_column(DateTime, server_default=func.now())
 
 
@@ -50,7 +50,7 @@ class CrmFollowUp(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     customer_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("customer.id"), nullable=False, index=True, comment="关联客户ID")
-    employee_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("sys_user.id"), nullable=False, index=True, comment="跟进员工")
+    employee_id: Mapped[int] = mapped_column(Integer, ForeignKey("sys_user.id"), nullable=False, index=True, comment="跟进员工")
     follow_type: Mapped[str | None] = mapped_column(String(32), nullable=True, comment="跟进类型")
     content: Mapped[str | None] = mapped_column(Text, nullable=True, comment="跟进内容")
     next_action: Mapped[str | None] = mapped_column(Text, nullable=True, comment="下一步动作")
@@ -67,7 +67,7 @@ class AiReport(Base):
     report_content = mapped_column(JSON, nullable=True)
     time_range_start = mapped_column(DateTime, nullable=True, index=True)
     time_range_end = mapped_column(DateTime, nullable=True)
-    generated_by: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("sys_user.id"), nullable=True)
+    generated_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("sys_user.id"), nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="generating", index=True)
     created_at = mapped_column(DateTime, server_default=func.now())
 
