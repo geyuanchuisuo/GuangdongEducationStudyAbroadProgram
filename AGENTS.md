@@ -562,9 +562,9 @@ VITE_API_BASE_URL=http://localhost:8000/api/v1
 ### 7.1 Git规范
 
 **分支**：
-- `master` - 主干（**2026-10-17 两次合并 longtrying：cba3303（v6.5.0+v6.6.0）→ 62d4cff（v6.7.0~v6.7.2+硬性规则文档），均无冲突**；保护分支已解除，当前可直推）
+- `master` - 主干（**2026-10-17 三次合并：cba3303（v6.5.0+v6.6.0）→ 62d4cff（v6.7.0~v6.7.2+硬性规则）→ a23fc49（v6.8.2~v6.8.5 全量：M4 学生模块+Docker E2E+存储本地化+M5 智能报告+前端界面+口径统一），均无冲突**；保护分支已解除，当前可直推）
 - `longtrying` - 开发分支（M3 员工模块，已全部收官并合入 master）
-- `longtrying_stu` - 开发分支（**M4 学生模块，2026-10-17 从 longtrying e3b0160 新建**，进度追踪统一实现归此分支）
+- `longtrying_stu` - 开发分支（**M4 学生模块，2026-10-17 从 longtrying e3b0160 新建**；v6.8.2~v6.8.5 全量工作已合入 master a23fc49）
 - `develop` - 开发（预留）
 - `feature/*` - 功能
 - `fix/*` - 修复
@@ -685,7 +685,7 @@ chore: 构建
 | 项目需求文档 | docs/项目需求文档.md | 完整需求、架构、接口、数据库 |
 | 更新记录 | docs/更新记录.md | 版本变更记录（当前v6.8.5） |
 | 开发路线图 | docs/开发路线图.md | 分期任务表（Phase 0已完成，M3 收官，Phase 1.4 M4 一期已交付，M5 后端已合入） |
-| 运行日志 | docs/运行日志.md | 排查记录与教训（当前 LOG-018） |
+| 运行日志 | docs/运行日志.md | 排查记录与教训（当前 LOG-019） |
 | 测试报告 | docs/测试报告_v6.8.2_M3M4端到端.md | v6.8.2 Docker E2E 69/69 检查明细+7项缺陷+7轮迭代留档 |
 | 接口契约v2 | docs/接口契约v1.md | API接口契约（v2.8.5，31张表，81路由路径） |
 | **基础架构方案** | **promts/lon/提示词整合测试_demo/docs/基础架构方案_五人并行开发.md** | **主基线文档（v1.2.0，28项决策），所有参考文档权重低于此文件** |
@@ -715,5 +715,5 @@ chore: 构建
 
 ---
 
-**最后更新**：2026-10-17 17:02（v6.8.5——拉取 master 合并：引入 M5 智能报告模块全套（reports.py 7 paths + report_* 服务/schemas + AiReport 表加 version/data_source_status/error_message + 32 用例 + report_package 口径文档）与前端界面更新，唯一冲突 main.py 双向路由注册合并保留双方；按用户指令功能相似统一名称+新增差异字段：M3 dashboard 对齐《一期指标口径表V1》（customers.status_overview/new_this_period 同名同构，overview 补 intent/converted/lost/new_outcomes，旧字段向下兼容），术语统一 /reports=智能报告 vs /employee/reports=员工日报；依赖 uv sync 补 reportlab；测试：verify_all 25/25（路由 81）、M5 测试 32/32、dashboard 对齐 14/14）  
+**最后更新**：2026-10-17 17:11（v6.8.5 收官——第三次合并 longtrying_stu→master：快进合并无冲突（90cf30c→a23fc49），M4 学生模块全量+Docker E2E+存储本地化+M5 智能报告+前端界面+指标口径统一全部进入主干，master 与 longtrying_stu 同树；合并后 verify_all 25/25；详见更新记录「第三次合并」条目与 LOG-019）  
 **维护人**：开发团队
