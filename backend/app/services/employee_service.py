@@ -2,7 +2,7 @@ from datetime import date, timedelta
 
 from app.core.exceptions import BusinessError, ConflictError, ForbiddenError, NotFoundError
 from app.models.customer import Customer
-from app.models.employee import EmployeeDailyReport, EmployeeOrg, EmployeeTodo
+from app.models.employee import DailyReportAnnotation, EmployeeDailyReport, EmployeeOrg, EmployeeTodo
 from app.models.student import StudentScore
 from app.models.system import ApprovalInstance
 from app.models.user import User
@@ -865,3 +865,185 @@ class EmployeeService:
         alert.status = "已处理"
         await self.db.commit()
         return {"alert_id": alert.id, "action": action, "status": "已处理"}
+
+    # ── 日报批示（MANAGER） ───────────────────────────
+    async def annotate_report(self, report_id: int, manager_id: int, content: str) -> DailyReportAnnotation:
+        report = await self.report_repo.get_by_id(report_id)
+        if not report:
+            raise NotFoundError(message="日报不存在")
+        annotation = DailyReportAnnotation(report_id=report_id, manager_id=manager_id, content=content)
+        self.db.add(annotation)
+        await self.db.commit()
+        await self.db.refresh(annotation)
+        return annotation
+
+    async def list_annotations(self, report_id: int, user: User) -> list[DailyReportAnnotation]:
+        """仅日报所属员工本人 + MANAGER 可见。"""
+        report = await self.report_repo.get_by_id(report_id)
+        if not report:
+            raise NotFoundError(message="日报不存在")
+        if user.user_type != "MANAGER" and report.employee_id != user.id:
+            raise ForbiddenError(message="无权限查看该日报批示")
+        result = await self.db.execute(
+            select(DailyReportAnnotation)
+            .where(DailyReportAnnotation.report_id == report_id)
+            .order_by(DailyReportAnnotation.create_time)
+        )
+        return list(result.scalars().all())
+
+    # ── 客户再分配（MANAGER 直接生效 + 操作日志 + 事件） ──
+    async def reassign_customers(
+        self, manager_id: int, from_employee_id: int, to_employee_id: int, customer_ids: list[int] | None
+    ) -> dict:
+        if from_employee_id == to_employee_id:
+            raise BusinessError(code=40002, message="原归属与新归属不能相同")
+        for uid, label in ((from_employee_id, "原归属员工"), (to_employee_id, "新归属员工")):
+            result = await self.db.execute(select(User).where(User.id == uid))
+            u = result.scalar_one_or_none()
+            if not u:
+                raise NotFoundError(message=f"{label}不存在")
+            if u.user_type not in ("EMPLOYEE", "MANAGER"):
+                raise BusinessError(code=40002, message=f"{label}必须是员工或管理层")
+
+        stmt = select(Customer).where(Customer.owner_employee_id == from_employee_id)
+        if customer_ids:
+            stmt = stmt.where(Customer.id.in_(customer_ids))
+        result = await self.db.execute(stmt)
+        customers = list(result.scalars().all())
+        if not customers:
+            raise NotFoundError(message="没有可转移的客户")
+        moved_ids = [c.id for c in customers]
+        for c in customers:
+            c.owner_employee_id = to_employee_id
+
+        from app.models.system import SysOperationLog
+        self.db.add(SysOperationLog(
+            user_id=manager_id,
+            module="M3",
+            action="customer_reassign",
+            target_type="customer",
+            target_id=None,
+            detail={"from": from_employee_id, "to": to_employee_id, "customer_ids": moved_ids},
+        ))
+        await self.db.commit()
+
+        from app.services.event_bus import event_bus
+        from app.services.event_contracts import EventType
+        await event_bus.publish(
+            EventType.LEAD_TRANSFERRED,
+            source_module="M3",
+            payload={
+                "from_employee_id": from_employee_id,
+                "to_employee_id": to_employee_id,
+                "customer_ids": moved_ids,
+                "operator_id": manager_id,
+            },
+        )
+        return {"moved": len(moved_ids), "customer_ids": moved_ids}
+
+    # ── 个人信息 ──────────────────────────────────────
+    async def update_profile(self, user_id: int, data: dict) -> User:
+        result = await self.db.execute(select(User).where(User.id == user_id))
+        user = result.scalar_one_or_none()
+        if not user:
+            raise NotFoundError(message="用户不存在")
+        # 手机号唯一校验
+        new_phone = data.get("phone")
+        if new_phone and new_phone != user.phone:
+            dup = await self.db.execute(select(User).where(User.phone == new_phone))
+            if dup.scalar_one_or_none():
+                raise ConflictError(message="该手机号已被其他账号使用")
+        for k, v in data.items():
+            setattr(user, k, v)
+        await self.db.commit()
+        await self.db.refresh(user)
+        return user
+
+    async def change_password(self, user_id: int, old_password: str, new_password: str) -> None:
+        from app.core.security import hash_password, verify_password
+        result = await self.db.execute(select(User).where(User.id == user_id))
+        user = result.scalar_one_or_none()
+        if not user:
+            raise NotFoundError(message="用户不存在")
+        if not verify_password(old_password, user.password_hash):
+            raise BusinessError(code=40001, message="旧密码不正确")
+        user.password_hash = hash_password(new_password)
+        await self.db.commit()
+
+    async def profile_stats(self, user_id: int) -> dict:
+        from sqlalchemy import func
+        month_start = date.today().replace(day=1)
+        base = select(func.count()).select_from(Customer).where(Customer.owner_employee_id == user_id)
+        total = (await self.db.execute(base)).scalar_one()
+        month_new = (await self.db.execute(
+            base.where(Customer.created_at >= month_start)
+        )).scalar_one()
+        rows = (await self.db.execute(
+            select(Customer.status, func.count()).where(Customer.owner_employee_id == user_id).group_by(Customer.status)
+        )).all()
+        by_status = {s: c for s, c in rows}
+
+        def _count(*keys: str) -> int:
+            return sum(by_status.get(k, 0) for k in keys)
+
+        return {
+            "total": total,
+            "month_new": month_new,
+            # 兼容中文 6 态与历史英文编码
+            "following": _count("跟进中", "新录入", "意向强烈", "NEW", "FOLLOWING"),
+            "signed": _count("已签约", "已入学", "CONVERTED"),
+            "lost": _count("已流失", "CHURNED"),
+        }
+
+    # ── CSV 导出（同步，BOM 头兼容 Excel 中文） ────────
+    @staticmethod
+    def _to_csv(header: list[str], rows: list[list]) -> str:
+        import csv
+        import io
+        buf = io.StringIO()
+        buf.write("﻿")  # BOM
+        writer = csv.writer(buf)
+        writer.writerow(header)
+        writer.writerows(rows)
+        return buf.getvalue()
+
+    async def export_customers_csv(self, user: User) -> str:
+        stmt = select(Customer)
+        if user.user_type != "MANAGER":
+            stmt = stmt.where(Customer.owner_employee_id == user.id)
+        stmt = stmt.order_by(Customer.created_at.desc())
+        customers = list((await self.db.execute(stmt)).scalars().all())
+        return self._to_csv(
+            ["客户ID", "姓名", "手机号", "状态", "来源渠道", "归属员工ID", "创建时间"],
+            [[c.id, c.name, c.phone, c.status, c.source_channel, c.owner_employee_id,
+              c.created_at.strftime("%Y-%m-%d %H:%M") if c.created_at else ""] for c in customers],
+        )
+
+    async def export_reports_csv(self, user: User, start: date | None, end: date | None) -> str:
+        stmt = select(EmployeeDailyReport)
+        if user.user_type != "MANAGER":
+            stmt = stmt.where(EmployeeDailyReport.employee_id == user.id)
+        if start:
+            stmt = stmt.where(EmployeeDailyReport.report_date >= start)
+        if end:
+            stmt = stmt.where(EmployeeDailyReport.report_date <= end)
+        stmt = stmt.order_by(EmployeeDailyReport.report_date.desc())
+        reports = list((await self.db.execute(stmt)).scalars().all())
+        return self._to_csv(
+            ["日报ID", "员工ID", "日期", "状态", "是否迟报", "内容"],
+            [[r.id, r.employee_id, str(r.report_date), r.status, "是" if r.is_late else "否", r.content] for r in reports],
+        )
+
+    async def export_followups_csv(self, user: User) -> str:
+        from app.models.crm import CrmFollowUp
+        stmt = select(CrmFollowUp)
+        if user.user_type != "MANAGER":
+            stmt = stmt.where(CrmFollowUp.employee_id == user.id)
+        stmt = stmt.order_by(CrmFollowUp.created_at.desc())
+        follows = list((await self.db.execute(stmt)).scalars().all())
+        return self._to_csv(
+            ["跟进ID", "客户ID", "员工ID", "跟进方式", "跟进内容", "下次跟进日期", "创建时间"],
+            [[f.id, f.customer_id, f.employee_id, f.follow_type, f.content,
+              str(f.next_date) if f.next_date else "",
+              f.created_at.strftime("%Y-%m-%d %H:%M") if f.created_at else ""] for f in follows],
+        )

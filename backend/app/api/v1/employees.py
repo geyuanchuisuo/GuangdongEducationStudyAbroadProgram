@@ -1,6 +1,6 @@
 from datetime import date
 
-from fastapi import APIRouter, Body, Depends, Query
+from fastapi import APIRouter, Body, Depends, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_user_type
@@ -16,6 +16,8 @@ from app.repositories.employee_repo import (
 from app.schemas.employee import (
     AdminServiceAction,
     AdminServiceOut,
+    AnnotationCreate,
+    AnnotationOut,
     CommandExecuteCreate,
     CommandExecuteOut,
     CommandParseCreate,
@@ -38,8 +40,11 @@ from app.schemas.employee import (
     OralReportCreate,
     OralReportOut,
     OrgNode,
+    PasswordChange,
+    ProfileUpdate,
     PsychAlertHandle,
     PsychAlertOut,
+    ReassignCreate,
     ScoreCreate,
     ScoreOut,
     TodoCreate,
@@ -438,3 +443,119 @@ async def handle_psych_alert(
 ):
     result = await service.handle_psych_alert(current_user.id, alert_id, data.action, data.note)
     return success_response(data=result, message="心理关怀已记录")
+
+
+# ── 日报批示（MANAGER） ──────────────────────────────
+@router.post("/reports/{report_id}/annotations", summary="日报批示（MANAGER）")
+async def annotate_report(
+    report_id: int,
+    data: AnnotationCreate,
+    current_user: User = Depends(require_user_type("MANAGER")),
+    service: EmployeeService = Depends(_get_service),
+):
+    annotation = await service.annotate_report(report_id, current_user.id, data.content)
+    return success_response(data=AnnotationOut.model_validate(annotation), message="批示已添加")
+
+
+@router.get("/reports/{report_id}/annotations", summary="查看日报批示（仅该员工+MANAGER）")
+async def list_annotations(
+    report_id: int,
+    current_user: User = Depends(require_user_type("EMPLOYEE", "MANAGER")),
+    service: EmployeeService = Depends(_get_service),
+):
+    items = await service.list_annotations(report_id, current_user)
+    return success_response(data={"items": [AnnotationOut.model_validate(a) for a in items]})
+
+
+# ── 客户再分配（MANAGER） ────────────────────────────
+@router.post("/customers/reassign", summary="客户再分配（MANAGER 直接生效，写日志+事件）")
+async def reassign_customers(
+    data: ReassignCreate,
+    current_user: User = Depends(require_user_type("MANAGER")),
+    service: EmployeeService = Depends(_get_service),
+):
+    result = await service.reassign_customers(
+        current_user.id, data.from_employee_id, data.to_employee_id, data.customer_ids
+    )
+    return success_response(data=result, message=f"已转移 {result['moved']} 个客户")
+
+
+# ── 个人信息 ────────────────────────────────────────
+@router.get("/profile", summary="个人信息")
+async def get_profile(current_user: User = Depends(require_user_type("EMPLOYEE", "MANAGER"))):
+    return success_response(data={
+        "id": current_user.id,
+        "username": current_user.username,
+        "real_name": current_user.real_name,
+        "user_type": current_user.user_type,
+        "phone": current_user.phone,
+        "employee_role": current_user.employee_role,
+        "department": current_user.department,
+        "contact_info": current_user.contact_info,
+    })
+
+
+@router.put("/profile", summary="修改基本信息（real_name/phone/department/contact_info）")
+async def update_profile(
+    data: ProfileUpdate,
+    current_user: User = Depends(require_user_type("EMPLOYEE", "MANAGER")),
+    service: EmployeeService = Depends(_get_service),
+):
+    user = await service.update_profile(current_user.id, data.model_dump(exclude_unset=True))
+    return success_response(data={"id": user.id, "real_name": user.real_name, "phone": user.phone}, message="已更新")
+
+
+@router.put("/profile/password", summary="修改密码（需验证旧密码）")
+async def change_password(
+    data: PasswordChange,
+    current_user: User = Depends(require_user_type("EMPLOYEE", "MANAGER")),
+    service: EmployeeService = Depends(_get_service),
+):
+    await service.change_password(current_user.id, data.old_password, data.new_password)
+    return success_response(message="密码已修改，请重新登录")
+
+
+@router.get("/profile/stats", summary="我的客户统计（本月新增/跟进中/已签约/已流失/总数）")
+async def profile_stats(
+    current_user: User = Depends(require_user_type("EMPLOYEE", "MANAGER")),
+    service: EmployeeService = Depends(_get_service),
+):
+    return success_response(data=await service.profile_stats(current_user.id))
+
+
+# ── CSV 导出 ────────────────────────────────────────
+def _csv_response(content: str, filename: str) -> Response:
+    return Response(
+        content=content,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{filename}"},
+    )
+
+
+@router.get("/export/customers", summary="导出客户列表 CSV（员工看自己/MANAGER全部）")
+async def export_customers(
+    current_user: User = Depends(require_user_type("EMPLOYEE", "MANAGER")),
+    service: EmployeeService = Depends(_get_service),
+):
+    csv_text = await service.export_customers_csv(current_user)
+    return _csv_response(csv_text, "customers.csv")
+
+
+@router.get("/export/daily-reports", summary="导出日报 CSV（支持 start/end 日期筛选）")
+async def export_daily_reports(
+    start: date | None = Query(None),
+    end: date | None = Query(None),
+    current_user: User = Depends(require_user_type("EMPLOYEE", "MANAGER")),
+    service: EmployeeService = Depends(_get_service),
+):
+    csv_text = await service.export_reports_csv(current_user, start, end)
+    return _csv_response(csv_text, "daily_reports.csv")
+
+
+@router.get("/export/follow-ups", summary="导出跟进记录 CSV")
+async def export_follow_ups(
+    current_user: User = Depends(require_user_type("EMPLOYEE", "MANAGER")),
+    service: EmployeeService = Depends(_get_service),
+):
+    csv_text = await service.export_followups_csv(current_user)
+    return _csv_response(csv_text, "follow_ups.csv")

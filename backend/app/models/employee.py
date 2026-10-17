@@ -48,3 +48,14 @@ class EmployeeOrg(Base):
     status: Mapped[str] = mapped_column(String(20), default="active", index=True)
     create_time = mapped_column(DateTime, server_default=func.now())
     update_time = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class DailyReportAnnotation(Base):
+    """日报批示：MANAGER 对日报的批注，仅该员工 + MANAGER 可见（v6.4.0）"""
+    __tablename__ = "daily_report_annotation"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    report_id: Mapped[int] = mapped_column(Integer, ForeignKey("employee_daily_report.id"), nullable=False, index=True)
+    manager_id: Mapped[int] = mapped_column(Integer, ForeignKey("sys_user.id"), nullable=False, index=True)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    create_time = mapped_column(DateTime, server_default=func.now())

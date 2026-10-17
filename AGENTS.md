@@ -7,7 +7,7 @@
 ## 零、快速定位（打开项目先看这里）
 
 **当前进度**：Phase 0 公共地基已完成（v6.0.1），进入 Phase 1 模块并行开发  
-**数据库**：30张表，13个API端点，MVC分层结构就绪  
+**数据库**：31张表，50个路由端点，MVC分层结构就绪  
 **主基线文档**：`promts/lon/提示词整合测试_demo/docs/基础架构方案_五人并行开发.md`（v1.2.0，28项决策）
 
 **接手阅读顺序**：
@@ -16,7 +16,7 @@
 3. `promts/lon/提示词整合测试_demo/docs/基础架构方案_五人并行开发.md` — **主基线，权重最高**
 4. `docs/开发路线图.md` — 当前进度、下一步任务
 5. `docs/接口契约v1.md` — API接口契约（v2.0）
-6. `docs/更新记录.md` — 最近变更（v6.3.0）
+6. `docs/更新记录.md` — 最近变更（v6.4.0）
 
 **重要规则**：
 - 主基线文档（基础架构方案）权重 > 其他参考文档（共用基座方案、公共框架等）
@@ -143,7 +143,7 @@ GuangdongEducationStudyAbroadProgram/
 - 员工数据隔离：普通员工只能看到自己名下的客户
 - 二期拆分为3个独立角色：人事（HR，不可看客户/经营）、经理（MANAGER_DIRECTOR，只看下属+自己客户）、总裁（MANAGER_PRESIDENT，看全部）
 
-### 4.2 数据库表（30张，v6.0.0更新）
+### 4.2 数据库表（31张，v6.4.0更新）
 
 > **数据库**：MySQL 8.0+，端口59000，库名 `GuangdongEducationStudyAbroadProgram`
 > **自动建表**：应用启动时自动创建所有表，无需手动执行SQL
@@ -175,22 +175,23 @@ GuangdongEducationStudyAbroadProgram/
 18. **cs_faq** - 常见问答对表
 
 **员工模块表（M3）**：
-19. **employee_daily_report** - 员工日报表
+19. **employee_daily_report** - 员工日报表（v6.3.0 加 status/is_late）
 20. **student_score** - 学生成绩表
 21. **employee_org** - 组织架构表
 22. **employee_todo** - 员工待办事项表
+23. **daily_report_annotation** - 日报批示表（v6.4.0 新增）
 
 **学生模块表（M4）**：
-23. **student_admin_service** - 学生行政服务表
-24. **student_psych_profile** - 心理健康画像表
-25. **student_psych_alert** - 心理预警表
-26. **student_feedback_ticket** - 售后反馈工单表
-27. **student_academic** - 学生学业考务表
-28. **student_application_progress** - 留学申请进度表
+24. **student_admin_service** - 学生行政服务表
+25. **student_psych_profile** - 心理健康画像表
+26. **student_psych_alert** - 心理预警表
+27. **student_feedback_ticket** - 售后反馈工单表
+28. **student_academic** - 学生学业考务表
+29. **student_application_progress** - 留学申请进度表
 
 **报告模块表（M5）**：
-29. **ai_report** - 智能报告表
-30. **ai_report_attachment** - 报告附件表
+30. **ai_report** - 智能报告表
+31. **ai_report_attachment** - 报告附件表
 
 ### 4.3 API接口分组
 
@@ -646,10 +647,10 @@ chore: 构建
 | **AGENTS.md** | **./AGENTS.md**（根目录） | **项目接手指南（agent自动读取，这是主文件）** |
 | AGENTS.md 副本 | docs/AGENTS.md | 与根目录保持同步的副本 |
 | 项目需求文档 | docs/项目需求文档.md | 完整需求、架构、接口、数据库 |
-| 更新记录 | docs/更新记录.md | 版本变更记录（当前v6.3.0） |
+| 更新记录 | docs/更新记录.md | 版本变更记录（当前v6.4.0） |
 | 开发路线图 | docs/开发路线图.md | 分期任务表（Phase 0已完成） |
 | 运行日志 | docs/运行日志.md | 排查记录与教训 |
-| 接口契约v2 | docs/接口契约v1.md | API接口契约（v2.0，30张表） |
+| 接口契约v2 | docs/接口契约v1.md | API接口契约（v2.3.0，31张表） |
 | **基础架构方案** | **promts/lon/提示词整合测试_demo/docs/基础架构方案_五人并行开发.md** | **主基线文档（v1.2.0，28项决策），所有参考文档权重低于此文件** |
 
 > **文档优先级**：基础架构方案_五人并行开发.md > 其他参考文档（共用基座方案、公共框架等）
@@ -677,5 +678,5 @@ chore: 构建
 
 ---
 
-**最后更新**：2026-10-17 10:15  
+**最后更新**：2026-10-17 10:45  
 **维护人**：开发团队

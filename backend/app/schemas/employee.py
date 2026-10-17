@@ -294,3 +294,38 @@ class PsychAlertOut(BaseModel):
     create_time: Optional[datetime] = None
 
     model_config = {"from_attributes": True}
+
+
+# ── 日报批示（MANAGER） ─────────────────────────────
+class AnnotationCreate(BaseModel):
+    content: str = Field(..., min_length=1, description="批示内容")
+
+
+class AnnotationOut(BaseModel):
+    id: int
+    report_id: int
+    manager_id: int
+    content: str
+    create_time: Optional[datetime] = None
+
+    model_config = {"from_attributes": True}
+
+
+# ── 客户再分配（MANAGER） ────────────────────────────
+class ReassignCreate(BaseModel):
+    from_employee_id: int = Field(..., description="原归属员工")
+    to_employee_id: int = Field(..., description="新归属员工")
+    customer_ids: Optional[list[int]] = Field(None, description="指定客户ID列表，不传则全部转移")
+
+
+# ── 个人信息 ────────────────────────────────────────
+class ProfileUpdate(BaseModel):
+    real_name: Optional[str] = Field(None, max_length=50)
+    phone: Optional[str] = Field(None, max_length=20)
+    department: Optional[str] = Field(None, max_length=100)
+    contact_info: Optional[str] = None
+
+
+class PasswordChange(BaseModel):
+    old_password: str = Field(..., min_length=1, description="旧密码（验证用）")
+    new_password: str = Field(..., min_length=6, max_length=64, description="新密码（至少6位）")
