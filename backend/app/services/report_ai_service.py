@@ -34,7 +34,23 @@ def _mock_analysis(report_type: str, metrics: dict) -> dict:
             "suggestions": [_suggestion("（模拟）关注信息不足客户的研判补全")],
         }
 
-    if report_type in ("daily_report_summary", "weekly_report_summary"):
+    if report_type == "daily_report_summary":
+        # M5-07.1 日报拆分：metrics 只有 days（按日应交/已交/未交），无全周人次/部门
+        days = metrics["days"]
+        total_submitted = sum(d["submitted"] for d in days)
+        total_missing = sum(d["missing"] for d in days)
+        missing_days = "、".join(d["date"] for d in days if d["missing"] > 0) or "无"
+        return {
+            "summary": (
+                f"（模拟）本日报周期共统计 {len(days)} 个工作日，"
+                f"已提交 {total_submitted} 人次、未提交 {total_missing} 人次。"
+            ),
+            "trend": None,
+            "analysis": f"（模拟）存在未提交的日期：{missing_days}。",
+            "suggestions": [_suggestion("（模拟）跟进未提交日报的员工")],
+        }
+
+    if report_type == "weekly_report_summary":
         total = metrics["week_total"]
         depts = metrics["departments"]
         missing_depts = "、".join(

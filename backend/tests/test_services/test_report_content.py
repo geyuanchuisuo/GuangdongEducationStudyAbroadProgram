@@ -44,14 +44,21 @@ def test_customer_metrics():
     assert m["profiles"]["sg_conclusion"]["符合"] == 4
 
 
-def test_daily_and_weekly_share_submission_stats():
+def test_daily_and_weekly_split_submission_stats():
+    """M5-07.1 日报与周报拆开：日报只有按日明细，周报才有全周人次与部门汇总。"""
     daily = _build("daily_report_summary")["metrics"]
     weekly = _build("weekly_report_summary")["metrics"]
-    # 日报/周报均包含每日明细、全周人次与部门汇总
-    for m in (daily, weekly):
-        assert len(m["days"]) == 5
-        assert m["week_total"]["submitted"] == 20
-        assert set(m["departments"]) == {"咨询部", "教务部", "市场部"}
+
+    # 日报：仅按日应交/已交/未交，不含全周人次与部门
+    assert len(daily["days"]) == 5
+    assert "week_total" not in daily
+    assert "departments" not in daily
+    assert sum(d["submitted"] for d in daily["days"]) == 20
+
+    # 周报：含每日明细 + 全周人次 + 部门汇总
+    assert len(weekly["days"]) == 5
+    assert weekly["week_total"]["submitted"] == 20
+    assert set(weekly["departments"]) == {"咨询部", "教务部", "市场部"}
 
 
 def test_psych_metrics():

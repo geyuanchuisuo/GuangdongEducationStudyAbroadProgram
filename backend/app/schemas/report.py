@@ -160,3 +160,20 @@ class ReportOut(BaseModel):
     created_at: datetime | None = None
 
     model_config = {"from_attributes": True}
+
+
+class ReportListOut(BaseModel):
+    """报告列表条目（M5-12.3 瘦身：不回传完整 report_content，载荷从详情接口取）。"""
+    id: int
+    report_type: str
+    report_title: str | None = None
+    time_range_start: datetime | None = None
+    time_range_end: datetime | None = None
+    generated_by: int | None = None
+    status: str
+    version: int = 1
+    data_source_status: str | None = None
+    error_message: str | None = None
+    created_at: datetime | None = None
+
+    model_config = {"from_attributes": True}

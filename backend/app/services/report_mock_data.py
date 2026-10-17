@@ -262,12 +262,21 @@ def _complaints() -> list[ComplaintReportInput]:
     ]
 
 
-def build_mock_dataset() -> MockReportDataset:
-    """构造完整模拟数据包。"""
+def build_mock_dataset(
+    period_start: datetime | None = None,
+    period_end: datetime | None = None,
+) -> MockReportDataset:
+    """构造完整模拟数据包（M5-02.2：支持指定周期）。
+
+    周期缺省时使用参考周期（2026-10-12 ~ 10-19）；指定其它周期时，
+    数据集的 period 字段按请求值盖章，样本记录本身不变（确定性样本），
+    指标计算按请求周期过滤——非参考周期大部分指标自然为空，属预期行为
+    （见 06_后端交付说明V1 风险说明 2）。
+    """
     return MockReportDataset(
         data_updated_at=PERIOD_END - timedelta(minutes=1),
-        period_start=PERIOD_START,
-        period_end=PERIOD_END,
+        period_start=period_start or PERIOD_START,
+        period_end=period_end or PERIOD_END,
         customers=_customers(),
         employees=_employees(),
         daily_reports=_daily_reports(),

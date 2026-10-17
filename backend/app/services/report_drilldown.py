@@ -6,7 +6,7 @@
 from app.core.exceptions import ForbiddenError
 from app.models.user import User
 from app.schemas.report import MockReportDataset
-from app.services.report_calculator import dedup_customers_by_phone
+from app.services.report_calculator import dedup_customers_by_phone, is_special_case
 
 
 def mask_phone(phone: str) -> str:
@@ -64,9 +64,10 @@ def psych_cases_for_user(ds: MockReportDataset, start, end, user: User) -> list[
 
 
 def special_cases_drilldown(ds: MockReportDataset) -> list[dict]:
-    """投诉特别案例：仅已复核通过，只返回案例编号 / 负责人 / 处理进度。"""
+    """投诉特别案例：统一口径（is_special_case）仅返回 AI 高风险候选且已复核通过者，
+    只返回案例编号 / 负责人 / 处理进度。"""
     complaints = [t for t in ds.complaints if t.feedback_type == "投诉"]
     return [
         {"ticket_id": t.ticket_id, "owner_id": t.owner_id, "progress": t.progress}
-        for t in complaints if t.ai_high_risk and t.review_status == "approved"
+        for t in complaints if is_special_case(t)
     ]

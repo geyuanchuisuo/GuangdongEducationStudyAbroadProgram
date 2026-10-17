@@ -9,6 +9,7 @@ from app.schemas.report import MockReportDataset
 from app.services.report_calculator import (
     calculate_complaint_stats,
     calculate_customer_stats,
+    calculate_daily_submission,
     calculate_psych_stats,
     calculate_weekly_submission,
 )
@@ -25,7 +26,7 @@ DATA_NOTES = {
     "customer_analysis": "口径：期末状态取周期结束时状态；本期新增按手机号去重、取最早新增时间；"
                          "画像分母为全部期末意向客户，无有效研判归信息不足；历史画像按当前最新研判重算。",
     "daily_report_summary": "口径：应提交范围为在职员工、周一至周五；同一员工同一日报日期最多计一次有效提交；"
-                            "补交归回原日期；周末不计应交/未交。",
+                            "补交归回原日期；周末不计应交/未交；日报汇总仅按日展示，不含全周人次与部门汇总。",
     "weekly_report_summary": "口径：同日报；部门归属按生成时员工部门汇总；全周人次为各工作日应交/已交/未交之和。",
     "psych_weekly": "口径：覆盖学生为本周期有心理记录的学生、按学生ID去重；风险结果沿用学生模块识别结果；"
                     "无记录不计比例、不视为正常。",
@@ -37,7 +38,10 @@ DATA_NOTES = {
 def _compute_metrics(report_type: str, ds: MockReportDataset, start: datetime, end: datetime) -> dict:
     if report_type == "customer_analysis":
         return calculate_customer_stats(ds.customers, start, end)
-    if report_type in ("daily_report_summary", "weekly_report_summary"):
+    if report_type == "daily_report_summary":
+        # M5-07.1 日报与周报拆开：日报只出按日应交/已交/未交，不出全周人次与部门汇总
+        return calculate_daily_submission(ds.employees, ds.daily_reports, start, end)
+    if report_type == "weekly_report_summary":
         return calculate_weekly_submission(ds.employees, ds.daily_reports, start, end)
     if report_type == "psych_weekly":
         return calculate_psych_stats(ds.psych_records, start, end)

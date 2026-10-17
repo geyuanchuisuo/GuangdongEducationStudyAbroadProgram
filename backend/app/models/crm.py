@@ -1,4 +1,5 @@
-from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, JSON, String, Text, func
+from sqlalchemy import (BigInteger, Boolean, DateTime, ForeignKey, Integer, JSON,
+                        String, Text, UniqueConstraint, func)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
@@ -64,6 +65,13 @@ class CrmFollowUp(Base):
 
 class AiReport(Base):
     __tablename__ = "ai_report"
+    # M5-06.4 版本号并发保护：同类型同周期版本号唯一（冲突由仓储层捕获重试）
+    __table_args__ = (
+        UniqueConstraint(
+            "report_type", "time_range_start", "time_range_end", "version",
+            name="uq_ai_report_version",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(BigInt, primary_key=True, autoincrement=True)
     report_type: Mapped[str] = mapped_column(String(50), nullable=False, index=True)

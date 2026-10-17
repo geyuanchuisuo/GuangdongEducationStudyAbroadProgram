@@ -23,6 +23,14 @@ SEVEN_DAYS = timedelta(hours=7 * 24)
 
 # ── 通用工具 ──────────────────────────────────────────────
 
+def is_special_case(t: ComplaintReportInput) -> bool:
+    """特别案例统一口径（M5-03.5）：AI 高风险候选 且 人工复核通过（approved）。
+
+    calculator 与 drilldown 共用本判定，两处不再各写一套。
+    """
+    return t.ai_high_risk and t.review_status == "approved"
+
+
 def customer_newest_time(c: CustomerReportInput) -> datetime | None:
     """客户新增时间 = 首次注册登录 / 首次员工提交 两者更早者。"""
     times = [t for t in (c.first_register_login_at, c.first_employee_submit_at) if t is not None]
@@ -47,9 +55,14 @@ def calculate_customer_stats(
 ) -> dict:
     uniq = dedup_customers_by_phone(customers)
 
-    # 期末状态总览
+    # 期末状态总览（M5-04.1 周期约束：仅统计周期结束前已存在的客户；
+    # 新增时间晚于 period_end 的客户属于未来周期，不计入本期期末）
+    existing = [
+        c for c in uniq
+        if (t := customer_newest_time(c)) is None or t < period_end
+    ]
     status_counts = {s: 0 for s in ("NEW", "FOLLOWING", "STRONG", "SIGNED", "ENROLLED", "LOST")}
-    for c in uniq:
+    for c in existing:
         status_counts[c.status_at_period_end] += 1
     intent = sum(status_counts[s] for s in INTENT_STATUSES)
     converted = sum(status_counts[s] for s in CONVERTED_STATUSES)
@@ -67,8 +80,9 @@ def calculate_customer_stats(
         "lost": sum(1 for c in new_customers if c.status_at_period_end == "LOST"),
     }
 
-    # 项目画像：分母 = 全部期末意向客户；None 归"信息不足"（未完成研判）
-    intent_customers = [c for c in uniq if c.status_at_period_end in INTENT_STATUSES]
+    # 项目画像：分母 = 全部期末意向客户（同 M5-04.1 仅计周期结束前已存在者）；
+    # None 归"信息不足"（未完成研判）
+    intent_customers = [c for c in existing if c.status_at_period_end in INTENT_STATUSES]
     profiles = {}
     for attr in ("sg_conclusion", "de_conclusion"):
         counts = {"符合": 0, "不符合": 0, "信息不足": 0}
@@ -80,7 +94,7 @@ def calculate_customer_stats(
     return {
         "status_overview": {
             **status_counts,
-            "total": len(uniq),
+            "total": len(existing),
             "intent": intent,
             "converted": converted,
             "lost": lost,
@@ -208,11 +222,16 @@ def calculate_complaint_stats(
         1 for t in complaints
         if t.resolved_at is not None and period_start <= t.resolved_at < period_end
     )
-    open_count = sum(1 for t in complaints if t.status == "open")
+    # 期末未解决（M5-04.3 周期界定：仅统计周期结束前已提交、截止时仍 open 的工单）
+    open_count = sum(
+        1 for t in complaints
+        if t.status == "open" and t.submitted_at < period_end
+    )
     # 超过 7×24h 仍未解决（严格大于，恰好 7 天不算）
     over7 = sum(
         1 for t in complaints
-        if t.status == "open" and (period_end - t.submitted_at) > SEVEN_DAYS
+        if t.status == "open" and t.submitted_at < period_end
+        and (period_end - t.submitted_at) > SEVEN_DAYS
     )
 
     responded = [t for t in complaints if t.first_response_at is not None]
@@ -225,8 +244,8 @@ def calculate_complaint_stats(
     for t in complaints:
         satisfaction[t.satisfaction] += 1
 
-    # 特别案例：AI 候选且已复核通过
-    special_cases = sum(1 for t in complaints if t.review_status == "approved")
+    # 特别案例（M5-03.5 统一口径）：AI 高风险候选且已复核通过
+    special_cases = sum(1 for t in complaints if is_special_case(t))
 
     return {
         "new_count": new_count,
