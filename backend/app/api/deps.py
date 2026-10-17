@@ -1,3 +1,5 @@
+from collections.abc import AsyncGenerator
+
 from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,13 +24,13 @@ async def get_current_user(
     if payload is None:
         raise AuthError()
 
-    user_id = payload.get("sub")
-    if user_id is None:
+    user_id_str: str | None = payload.get("sub")
+    if user_id_str is None:
         raise AuthError()
     try:
-        user_id = int(user_id)
-    except (TypeError, ValueError):
-        raise AuthError()
+        user_id = int(user_id_str)
+    except ValueError:
+        raise AuthError() from None
 
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
