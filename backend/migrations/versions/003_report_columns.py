@@ -92,6 +92,18 @@ def upgrade() -> None:
                 f"{name} FOREIGN KEY (report_id) REFERENCES ai_report (id)"
             )
 
+    # ── 5. 版本号并发保护唯一约束（M5-06.4，对齐 ORM uq_ai_report_version） ──
+    has_uq = bind.execute(sa.text(
+        "SELECT COUNT(*) FROM information_schema.STATISTICS "
+        "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ai_report' AND INDEX_NAME = 'uq_ai_report_version'"
+    )).scalar()
+    if not has_uq:
+        # 注意：存量数据若已有重复 (type,start,end,version) 会失败，需先清重
+        op.execute(
+            "CREATE UNIQUE INDEX uq_ai_report_version ON ai_report "
+            "(report_type, time_range_start, time_range_end, version)"
+        )
+
 
 def downgrade() -> None:
     """回滚到 001+002 形态（BIGINT→INT、还原列名/长度、删三列）。"""
@@ -129,3 +141,7 @@ def downgrade() -> None:
         op.drop_column("ai_report", "data_source_status")
     if cols and "version" in cols:
         op.drop_column("ai_report", "version")
+
+    bind.execute(sa.text(
+        "DROP INDEX uq_ai_report_version ON ai_report"
+    ))
