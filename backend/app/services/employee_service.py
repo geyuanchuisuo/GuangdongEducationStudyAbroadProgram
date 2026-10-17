@@ -1390,7 +1390,27 @@ class EmployeeService:
             )
         )).scalar_one()
 
+        # ── 业绩概览（需求矩阵：新增意向数/转化率/签约金额/在办学生数/投诉率） ──
+        converted = funnel[-1]["count"] + funnel[-2]["count"]  # 已入学 + 已签约
+        conversion_rate = round(converted / total * 100, 2) if total else 0.0
+        active_students = (await self.db.execute(
+            select(func.count()).select_from(User).where(
+                User.user_type == "STUDENT", User.status == "正常"
+            )
+        )).scalar_one()
+        tickets_total = (await self.db.execute(
+            select(func.count()).select_from(StudentFeedbackTicket)
+        )).scalar_one()
+        complaint_rate = round(tickets_total / active_students * 100, 2) if active_students else 0.0
+
         return {
+            "overview": {
+                "new_prospects_this_month": new_this_month,
+                "conversion_rate": conversion_rate,
+                "active_students": active_students,
+                "complaint_rate": complaint_rate,
+                "signed_amount": None,  # 签约金额：数据模型无金额字段，需求差异待确认（见需求文档）
+            },
             "customers": {
                 "total": total,
                 "new_this_month": new_this_month,
