@@ -23,6 +23,10 @@ yarn-error.log*
 .env.local
 .env.*.local
 
+# 本地文件存储（STORAGE_BACKEND=local 落盘目录）
+storage_data/
+backend/storage_data/
+
 # IDE
 .vscode/
 .idea/

@@ -6,8 +6,8 @@
 
 ## 零、快速定位（打开项目先看这里）
 
-**当前进度**：Phase 0 公共地基已完成（v6.0.1），Phase 1 模块并行开发中；M3 员工模块全部交付（v6.5.0 收官）；v6.6.0 需求对齐差异全部落地；v6.7.0~v6.7.2 管理层端三项+需求核对 52/52；**M4 学生模块一期全部交付（v6.8.0 第一批 7 子模块 + v6.8.1 第二批 学生助手Agent/提醒聚合，11 paths / 13 endpoints）；v6.8.2 Docker 环境搭建 + M3/M4 数据库端到端验证通过（E2E 69/69，修复 7 项缺陷）；v6.8.3 指令解析本地兜底 + 提醒聚合 TicketUpdateItem 缺陷修复（E2E 71/71 幂等全过）**；master 已合并 longtrying 全部工作（62d4cff，2026-10-17，无冲突）  
-**数据库**：31张表，74条路由路径（73 API + 1 health；employee 42 paths，student 11 paths/13 endpoints），MVC分层结构就绪；**Docker 环境：edu-mysql/edu-redis/edu-backend 全部健康（docker compose up -d mysql backend），MinIO 待补（镜像拉取受限）**  
+**当前进度**：Phase 0 公共地基已完成（v6.0.1），Phase 1 模块并行开发中；M3 员工模块全部交付（v6.5.0 收官）；v6.6.0 需求对齐差异全部落地；v6.7.0~v6.7.2 管理层端三项+需求核对 52/52；**M4 学生模块一期全部交付（v6.8.0 第一批 7 子模块 + v6.8.1 第二批 学生助手Agent/提醒聚合，11 paths / 13 endpoints）；v6.8.2 Docker 环境搭建 + M3/M4 数据库端到端验证通过（E2E 69/69，修复 7 项缺陷）；v6.8.3 指令解析本地兜底 + 提醒聚合 TicketUpdateItem 缺陷修复（E2E 71/71 幂等全过）；v6.8.4 文件存储改本地磁盘后端（docker compose 移除 MinIO，零额外镜像三容器直跑，静态 17/17+HTTP 11/11+E2E 71/71）+ DIFY_BASE_URL 根因修正（3 个 Dify Agent Key 待用户补充）**；master 已合并 longtrying 全部工作（62d4cff，2026-10-17，无冲突）  
+**数据库**：31张表，74条路由路径（73 API + 1 health；employee 42 paths，student 11 paths/13 endpoints），MVC分层结构就绪；**Docker 环境：edu-mysql/edu-redis/edu-backend 全部健康，`docker compose up -d` 三容器零额外镜像直跑（文件存储默认本地磁盘 backend_storage 卷，不再依赖 MinIO）**  
 **主基线文档**：`promts/lon/提示词整合测试_demo/docs/基础架构方案_五人并行开发.md`（v1.2.0，28项决策）
 
 **接手阅读顺序**：
@@ -15,8 +15,8 @@
 2. `docs/项目需求文档.md` — 完整业务需求
 3. `promts/lon/提示词整合测试_demo/docs/基础架构方案_五人并行开发.md` — **主基线，权重最高**
 4. `docs/开发路线图.md` — 当前进度、下一步任务
-5. `docs/接口契约v1.md` — API接口契约（v2.8.2）
-6. `docs/更新记录.md` — 最近变更（v6.8.2）
+5. `docs/接口契约v1.md` — API接口契约（v2.8.4）
+6. `docs/更新记录.md` — 最近变更（v6.8.4）
 
 **重要规则**：
 - 主基线文档（基础架构方案）权重 > 其他参考文档（共用基座方案、公共框架等）
@@ -78,7 +78,7 @@
 ### 部署
 - **容器化**：Docker + Docker Compose
 - **反向代理**：Nginx
-- **对象存储**：MinIO
+- **对象存储**：一期本地磁盘（STORAGE_BACKEND=local，落盘 storage_data 卷，零外部依赖）；二期可选 MinIO/S3（STORAGE_BACKEND=s3，代码路径已保留）
 
 ---
 
@@ -410,8 +410,9 @@ cp .env.example .env
 #   DATABASE_URL - MySQL数据库连接地址（端口59000，库名GuangdongEducationStudyAbroadProgram）
 #   REDIS_URL - Redis连接地址
 #   SECRET_KEY - JWT密钥（请用随机字符串）
-#   DIFY_BASE_URL - Dify服务地址（版本1.16.0-rc1，OpenAI协议）
-#   DIFY_*_AGENT_KEY - 各Agent的API Key
+#   DIFY_BASE_URL - Dify API 地址（nginx 80 的 /v1 路由；本机 http://localhost，容器内由 compose 覆盖为 http://host.docker.internal）
+#   DIFY_*_AGENT_KEY - 各Agent的API Key（控制台各应用「API 访问」页生成，app-开头）
+#   STORAGE_BACKEND - 文件存储后端：local（默认，本地磁盘）/ s3（MinIO，二期可选）
 ```
 
 #### 第七步：启动开发服务器
@@ -480,29 +481,35 @@ npm run dev
 # 1. 部署Dify（参考官方文档）
 # https://docs.dify.ai/getting-started/install-self-hosted
 
-# 2. 创建3个Agent应用
-# - 留学生智能管家
-# - 企业员工助手
-# - 客服Agent
+# 2. 控制台 http://localhost 注册管理员，创建3个「聊天助手」应用
+# - 客服Agent（DIFY_CUSTOMER_AGENT_KEY）：7大场景应答，年轻化人设
+# - 企业员工助手（DIFY_EMPLOYEE_AGENT_KEY）：读 inputs.capabilities，记忆窗口5轮
+# - 留学生智能管家（DIFY_STUDENT_AGENT_KEY）：读 inputs.restrictions，不承诺退费/不给医疗级建议
 
-# 3. 导入知识库文档
-# 将 dify/knowledge_base/ 下的文档导入Dify知识库
+# 3. 导入知识库文档（可选）
+# 将 dify/knowledge_base/ 下的文档（如《公司新人指南》）导入知识库并关联企业助手
 
 # 4. 获取API Key
-# 在Dify后台获取每个应用的API Key，填入后端 .env
+# 各应用左侧「API 访问」→「API 密钥」生成 app-xxx Key，填入后端 .env
 ```
 
 ### 5.4 Docker一键启动
 
 ```bash
-# 构建并启动所有服务
-docker-compose up -d
+# 启动全部服务（mysql + redis + backend，文件存储用本地磁盘卷，零额外镜像）
+docker compose up -d
+
+# 只启动核心三件套（Dify 独立部署时）
+docker compose up -d mysql redis backend
 
 # 查看日志
-docker-compose logs -f
+docker compose logs -f backend
 
 # 停止服务
-docker-compose down
+docker compose down
+
+# 上传文件持久化位置：命名卷 backend_storage（容器内 /app/storage_data）
+docker volume inspect guangdongeducationstudyabroadprogram_backend_storage
 ```
 
 ---
@@ -522,18 +529,23 @@ REDIS_URL=redis://localhost:6379
 SECRET_KEY=your-secret-key-here
 ACCESS_TOKEN_EXPIRE_MINUTES=1440
 
-# Dify（版本1.16.0-rc1，使用OpenAI协议）
-DIFY_BASE_URL=http://localhost:3000
+# Dify（版本1.16.0-rc1，Service API：/v1/chat-messages）
+# API 走 Dify nginx(80) 的 /v1 路由（3000 是 web 控制台端口且未映射宿主机，不能作 API 地址）
+DIFY_BASE_URL=http://localhost
 DIFY_VERSION=1.16.0-rc1
 DIFY_API_PROTOCOL=openai
 DIFY_STUDENT_AGENT_KEY=app-xxx
 DIFY_EMPLOYEE_AGENT_KEY=app-yyy
 DIFY_CUSTOMER_AGENT_KEY=app-zzz
 
-# MinIO
+# 文件存储（local=本地磁盘，默认零外部依赖；s3=MinIO，仅二期生产需要时切换）
+STORAGE_BACKEND=local
+STORAGE_LOCAL_DIR=./storage_data
+# 以下仅 STORAGE_BACKEND=s3 时生效
 MINIO_ENDPOINT=localhost:9000
 MINIO_ACCESS_KEY=admin
 MINIO_SECRET_KEY=password
+MINIO_BUCKET=education
 ```
 
 ### 6.2 前端环境变量（.env）
@@ -634,10 +646,11 @@ chore: 构建
 ### Q2: Dify接口调用失败？
 
 检查：
-1. DIFY_BASE_URL是否正确
-2. API Key是否正确
+1. DIFY_BASE_URL是否正确（本机 http://localhost；容器内 http://host.docker.internal。**不是 3000**——3000 是 web 控制台且未映射宿主机）
+2. API Key是否正确（app-开头，在各应用「API 访问」页生成）
 3. Agent应用是否已发布
-4. 网络是否可达
+4. 网络是否可达（容器内验证：docker exec edu-backend python -c "import socket;socket.create_connection(('host.docker.internal',80))"）
+5. Key 未配置/AI 不可用时系统自动降级：agent/chat 返回能力清单话术，commands/parse 走本地规则兜底（source=local），不阻断业务
 
 ### Q3: 前端跨域问题？
 
@@ -669,11 +682,11 @@ chore: 构建
 | **AGENTS.md** | **./AGENTS.md**（根目录） | **项目接手指南（agent自动读取，这是主文件）** |
 | AGENTS.md 副本 | docs/AGENTS.md | 与根目录保持同步的副本 |
 | 项目需求文档 | docs/项目需求文档.md | 完整需求、架构、接口、数据库 |
-| 更新记录 | docs/更新记录.md | 版本变更记录（当前v6.8.2） |
+| 更新记录 | docs/更新记录.md | 版本变更记录（当前v6.8.4） |
 | 开发路线图 | docs/开发路线图.md | 分期任务表（Phase 0已完成，M3 收官，Phase 1.4 M4 一期已交付） |
-| 运行日志 | docs/运行日志.md | 排查记录与教训 |
+| 运行日志 | docs/运行日志.md | 排查记录与教训（当前 LOG-017） |
 | 测试报告 | docs/测试报告_v6.8.2_M3M4端到端.md | v6.8.2 Docker E2E 69/69 检查明细+7项缺陷+7轮迭代留档 |
-| 接口契约v2 | docs/接口契约v1.md | API接口契约（v2.8.2，31张表，74路由路径） |
+| 接口契约v2 | docs/接口契约v1.md | API接口契约（v2.8.4，31张表，74路由路径） |
 | **基础架构方案** | **promts/lon/提示词整合测试_demo/docs/基础架构方案_五人并行开发.md** | **主基线文档（v1.2.0，28项决策），所有参考文档权重低于此文件** |
 
 > **文档优先级**：基础架构方案_五人并行开发.md > 其他参考文档（共用基座方案、公共框架等）
@@ -701,5 +714,5 @@ chore: 构建
 
 ---
 
-**最后更新**：2026-10-17 15:46（v6.8.3——修复 M4 GET /student/reminders TicketUpdateItem 未导入 50001（存量缺陷：学生有已处理未通知工单即崩）；POST /employee/commands/parse AI 失败自动本地规则兜底（4 类句式，action 增 source=ai/local，不再 50002）；E2E 脚本幂等化（时间戳账号/日报日期避让/客户归属还原）重跑 **71/71 全过（0 跳过）**；路由 74 不变；verify_all 24/24）  
+**最后更新**：2026-10-17 16:29（v6.8.4——文件存储默认改本地磁盘后端：file_storage.py 双后端 local/s3（s3 延迟 import，路径穿越白名单+resolve 双校验），docker-compose 移除 minio 服务与卷、backend 增 backend_storage 卷与 STORAGE_* 环境变量，三容器零额外镜像直跑；DIFY_BASE_URL 根因修正 3000→http://localhost（容器内 host.docker.internal，已实测连通），3 个 Dify Agent Key 待用户控制台创建后补充；测试：静态 17/17、HTTP 端到端 11/11、verify_all 24/24、E2E 71/71 无回归；路由 74 不变）  
 **维护人**：开发团队
