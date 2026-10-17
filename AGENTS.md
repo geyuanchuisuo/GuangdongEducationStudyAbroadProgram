@@ -1,4 +1,4 @@
-﻿﻿# AGENTS.md - 项目接手指南
+# AGENTS.md - 项目接手指南
 
 > 给下一个接手这个项目的人/AI 的完整指南
 
@@ -10,11 +10,12 @@
 **当前进度**：Phase 0 公共地基已完成（v6.0.1），Phase 1 模块并行开发中；M3 员工模块全部交付（v6.5.0 收官）；v6.6.0 需求对齐差异全部落地；v6.7.0~v6.7.2 管理层端三项+需求核对 52/52；master 已合并 longtrying（62d4cff）与 longtrying_stu（a23fc49，第三次合并）全部工作；**M4 学生模块一期全部交付（v6.8.0 第一批 7 子模块 + v6.8.1 第二批 学生助手Agent/提醒聚合，11 paths / 13 endpoints）；v6.8.2 Docker 环境搭建 + M3/M4 数据库端到端验证通过（E2E 69/69，修复 7 项缺陷）；v6.8.3 指令解析本地兜底 + 提醒聚合缺陷修复（E2E 71/71 幂等全过）；v6.8.4 文件存储改本地磁盘后端（docker compose 移除 MinIO，零额外镜像三容器直跑）+ DIFY_BASE_URL 根因修正；v6.8.5 引入 M5 智能报告 7 paths 与前端界面，M3 dashboard 与《一期指标口径表V1》统一名称+新增差异字段（verify_all 25/25 + M5 测试 32/32 + 对齐 14/14）；v6.8.6 AI 全链路打通：Dify 绑定 mimo-v2.6-flash（api.xiaomimimo.com），3 个 Agent 应用创建并回填 app key，真实 AI 链路 6/6 验证通过，环境缺口全部关闭**；**anhoa 分支 v6.8.0：M1 客户模块 + M2 客服 Agent 一期补齐（客户 8 研判字段/6 态流转/pending_lead 待补全线索/客服 Agent 4 出口），2026-10-17 两次合并 origin/master 并线（v6.8.0 被两条分支并行使用，路由 81→99）**；**v6.8.8 P1 运行时缺陷修复：ai_service.py 恢复 M3/M4 依赖的 AgentType/AIService/ai_service（anhoa 合并重写所致，函数内延迟导入绕过静态检查），客服 AiService 与通用 AIService 双服务共存，容器内真实 Dify 调用成功（verify_all 27/27 + pytest 64/64）**；**v6.9.0 远端访问方案（longtrying_test 分支）：docker-compose 增加 nginx 统一 80 入口 + ngrok 内网穿透脚本 + 一键构建启动脚本 + 完整使用指南（REMOTE_ACCESS.md），本地执行 `.\scripts\build-and-serve.ps1` + `.\scripts\start-ngrok.ps1` 即可获得公网 URL**；**v6.9.1 远端访问实测修正：nginx 端口 80→8080（本机 80 被 Dify 占用），新增 localtunnel 免注册方案，公网实测通过（https://wide-cameras-pay.loca.lt 前端 200/API 正常）**；**v6.9.2 master 快进合并 longtrying_test（b84acf3..4c27071，13 文件 +406/-14，无冲突，verify_all 27/27），远端访问能力并入主干；**M5 智能报告 v6.9.0（ZNBG 分支线，与 master v6.9.0 远端访问同名异义）：批次 A~E 连续交付——口径健壮性 11 项 + 真实数据适配器骨架（REPORT_DATA_SOURCE 开关/三态质量标注）+ 前端报告闭环（列表/详情/生成/下钻/真实 PDF）+ 测试资产（全仓 pytest 113/113、verify_all 27/27、npm build 通过）**  
 
 **M5 移交待办清单（v6.9.0，接手者从这里继续）**：
-1. ⏳ **环境级验收**（等用户拉其他合并后执行）：Docker E2E 跑 `tests/e2e_m3m4_test.py`（Section 5.5 已含 M5 报告链路 10 检查）+ production 冒烟（`REPORT_DATA_SOURCE=production` 真实表生成报告）
+1. ✅ **环境级验收（v6.9.3 已实测完成）**：Docker E2E `tests/e2e_m3m4_test.py` **80/80**（含 Section 5.5 M5 报告链路 10 检查）；production 冒烟 `REPORT_DATA_SOURCE=production` 显式传「上一自然周」**7/7**（4/5 类 completed，complaint_weekly 按设计显式拒绝）。**但默认周期调用仅 2/7**——见第 6 项两条 P1，切 production 前必须先修（LOG-040）
 2. 🔴 **转告 M0/M1/anho**：修 `migrations/versions/002_customer_approval.py` 4 处 FK 列 BigInteger→Integer（customer.owner_employee_id/sys_user_id、approval_instance.initiator_id、approval_task.approver_id）——BIGINT→INT(sys_user.id) errno 150，**空库 alembic upgrade head 必失败**，M5 的 003 迁移空库验收被阻塞（LOG-033）
 3. ✅ ~~P1 缺陷 M3/M4 Agent 断链~~ **已修复**：v6.8.8 上游在 ai_service.py 尾部恢复 M0 网关符号（与 M2 客服 AiService 双服务共存），并随本次合并（eaaea94）进入本分支（LOG-031）
-4. 🟡 **业务确认**：`docs/M5_字段映射表.md` 交 M1/M3/M4 负责人逐行确认（投诉 9 字段落库、画像 4→3 映射拍板、客户状态历史来源）→ 确认后 M5 切 `REPORT_DATA_SOURCE=production`
-5. 🟡 ZNBG 分支本地提交未推送（含 v6.9.0 全部工作），推送节奏由用户掌握  
+4. 🟡 **业务确认**：`docs/M5_字段映射表.md` 交 M1/M3/M4 负责人逐行确认（投诉 9 字段落库、画像 4→3 映射拍板、客户状态历史来源）→ 确认 + 修完第 6 项后才可切 `REPORT_DATA_SOURCE=production`
+5. ✅ ~~ZNBG 分支本地提交未推送~~ **已推送**（v6.9.3 起本分支已同步远端；git 凭据本机已恢复，`git ls-remote` 免交互即通）
+6. 🔴 **两条 P1（v6.9.3 实测发现，M5，阻断切 production）**：a) production 缺省周期取 `week_range(now)`（左闭右开，终点=下周一 00:00）恒在未来 → `validate_period(check_future=True)` 必拒 → 不传周期的生成请求 **100% 40002**；b) `report_data_source.fetch_customers` 未做「中文 6 态→英文码」归一，而 M1 契约 `CustomerStatusChange` 与文档化 E2E 都允许写中文（`跟进中`）→ `CustomerReportInput.status_at_period_end` Literal 校验崩 → 500，**单行脏数据拖垮全部 5 类报告**。P2：`seed_data.py` ai_report 段秒级 DATETIME 随机碰撞（2 跑 1 败）、前端 `RoleWorkspace.vue` 部分区块仍为静态演示值（管理层看板 183/21.4%/689/3.2%、学生首屏「李同学」与登录账号不符）
 
 **数据库**：31张表（customer 加 8 研判画像列、cs_intent_log.user_id 放宽可空、AiReport 表加 version/data_source_status/error_message 3 列），99条路由路径（98 API + 1 health；employee 42 paths，student 11 paths/13 endpoints，reports 7 paths，crm/ai/courses/events 15 paths），MVC分层结构就绪；**Docker 环境：edu-mysql/edu-redis/edu-backend 全部健康，`docker compose up -d` 三容器零额外镜像直跑（文件存储默认本地磁盘 backend_storage 卷，不再依赖 MinIO）**  
 **主基线文档**：`promts/lon/提示词整合测试_demo/docs/基础架构方案_五人并行开发.md`（v1.2.0，28项决策）
@@ -725,7 +726,9 @@ chore: 构建
 
 ---
 
-**最后更新**：2026-10-17 22:11（第五次同步 origin/master eaaea94→master_ZNBG——并入 v6.8.8 **P1 修复**（ai_service.py 尾部恢复 M0 网关符号，M3/M4 Agent 断链关闭，移交清单第 3 项销，导入实测通过）+ v6.9.0~v6.9.2 远端访问（nginx 8080/ngrok+localtunnel 脚本/REMOTE_ACCESS.md）+ dev 组依赖并集（aiosqlite+pytest-asyncio）；冲突 7 文件并集解决（v6.9.0 双线同名异义已注明：master=远端访问、ZNBG=M5 批次 A~E，ZNBG 线 pytest 113/113+verify_all 27/27）；遗留：推送待用户凭据、002 迁移 FK 未修（上游）、E2E/production 冒烟待环境、M5 字段映射表待业务确认；详见更新记录 merge 条目与 LOG-039）  
+**最后更新**：2026-10-17 14:50（**v6.9.3 环境级验收 + 前后端全量实测，零代码改动**：①环境修复——Docker 卷内 MySQL root 密码仍是旧值 `password`（卷早于「统一 420821」那次改动，`MYSQL_ROOT_PASSWORD` 仅首启生效），edu-backend 启动即崩却显示 Up；`ALTER USER` 对齐 420821 + 重启后 `/health` ok、31 表自动建表 ②测试全绿：compileall / verify_all **27/27** / pytest **113/113** / `npm run build` / Docker E2E **80/80** / **前端 Chrome CDP 自研 E2E 36/36**（真填表登录 + PROSPECT/STUDENT/EMPLOYEE/MANAGER 四端 31 个 section，0 console 错误 / 0 个 4xx-5xx）/ M5 production 冒烟（显式上一自然周）**7/7** ③移交清单第 1、5 项销；新增第 6 项两条 P1（production 缺省周期恒落未来必 40002；客户中文 6 态击穿 CustomerReportInput Literal 必 500 且拖垮 5 类报告）+ 两条 P2（seed ai_report 唯一键随机碰撞、前端部分区块仍静态演示值）；截图存 docs/测试截图_2026-10-17/；详见更新记录 v6.9.3 与 LOG-040）  
+
+**上一版记录**：2026-10-17 22:11（第五次同步 origin/master eaaea94→master_ZNBG——并入 v6.8.8 **P1 修复**（ai_service.py 尾部恢复 M0 网关符号，M3/M4 Agent 断链关闭，移交清单第 3 项销，导入实测通过）+ v6.9.0~v6.9.2 远端访问（nginx 8080/ngrok+localtunnel 脚本/REMOTE_ACCESS.md）+ dev 组依赖并集（aiosqlite+pytest-asyncio）；冲突 7 文件并集解决（v6.9.0 双线同名异义已注明：master=远端访问、ZNBG=M5 批次 A~E，ZNBG 线 pytest 113/113+verify_all 27/27）；遗留：推送待用户凭据、002 迁移 FK 未修（上游）、E2E/production 冒烟待环境、M5 字段映射表待业务确认；详见更新记录 merge 条目与 LOG-039）  
 
 **维护人**：开发团队
 
