@@ -267,8 +267,9 @@ class EmployeeService:
         svc = result.scalar_one_or_none()
         if not svc:
             raise NotFoundError(message="审批单不存在")
-        if svc.approver_id != employee_id:
+        if svc.approver_id is not None and svc.approver_id != employee_id:
             raise ForbiddenError(message="你不是该单的审批人")
+        # approver_id 为空（学生端未关联到负责员工）时，任何员工/管理层可兜底认领审批
         if svc.status != "待审批":
             raise ConflictError(message=f"该单已处理，当前状态：{svc.status}")
 
@@ -705,6 +706,8 @@ class EmployeeService:
         )
         self.db.add(log)
         await self.db.commit()
+        # commit 后对象属性已过期（expired），必须 refresh 再读，否则异步上下文触发 MissingGreenlet
+        await self.db.refresh(customer)
         return {
             "customer_id": customer_id,
             "old_status": old_status_cn,

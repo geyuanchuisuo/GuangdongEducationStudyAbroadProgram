@@ -6,8 +6,8 @@
 
 ## 零、快速定位（打开项目先看这里）
 
-**当前进度**：Phase 0 公共地基已完成（v6.0.1），Phase 1 模块并行开发中；M3 员工模块全部交付（v6.5.0 收官）；v6.6.0 需求对齐差异全部落地；v6.7.0~v6.7.2 管理层端三项+需求核对 52/52；**M4 学生模块一期全部交付（v6.8.0 第一批 7 子模块 + v6.8.1 第二批 学生助手Agent/提醒聚合，11 paths / 13 endpoints）**；master 已合并 longtrying 全部工作（62d4cff，2026-10-17，无冲突）  
-**数据库**：31张表，74条路由路径（73 API + 1 health；employee 42 paths，student 11 paths/13 endpoints），MVC分层结构就绪  
+**当前进度**：Phase 0 公共地基已完成（v6.0.1），Phase 1 模块并行开发中；M3 员工模块全部交付（v6.5.0 收官）；v6.6.0 需求对齐差异全部落地；v6.7.0~v6.7.2 管理层端三项+需求核对 52/52；**M4 学生模块一期全部交付（v6.8.0 第一批 7 子模块 + v6.8.1 第二批 学生助手Agent/提醒聚合，11 paths / 13 endpoints）；v6.8.2 Docker 环境搭建 + M3/M4 数据库端到端验证通过（E2E 69/69，修复 7 项缺陷）**；master 已合并 longtrying 全部工作（62d4cff，2026-10-17，无冲突）  
+**数据库**：31张表，74条路由路径（73 API + 1 health；employee 42 paths，student 11 paths/13 endpoints），MVC分层结构就绪；**Docker 环境：edu-mysql/edu-redis/edu-backend 全部健康（docker compose up -d mysql backend），MinIO 待补（镜像拉取受限）**  
 **主基线文档**：`promts/lon/提示词整合测试_demo/docs/基础架构方案_五人并行开发.md`（v1.2.0，28项决策）
 
 **接手阅读顺序**：
@@ -700,5 +700,5 @@ chore: 构建
 
 ---
 
-**最后更新**：2026-10-17 14:15（M4 一期收官 v6.8.1——第二批落地 POST /student/agent/chat 学生助手（限制预期注入：不承诺退费/不给出医疗级建议，AI 不可用降级）+ GET /student/reminders 提醒聚合（3 日内 DDL 拉取即推送写回 reminder_sent）；修复 _POSITIVE_KEYWORDS「开心」重复计分；路由 72→74（student 11 paths/13 endpoints）；verify_all 24/24 + 静态 19/19；M4 剩 DB 端到端待 MySQL 启动）  
+**最后更新**：2026-10-17 23:05（v6.8.2——Docker 环境搭建（edu-mysql/edu-redis/edu-backend 全健康，MinIO 镜像拉取受限记缺口）+ M3/M4 数据库端到端验证 **69/69 通过**（新增 tests/e2e_m3m4_test.py）；修复 7 项缺陷：M4 学业/提醒 naive-aware datetime 崩溃、学生请假审批人自动解析为负责员工、M3 允许空审批人认领、客户状态流转 MissingGreenlet、操作日志查询构造缺依赖+Schema 缺 from_attributes（v6.6.0 以来该端点一直 500）；路由 74 不变；verify_all 24/24）  
 **维护人**：开发团队

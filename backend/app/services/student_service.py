@@ -100,6 +100,14 @@ class StudentService:
             if dup_result.scalars().first():
                 raise ConflictError(message="你已有一条待审批或已通过的请假记录，请等待审批结果")
 
+        # 解析审批人：该学生的负责员工（学生已关联客户时）；无负责员工则留空，由员工端兜底认领
+        approver_id: int | None = None
+        cust = (await self.db.execute(
+            select(Customer).where(Customer.sys_user_id == student_id)
+        )).scalars().first()
+        if cust is not None and cust.owner_employee_id:
+            approver_id = cust.owner_employee_id
+
         svc = StudentAdminService(
             student_id=student_id,
             service_type=data.service_type,
@@ -107,6 +115,7 @@ class StudentService:
             end_time=data.end_time,
             reason=data.reason,
             related_academic_id=data.related_academic_id,
+            approver_id=approver_id,
             status="待审批",
         )
         self.db.add(svc)
@@ -247,7 +256,8 @@ class StudentService:
 
     # ── 学业考务 ──
     async def get_academic(self, student_id: int) -> dict:
-        now = datetime.now(timezone.utc)
+        # DB 读取的 DATETIME 为 naive，此处必须用 naive now，否则 aware/naive 比较抛 TypeError
+        now = datetime.now()
         items = (await self.db.execute(
             select(StudentAcademic)
             .where(StudentAcademic.student_id == student_id)
@@ -359,7 +369,8 @@ class StudentService:
     async def get_reminders(self, student_id: int) -> dict:
         """聚合：3 日内到期学业 DDL（拉取即推送并写回 reminder_sent）/ 最近出结果的请假 /
         已处理工单（未通知的拉取后置为已通知）/ 近 7 天进度更新。"""
-        now = datetime.now(timezone.utc)
+        # DB 读回的 DATETIME 为 naive，必须用 naive now（SQL 参数与 Python 侧减法均需一致）
+        now = datetime.now()
 
         ddl_rows = (await self.db.execute(
             select(StudentAcademic).where(

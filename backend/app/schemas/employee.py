@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 # ── 日报 ──────────────────────────────────────────────
@@ -395,6 +395,8 @@ class PhoneRevealOut(BaseModel):
 
 # ── 操作日志查询（v6.6.0，Phase 1.3 管理层端） ──────────
 class OperationLogItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     user_id: Optional[int] = None
     module: str

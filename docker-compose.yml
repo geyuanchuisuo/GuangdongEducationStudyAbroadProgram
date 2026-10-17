@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   mysql:
     image: mysql:8.0
@@ -34,7 +32,7 @@ services:
       retries: 5
 
   minio:
-    image: minio/minio:latest
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
     container_name: edu-minio
     environment:
       MINIO_ROOT_USER: admin
@@ -69,9 +67,12 @@ services:
         condition: service_healthy
     volumes:
       - ./backend:/app
-    command: uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+      # 独立命名卷保护镜像内构建好的 Linux venv，避免被宿主机 Windows venv 遮蔽
+      - backend_venv:/app/.venv
+    command: /app/.venv/bin/uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 volumes:
   mysql_data:
   redis_data:
   minio_data:
+  backend_venv:
