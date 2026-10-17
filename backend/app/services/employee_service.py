@@ -433,3 +433,109 @@ class EmployeeService:
         stmt = stmt.order_by(CrmFollowUp.created_at.desc()).offset((page - 1) * page_size).limit(page_size)
         result = await self.db.execute(stmt)
         return list(result.scalars().all()), total
+
+    # ── 指令式业务处理（AI 解析 + 二次确认） ─────────────
+    # token 存内存 dict：{token: {employee_id, action, expire_at}}，10 分钟过期
+    _PENDING_COMMANDS: dict = {}
+
+    async def parse_command(self, employee_id: int, text: str) -> dict:
+        """调 AI 解析自然语言指令为结构化动作。返回 token + action。"""
+        import json
+        import secrets
+        import time
+        from app.services.ai_service import AgentType, ai_service
+
+        prompt = (
+            "请把员工的自然语言指令解析为一个 JSON 动作对象，只输出 JSON，不要任何解释。\n"
+            "支持的动作类型 action_type：\n"
+            "  - follow_up.create（新增跟进记录，params: customer_id 必填、content 必填、follow_type/next_action/next_date 可选）\n"
+            "  - todo.create（新增待办，params: title 必填、description/due_time/priority 可选）\n"
+            "  - score.record（录入成绩，params: student_id 必填、course_name 必填、score 必填、semester 可选）\n"
+            "  - report.submit（提交日报，params: report_date 必填 YYYY-MM-DD、content 必填）\n"
+            "  - unknown（无法识别，params: {reason: \"...\"}）\n"
+            "输出格式：{\"action_type\": \"...\", \"params\": {...}, \"summary\": \"一句话描述将执行的动作\"}\n\n"
+            f"员工指令：{text}"
+        )
+        try:
+            resp = await ai_service.chat(
+                agent=AgentType.EMPLOYEE,
+                message=prompt,
+                session_id="new",
+                user_id=f"employee_{employee_id}",
+            )
+        except Exception as exc:
+            raise BusinessError(code=50002, message=f"AI 解析失败：{exc}") from exc
+
+        content = (resp.content or "").strip()
+        try:
+            start = content.find("{")
+            end = content.rfind("}")
+            if start < 0 or end <= start:
+                raise ValueError("no json")
+            parsed = json.loads(content[start:end + 1])
+        except Exception:
+            raise BusinessError(code=40002, message="AI 未返回有效 JSON，请换个说法") from None
+
+        action_type = parsed.get("action_type") or "unknown"
+        params = parsed.get("params") or {}
+        summary = parsed.get("summary") or text
+        if action_type == "unknown":
+            raise BusinessError(code=40002, message=f"无法识别指令：{params.get('reason', '请换个说法')}")
+
+        token = secrets.token_urlsafe(24)
+        expire_at = time.time() + 600
+        # 清理过期 token
+        for k in [k for k, v in EmployeeService._PENDING_COMMANDS.items() if v["expire_at"] < time.time()]:
+            EmployeeService._PENDING_COMMANDS.pop(k, None)
+        EmployeeService._PENDING_COMMANDS[token] = {
+            "employee_id": employee_id,
+            "action_type": action_type,
+            "params": params,
+            "summary": summary,
+            "expire_at": expire_at,
+        }
+        return {
+            "token": token,
+            "action": {"action_type": action_type, "params": params, "summary": summary},
+            "expires_in": 600,
+        }
+
+    async def execute_command(self, employee_id: int, token: str, confirm: bool) -> dict:
+        """二次确认后执行动作。"""
+        import time
+
+        pending = EmployeeService._PENDING_COMMANDS.pop(token, None)
+        if not pending:
+            raise NotFoundError(message="token 无效或已过期")
+        if pending["employee_id"] != employee_id:
+            raise ForbiddenError(message="只能执行自己的指令")
+        if pending["expire_at"] < time.time():
+            raise ConflictError(message="token 已过期，请重新解析")
+
+        if not confirm:
+            return {"executed": False, "result": None, "message": "已取消"}
+
+        action_type = pending["action_type"]
+        params = pending["params"]
+        result: dict = {}
+
+        if action_type == "follow_up.create":
+            follow = await self.create_follow_up(employee_id, params)
+            result = {"follow_up_id": follow.id}
+        elif action_type == "todo.create":
+            todo = await self.create_todo(employee_id, params)
+            result = {"todo_id": todo.id}
+        elif action_type == "score.record":
+            score = await self.record_score(params)
+            result = {"score_id": score.id}
+        elif action_type == "report.submit":
+            from datetime import date as _date, datetime as _dt
+            rd = params.get("report_date")
+            if isinstance(rd, str):
+                rd = _dt.strptime(rd, "%Y-%m-%d").date()
+            report = await self.submit_report(employee_id, rd or _date.today(), params["content"])
+            result = {"report_id": report.id}
+        else:
+            raise BusinessError(code=40002, message=f"暂不支持的动作类型：{action_type}")
+
+        return {"executed": True, "result": result, "message": "已执行"}

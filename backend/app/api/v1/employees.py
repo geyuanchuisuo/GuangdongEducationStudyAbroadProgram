@@ -16,6 +16,10 @@ from app.repositories.employee_repo import (
 from app.schemas.employee import (
     AdminServiceAction,
     AdminServiceOut,
+    CommandExecuteCreate,
+    CommandExecuteOut,
+    CommandParseCreate,
+    CommandParseOut,
     ConvertApplyCreate,
     ConvertApplyOut,
     CrmFollowUpCreate,
@@ -288,3 +292,24 @@ async def list_follow_ups(
             "page_size": page_size,
         }
     )
+
+
+# ── 指令式业务处理（AI 解析 + 二次确认） ────────────────
+@router.post("/commands/parse", summary="解析自然语言指令为业务动作（返回 token）")
+async def parse_command(
+    data: CommandParseCreate,
+    current_user: User = Depends(require_user_type("EMPLOYEE", "MANAGER")),
+    service: EmployeeService = Depends(_get_service),
+):
+    result = await service.parse_command(current_user.id, data.text)
+    return success_response(data=CommandParseOut(**result), message="解析完成，请确认后执行")
+
+
+@router.post("/commands/execute", summary="二次确认后执行业务动作")
+async def execute_command(
+    data: CommandExecuteCreate,
+    current_user: User = Depends(require_user_type("EMPLOYEE", "MANAGER")),
+    service: EmployeeService = Depends(_get_service),
+):
+    result = await service.execute_command(current_user.id, data.token, data.confirm)
+    return success_response(data=CommandExecuteOut(**result), message=result["message"])

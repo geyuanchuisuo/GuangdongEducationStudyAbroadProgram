@@ -195,3 +195,33 @@ class CrmFollowUpOut(BaseModel):
     created_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}
+
+
+# ── 指令式业务处理（AI 解析 + 二次确认） ────────────────
+class CommandParseCreate(BaseModel):
+    """员工用自然语言下达业务指令，AI 解析为结构化动作，返回 token。"""
+    text: str = Field(..., min_length=1, description="自然语言指令，例如：给客户张三发条跟进记录：明天约面谈")
+
+
+class CommandParsedAction(BaseModel):
+    """AI 解析出的待执行动作。"""
+    action_type: str = Field(..., description="follow_up.create / todo.create / score.record 等")
+    params: dict = Field(default_factory=dict)
+    summary: str = Field(..., description="员工可读的动作描述，用于二次确认展示")
+
+
+class CommandParseOut(BaseModel):
+    token: str = Field(..., description="待确认令牌，10 分钟有效")
+    action: CommandParsedAction
+    expires_in: int = 600
+
+
+class CommandExecuteCreate(BaseModel):
+    token: str = Field(..., description="来自 parse 接口的待确认令牌")
+    confirm: bool = Field(True, description="true=执行；false=取消")
+
+
+class CommandExecuteOut(BaseModel):
+    executed: bool
+    result: Optional[dict] = None
+    message: str
