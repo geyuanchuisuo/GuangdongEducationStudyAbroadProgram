@@ -4,7 +4,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api.v1 import approvals, auth, customers, files, notifications, users
+from app.api.v1 import approvals, auth, customers, employees, files, notifications, users
 from app.config import settings
 from app.core.exceptions import BusinessError
 from app.core.middleware import RequestLogMiddleware
@@ -79,6 +79,7 @@ app.include_router(customers.router, prefix=settings.API_V1_PREFIX)
 app.include_router(approvals.router, prefix=settings.API_V1_PREFIX)
 app.include_router(notifications.router, prefix=settings.API_V1_PREFIX)
 app.include_router(files.router, prefix=settings.API_V1_PREFIX)
+app.include_router(employees.router, prefix=settings.API_V1_PREFIX)
 
 
 @app.get("/health")
