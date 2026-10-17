@@ -6,7 +6,7 @@
 
 ## 零、快速定位（打开项目先看这里）
 
-**当前进度**：Phase 0 公共地基已完成（v6.0.1），Phase 1 模块并行开发中；M3 员工模块全部交付（v6.5.0 收官）；v6.6.0 需求对齐差异全部落地；v6.7.0~v6.7.2 管理层端三项+需求核对 52/52；master 已合并 longtrying（62d4cff）与 longtrying_stu（a23fc49，第三次合并）全部工作；**M4 学生模块一期全部交付（v6.8.0 第一批 7 子模块 + v6.8.1 第二批 学生助手Agent/提醒聚合，11 paths / 13 endpoints）；v6.8.2 Docker 环境搭建 + M3/M4 数据库端到端验证通过（E2E 69/69，修复 7 项缺陷）；v6.8.3 指令解析本地兜底 + 提醒聚合缺陷修复（E2E 71/71 幂等全过）；v6.8.4 文件存储改本地磁盘后端（docker compose 移除 MinIO，零额外镜像三容器直跑）+ DIFY_BASE_URL 根因修正；v6.8.5 引入 M5 智能报告 7 paths 与前端界面，M3 dashboard 与《一期指标口径表V1》统一名称+新增差异字段（verify_all 25/25 + M5 测试 32/32 + 对齐 14/14）；v6.8.6 AI 全链路打通：Dify 绑定 mimo-v2.6-flash（api.xiaomimimo.com），3 个 Agent 应用创建并回填 app key，真实 AI 链路 6/6 验证通过，环境缺口全部关闭**；**anhoa 分支 v6.8.0：M1 客户模块 + M2 客服 Agent 一期补齐（客户 8 研判字段/6 态流转/pending_lead 待补全线索/客服 Agent 4 出口），2026-10-17 两次合并 origin/master 并线（v6.8.0 被两条分支并行使用，路由 81→99）**  
+**当前进度**：Phase 0 公共地基已完成（v6.0.1），Phase 1 模块并行开发中；M3 员工模块全部交付（v6.5.0 收官）；v6.6.0 需求对齐差异全部落地；v6.7.0~v6.7.2 管理层端三项+需求核对 52/52；master 已合并 longtrying（62d4cff）与 longtrying_stu（a23fc49，第三次合并）全部工作；**M4 学生模块一期全部交付（v6.8.0 第一批 7 子模块 + v6.8.1 第二批 学生助手Agent/提醒聚合，11 paths / 13 endpoints）；v6.8.2 Docker 环境搭建 + M3/M4 数据库端到端验证通过（E2E 69/69，修复 7 项缺陷）；v6.8.3 指令解析本地兜底 + 提醒聚合缺陷修复（E2E 71/71 幂等全过）；v6.8.4 文件存储改本地磁盘后端（docker compose 移除 MinIO，零额外镜像三容器直跑）+ DIFY_BASE_URL 根因修正；v6.8.5 引入 M5 智能报告 7 paths 与前端界面，M3 dashboard 与《一期指标口径表V1》统一名称+新增差异字段（verify_all 25/25 + M5 测试 32/32 + 对齐 14/14）；v6.8.6 AI 全链路打通：Dify 绑定 mimo-v2.6-flash（api.xiaomimimo.com），3 个 Agent 应用创建并回填 app key，真实 AI 链路 6/6 验证通过，环境缺口全部关闭**；**anhoa 分支 v6.8.0：M1 客户模块 + M2 客服 Agent 一期补齐（客户 8 研判字段/6 态流转/pending_lead 待补全线索/客服 Agent 4 出口），2026-10-17 两次合并 origin/master 并线（v6.8.0 被两条分支并行使用，路由 81→99）**；**v6.8.8 P1 运行时缺陷修复：ai_service.py 恢复 M3/M4 依赖的 AgentType/AIService/ai_service（anhoa 合并重写所致，函数内延迟导入绕过静态检查），客服 AiService 与通用 AIService 双服务共存，容器内真实 Dify 调用成功（verify_all 27/27 + pytest 64/64）**  
 **数据库**：31张表（customer 加 8 研判画像列、cs_intent_log.user_id 放宽可空、AiReport 表加 version/data_source_status/error_message 3 列），99条路由路径（98 API + 1 health；employee 42 paths，student 11 paths/13 endpoints，reports 7 paths，crm/ai/courses/events 15 paths），MVC分层结构就绪；**Docker 环境：edu-mysql/edu-redis/edu-backend 全部健康，`docker compose up -d` 三容器零额外镜像直跑（文件存储默认本地磁盘 backend_storage 卷，不再依赖 MinIO）**  
 **主基线文档**：`promts/lon/提示词整合测试_demo/docs/基础架构方案_五人并行开发.md`（v1.2.0，28项决策）
 
@@ -716,7 +716,7 @@ chore: 构建
 
 ---
 
-**最后更新**：2026-10-17（anhoa 第三次合并 origin/master：并入 master v6.8.7 前端交付（登录与 Agent chat 修复、学生接口对接、启动/账号脚本密码统一 420821 并移除 MinIO、新增 docs/测试账号.md），后端与公共模块零变更，仅运行日志 1 处冲突并集解决（master 条目 LOG-v6.8.7 按序号规范重编 LOG-028）；本日累计三次并线（v6.8.0 M1/M2 补齐 → v6.8.6 AI 全链路 → v6.8.7 前端修复），路由 99 paths 不变，pytest 64/64 + verify_all 27/27；另 LOG-027：本机直连 MySQL 8.0.27@3306（本机实例密码 123456，与 compose 的 420821 并存，以 backend/.env 为准）；详见更新记录双方条目与 LOG-020/LOG-025~028）  
+**最后更新**：2026-10-17 20:19（v6.8.8 P1 运行时缺陷修复：ai_service.py 恢复 M3/M4 依赖的 AgentType/AIService/ai_service——anhoa 合并将其重写为客服专用 AiService，M3/M4 函数内延迟导入使启动与静态检查无法暴露，运行时 50001；修复保留云端客服逻辑、文件末尾追加通用多 Agent 接口，调用方零改动；dev 依赖补 pytest-asyncio+aiosqlite；verify_all 27/27 + pytest 64/64 + 容器内真实 Dify 调用成功；教训记入 LOG-029：跨分支合并重写公共模块后必须做容器内运行时导入冒烟）  
 **维护人**：开发团队
 
 
