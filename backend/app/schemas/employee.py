@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 # ── 日报 ──────────────────────────────────────────────
@@ -225,6 +225,7 @@ class CommandParsedAction(BaseModel):
     action_type: str = Field(..., description="follow_up.create / todo.create / score.record 等")
     params: dict = Field(default_factory=dict)
     summary: str = Field(..., description="员工可读的动作描述，用于二次确认展示")
+    source: str = Field("ai", description="解析来源：ai=Dify 解析 / local=本地规则兜底")
 
 
 class CommandParseOut(BaseModel):
@@ -395,6 +396,8 @@ class PhoneRevealOut(BaseModel):
 
 # ── 操作日志查询（v6.6.0，Phase 1.3 管理层端） ──────────
 class OperationLogItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     user_id: Optional[int] = None
     module: str

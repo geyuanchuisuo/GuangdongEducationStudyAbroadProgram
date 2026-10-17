@@ -13,6 +13,7 @@ from app.api.v1 import (
     notifications,
     operation_logs,
     reports,
+    students,
     users,
 )
 from app.config import settings
@@ -103,7 +104,9 @@ app.include_router(notifications.router, prefix=settings.API_V1_PREFIX)
 app.include_router(files.router, prefix=settings.API_V1_PREFIX)
 app.include_router(employees.router, prefix=settings.API_V1_PREFIX)
 app.include_router(operation_logs.router, prefix=settings.API_V1_PREFIX)
-app.include_router(reports.router, prefix=settings.API_V1_PREFIX)
+app.include_router(students.router, prefix=settings.API_V1_PREFIX)          # M4 学生模块（学生端）
+app.include_router(students.employee_router, prefix=settings.API_V1_PREFIX)  # M4 进度追踪员工端更新
+app.include_router(reports.router, prefix=settings.API_V1_PREFIX)           # M5 报告模块
 
 
 @app.get("/health")
