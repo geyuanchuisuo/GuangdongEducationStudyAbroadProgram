@@ -527,6 +527,67 @@ check("M4 未读通知计数", ok and isinstance(bj.get("data"), (int, dict)), s
 
 print()
 print("=" * 60)
+print("Section 5.5: M5 智能报告链路（MANAGER/EMPLOYEE 权限 + 生成/列表/详情/下钻/PDF）")
+print("=" * 60)
+
+# 生成（默认参考周期，mock 数据）
+ok, bj = call(client, "POST", "/reports/generate", mgr_tok, body={"report_type": "psych_weekly"})
+check("M5 生成心理周报（completed+mock）",
+      ok and bj.get("data", {}).get("status") == "completed"
+      and bj.get("data", {}).get("data_source_status") == "mock", str(bj)[:160])
+report_id = bj.get("data", {}).get("id") if ok else None
+
+# 重复生成 → 版本递增
+ok2, bj2 = call(client, "POST", "/reports/generate", mgr_tok, body={"report_type": "psych_weekly"})
+check("M5 重复生成版本递增",
+      ok2 and bj2.get("data", {}).get("version", 0) > bj.get("data", {}).get("version", 0),
+      f"v1={bj.get('data', {}).get('version')} v2={bj2.get('data', {}).get('version')}")
+if ok2 and report_id is None:
+    report_id = bj2.get("data", {}).get("id")
+
+# 列表（折叠 + 瘦身：条目不含 report_content）
+ok, bj = call(client, "GET", "/reports?page_size=20", mgr_tok)
+items = bj.get("data", {}).get("items", []) if ok else []
+check("M5 列表（≥1 条且条目无 report_content）",
+      ok and len(items) >= 1 and all("report_content" not in it for it in items), str(bj)[:160])
+
+# 详情
+if report_id:
+    ok, bj = call(client, "GET", f"/reports/{report_id}", mgr_tok)
+    check("M5 详情（ai_status 合法值）",
+          ok and bj.get("data", {}).get("report_content", {}).get("ai_status") in ("available", "unavailable"),
+          str(bj)[:160])
+    # 心理个案下钻（manager 全量）
+    ok, bj = call(client, "GET", f"/reports/{report_id}/psych_cases", mgr_tok)
+    check("M5 心理个案下钻（manager）", ok and isinstance(bj.get("data", {}).get("items"), list), str(bj)[:160])
+
+# EMPLOYEE：管理端点 40301；心理个案 200（按负责过滤）
+ok, bj = call(client, "GET", "/reports", emp_tok, expect=(200, 40301))
+check("M5 EMPLOYEE 列表被拒（40301）", ok and bj.get("code") == 40301, str(bj)[:160])
+if report_id:
+    ok, bj = call(client, "GET", f"/reports/{report_id}/psych_cases", emp_tok)
+    check("M5 EMPLOYEE 心理个案（200，按负责过滤）", ok and bj.get("code") == 200, str(bj)[:160])
+
+# 非法 report_type → HTTP 422（schema Literal 校验）
+try:
+    r = client.request("POST", BASE + "/reports/generate", json={"report_type": "customer_business"},
+                       headers={"Authorization": f"Bearer {mgr_tok}", "Connection": "close"}, timeout=30)
+    check("M5 非法 report_type → 422", r.status_code == 422, f"HTTP {r.status_code}")
+except Exception as exc:
+    check("M5 非法 report_type → 422", False, str(exc))
+
+# PDF 下载（二进制响应，不走 call 的 json 解析）
+if report_id:
+    try:
+        r = client.get(BASE + f"/reports/{report_id}/download",
+                       headers={"Authorization": f"Bearer {mgr_tok}", "Connection": "close"}, timeout=30)
+        check("M5 下载脱敏 PDF（%PDF 魔数）", r.status_code == 200 and r.content[:4] == b"%PDF",
+              f"HTTP {r.status_code} bytes={len(r.content)}")
+    except Exception as exc:
+        check("M5 下载脱敏 PDF", False, str(exc))
+
+print()
+print("=" * 60)
 total = PASSED + FAILED
 print(f"RESULT: {PASSED}/{total} passed, {FAILED} failed, {SKIPPED} skipped")
 if FAILURES:
