@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
-import { login as loginApi, getMe } from '../api/auth'
+import { computed, ref } from 'vue'
+import { getMe, login as loginApi } from '../api/auth'
 
 export interface UserInfo {
   id: number
@@ -9,12 +9,13 @@ export interface UserInfo {
   user_type: string
   employee_role?: string
   department?: string
+  contact_info?: string
+  status?: string
 }
 
 export const useUserStore = defineStore('user', () => {
   const token = ref(localStorage.getItem('token') || '')
   const userInfo = ref<UserInfo | null>(null)
-
   const isLoggedIn = computed(() => !!token.value)
   const userType = computed(() => userInfo.value?.user_type || '')
 
@@ -25,7 +26,19 @@ export const useUserStore = defineStore('user', () => {
     await fetchUserInfo()
   }
 
+  function loginDemo(role: string, name: string) {
+    token.value = 'demo-token'
+    userInfo.value = { id: 1, username: 'demo', real_name: name, user_type: role }
+    localStorage.setItem('token', token.value)
+    localStorage.setItem('demo-user', JSON.stringify(userInfo.value))
+  }
+
   async function fetchUserInfo() {
+    if (token.value === 'demo-token') {
+      const saved = localStorage.getItem('demo-user')
+      if (saved) userInfo.value = JSON.parse(saved)
+      return
+    }
     const res: any = await getMe()
     userInfo.value = res.data || res
   }
@@ -34,7 +47,9 @@ export const useUserStore = defineStore('user', () => {
     token.value = ''
     userInfo.value = null
     localStorage.removeItem('token')
+    localStorage.removeItem('demo-user')
   }
 
-  return { token, userInfo, isLoggedIn, userType, login, fetchUserInfo, logout }
+  return { token, userInfo, isLoggedIn, userType, login, loginDemo, fetchUserInfo, logout }
 })
+

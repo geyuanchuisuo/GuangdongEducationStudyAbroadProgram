@@ -1,107 +1,71 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { register } from '../api/auth'
 import { ElMessage } from 'element-plus'
+import { register } from '../api/auth'
 
 const router = useRouter()
-
-const form = ref({
-  username: '',
-  password: '',
-  confirmPassword: '',
-  real_name: '',
-  user_type: 'PROSPECT',
-  contact_info: '',
-})
 const loading = ref(false)
+const form = ref({ real_name: '', gender: '', age: '', phone: '', education: '', career: '', german: '', password: '', confirm: '', code: '' })
 
-async function handleRegister() {
-  if (!form.value.username || !form.value.password || !form.value.real_name) {
-    ElMessage.warning('请填写必填项')
+async function submit() {
+  const f = form.value
+  if (!f.real_name || !f.gender || !f.age || !f.phone || !f.education || !f.password) {
+    ElMessage.warning('请填写所有必填项')
     return
   }
-  if (form.value.password !== form.value.confirmPassword) {
-    ElMessage.warning('两次密码输入不一致')
-    return
-  }
+  if (f.password !== f.confirm) { ElMessage.warning('两次密码输入不一致'); return }
+  if (!/^\d{6}$/.test(f.code)) { ElMessage.warning('请输入6位短信验证码'); return }
   loading.value = true
   try {
-    await register({
-      username: form.value.username,
-      password: form.value.password,
-      real_name: form.value.real_name,
-      user_type: form.value.user_type,
-      contact_info: form.value.contact_info,
-    })
-    ElMessage.success('注册成功，请登录')
+    await register({ username: f.phone, password: f.password, real_name: f.real_name, user_type: 'PROSPECT', contact_info: f.phone })
+    ElMessage.success('注册成功，账号状态为待开通')
     router.push('/login')
   } catch {
-    ElMessage.error('注册失败')
-  } finally {
-    loading.value = false
-  }
+    ElMessage.error('注册失败，请稍后重试')
+  } finally { loading.value = false }
 }
 </script>
 
 <template>
-  <div class="register-container">
-    <el-card class="register-card">
-      <h2 class="title">注册新账号</h2>
-      <el-form :model="form" @submit.prevent="handleRegister">
-        <el-form-item>
-          <el-input v-model="form.username" placeholder="用户名" prefix-icon="User" size="large" />
-        </el-form-item>
-        <el-form-item>
-          <el-input v-model="form.real_name" placeholder="真实姓名" prefix-icon="Postcard" size="large" />
-        </el-form-item>
-        <el-form-item>
-          <el-input v-model="form.password" type="password" placeholder="密码" prefix-icon="Lock" size="large" show-password />
-        </el-form-item>
-        <el-form-item>
-          <el-input v-model="form.confirmPassword" type="password" placeholder="确认密码" prefix-icon="Lock" size="large" show-password />
-        </el-form-item>
-        <el-form-item>
-          <el-select v-model="form.user_type" size="large" style="width: 100%">
-            <el-option label="客户/访客" value="PROSPECT" />
-            <el-option label="学生" value="STUDENT" />
-          </el-select>
-        </el-form-item>
-        <el-form-item>
-          <el-input v-model="form.contact_info" placeholder="联系方式（选填）" prefix-icon="Phone" size="large" />
-        </el-form-item>
-        <el-form-item>
-          <el-button type="primary" size="large" :loading="loading" style="width: 100%" native-type="submit">
-            注册
-          </el-button>
-        </el-form-item>
-      </el-form>
-      <div class="footer">
-        <router-link to="/login">已有账号？返回登录</router-link>
+  <div class="register-shell">
+    <section class="register-intro"><span class="badge">30秒注册</span><h1>开启专属<br />留学规划</h1><p>注册后账号进入待开通状态，由员工审核后开放完整服务。</p><ul><li>课程与项目预约</li><li>活动报名</li><li>咨询进度查询</li></ul></section>
+    <main class="register-panel">
+      <div class="register-card"><h2>创建账号</h2><p class="muted">必填 5 项 · 选填 2 项</p>
+        <el-form label-position="top" @submit.prevent="submit">
+          <div class="form-grid">
+            <el-form-item label="姓名"><el-input v-model="form.real_name" /></el-form-item>
+            <el-form-item label="性别"><el-select v-model="form.gender" style="width:100%"><el-option label="男" value="男" /><el-option label="女" value="女" /></el-select></el-form-item>
+            <el-form-item label="年龄"><el-input v-model="form.age" /></el-form-item>
+            <el-form-item label="手机号"><el-input v-model="form.phone" /></el-form-item>
+            <el-form-item label="最高学历"><el-select v-model="form.education" style="width:100%"><el-option v-for="item in ['初中及以下','高中/中专','大专','本科','硕士','博士']" :key="item" :label="item" :value="item" /></el-select></el-form-item>
+            <el-form-item label="短信验证码"><div class="code-row"><el-input v-model="form.code" maxlength="6" /><el-button>获取验证码</el-button></div></el-form-item>
+            <el-form-item label="职业 / 专业需求（选填）"><el-input v-model="form.career" /></el-form-item>
+            <el-form-item label="德语能力（选填）"><el-select v-model="form.german" style="width:100%"><el-option v-for="item in ['零基础','A1-A2','B1-B2','C1及以上']" :key="item" :label="item" :value="item" /></el-select></el-form-item>
+            <el-form-item label="设置密码"><el-input v-model="form.password" type="password" show-password /></el-form-item>
+            <el-form-item label="确认密码"><el-input v-model="form.confirm" type="password" show-password /></el-form-item>
+          </div>
+          <el-button type="primary" size="large" :loading="loading" native-type="submit" style="width:100%">提交注册</el-button>
+        </el-form>
+        <p class="agreement">提交即表示同意《服务协议》与《隐私政策》。<router-link to="/login">已有账号，去登录</router-link></p>
       </div>
-    </el-card>
+    </main>
   </div>
 </template>
 
 <style scoped>
-.register-container {
-  height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-}
-.register-card {
-  width: 400px;
-  padding: 20px;
-}
-.title {
-  text-align: center;
-  margin-bottom: 30px;
-  color: #333;
-}
-.footer {
-  text-align: center;
-  margin-top: 10px;
-}
+.register-shell { min-height: 100vh; display: grid; grid-template-columns: .75fr 1.25fr; }
+.register-intro { padding: 70px; color: #fff; background: var(--ink); }
+.register-intro h1 { margin: 26px 0 18px; font-family: Georgia, serif; font-size: 65px; line-height: 1.08; }
+.register-intro p { color: #d2d1eb; line-height: 1.8; font-size: 18px; }
+.register-intro ul { margin-top: 38px; padding: 0; list-style: none; display: grid; gap: 15px; }
+.register-intro li::before { content: '✓'; display: inline-grid; place-items: center; width: 25px; height: 25px; margin-right: 10px; color: var(--ink); background: #8dd933; border-radius: 50%; }
+.register-panel { display: grid; place-items: center; padding: 35px; }
+.register-card { width: min(760px, 100%); padding: 36px; background: #fff; border-radius: 24px; box-shadow: var(--shadow); }
+.register-card h2 { margin: 0; color: var(--ink-deep); font-size: 35px; }
+.form-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0 18px; margin: 22px 0; }
+.code-row { display: flex; width: 100%; gap: 8px; }
+.agreement { color: var(--muted); text-align: center; font-size: 12px; }.agreement a { color: var(--violet); }
+@media (max-width: 850px) { .register-shell { grid-template-columns: 1fr; }.register-intro { display: none; }.form-grid { grid-template-columns: 1fr; } }
 </style>
+
