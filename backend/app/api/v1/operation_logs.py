@@ -7,6 +7,12 @@ from app.api.deps import require_user_type
 from app.core.response import success_response
 from app.database import get_db
 from app.models.user import User
+from app.repositories.employee_repo import (
+    DailyReportRepository,
+    OrgRepository,
+    ScoreRepository,
+    TodoRepository,
+)
 from app.schemas.employee import OperationLogItem
 from app.services.employee_service import EmployeeService
 
@@ -14,7 +20,14 @@ router = APIRouter(prefix="/operation-logs", tags=["操作日志"])
 
 
 def _get_service(db: AsyncSession = Depends(get_db)) -> EmployeeService:
-    return EmployeeService(db)
+    # 与 employees.py._get_service 保持一致：EmployeeService 需要完整仓储依赖
+    return EmployeeService(
+        db=db,
+        report_repo=DailyReportRepository(db),
+        todo_repo=TodoRepository(db),
+        org_repo=OrgRepository(db),
+        score_repo=ScoreRepository(db),
+    )
 
 
 @router.get("", summary="操作日志查询（MANAGER，按操作类型/操作人/时间筛选）")

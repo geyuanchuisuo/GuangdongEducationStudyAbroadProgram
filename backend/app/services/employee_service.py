@@ -267,8 +267,9 @@ class EmployeeService:
         svc = result.scalar_one_or_none()
         if not svc:
             raise NotFoundError(message="审批单不存在")
-        if svc.approver_id != employee_id:
+        if svc.approver_id is not None and svc.approver_id != employee_id:
             raise ForbiddenError(message="你不是该单的审批人")
+        # approver_id 为空（学生端未关联到负责员工）时，任何员工/管理层可兜底认领审批
         if svc.status != "待审批":
             raise ConflictError(message=f"该单已处理，当前状态：{svc.status}")
 
@@ -558,8 +559,98 @@ class EmployeeService:
     # token 存内存 dict：{token: {employee_id, action, expire_at}}，10 分钟过期
     _PENDING_COMMANDS: dict = {}
 
+    _COMMAND_LOCAL_HINT = (
+        "本地兜底解析句式示例："
+        "「给客户12添加跟进记录：明天上午电话回访」/"
+        "「新增待办：周五前回访客户」/"
+        "「录入学生3成绩：数据库 92分」/"
+        "「提交日报：今日完成客户回访3次」"
+    )
+
+    @staticmethod
+    def _local_parse_command(text: str) -> dict:
+        """AI 不可用/返回无效时的本地规则兜底解析（关键词+正则）。
+
+        返回与 AI 相同结构的动作 dict；无法识别返回 unknown（reason 带句式提示），
+        由调用方统一按 40002 处理。识别精度有限，仅覆盖常见指令句式。"""
+        import re
+        from datetime import date as _d, timedelta as _td
+
+        t = (text or "").strip()
+
+        def after_colon(s: str) -> str | None:
+            m = re.search(r"[：:]", s)
+            tail = s[m.end():].strip() if m else ""
+            return tail or None
+
+        def iso_date(s: str) -> str | None:
+            m = re.search(r"(\d{4}-\d{1,2}-\d{1,2})", s)
+            return m.group(1) if m else None
+
+        def unknown(reason: str) -> dict:
+            return {"action_type": "unknown", "params": {"reason": reason},
+                    "summary": "无法识别指令"}
+
+        # 1) 日报：「提交日报：内容」
+        if "日报" in t:
+            rd = iso_date(t) or _d.today().isoformat()
+            content = after_colon(t) or t
+            return {"action_type": "report.submit",
+                    "params": {"report_date": rd, "content": content},
+                    "summary": f"提交日报（{rd}）"}
+
+        # 2) 成绩：「录入学生3成绩：数据库 92分」
+        if "成绩" in t:
+            m_stu = re.search(r"学生\s*(\d+)", t)
+            m_score = re.search(r"(\d+(?:\.\d{1,2})?)\s*分", t)
+            body = after_colon(t)
+            course = None
+            if body:
+                course = re.sub(r"\d+(?:\.\d{1,2})?\s*分.*$", "", body).strip() or None
+            if course is None:
+                m_c = re.search(r"课程\s*([\u4e00-\u9fa5A-Za-z0-9]+)", t)
+                course = m_c.group(1) if m_c else None
+            if not (m_stu and m_score and course):
+                return unknown("未能提取学生编号/课程/分数，请按「录入学生3成绩：数据库 92分」格式")
+            return {"action_type": "score.record",
+                    "params": {"student_id": int(m_stu.group(1)),
+                               "course_name": course,
+                               "score": float(m_score.group(1))},
+                    "summary": f"录入学生{m_stu.group(1)}「{course}」成绩 {m_score.group(1)} 分"}
+
+        # 3) 跟进：「给客户12添加跟进记录：明天上午电话回访」
+        if "跟进" in t:
+            m_cust = re.search(r"客户\s*(\d+)", t)
+            content = after_colon(t) or t
+            if not m_cust:
+                return unknown("需要客户编号，请按「给客户12添加跟进记录：明天回访」格式")
+            return {"action_type": "follow_up.create",
+                    "params": {"customer_id": int(m_cust.group(1)), "content": content},
+                    "summary": f"为客户{m_cust.group(1)}新增跟进记录"}
+
+        # 4) 待办：「新增待办：xxx」/「提醒我 xxx」
+        if "待办" in t or "提醒我" in t:
+            title = after_colon(t) or re.sub(
+                r"^(帮我)?(新增|创建|添加)?(一个)?(待办|提醒我)[，,：:]?", "", t).strip()
+            if not title:
+                return unknown("未能提取待办标题，请按「新增待办：周五前回访客户」格式")
+            params: dict = {"title": title}
+            due = iso_date(t)
+            if not due:
+                today = _d.today()
+                due = (today + _td(days=1)).isoformat() if "明天" in t else \
+                      ((today + _td(days=2)).isoformat() if "后天" in t else None)
+            if due:
+                params["due_time"] = due
+            return {"action_type": "todo.create", "params": params,
+                    "summary": f"新增待办「{title}」"}
+
+        return unknown(f"无法识别该指令。{EmployeeService._COMMAND_LOCAL_HINT}")
+
     async def parse_command(self, employee_id: int, text: str) -> dict:
-        """调 AI 解析自然语言指令为结构化动作。返回 token + action。"""
+        """解析自然语言指令为结构化动作：AI 优先，AI 失败/无效返回时自动本地规则兜底。
+
+        返回 token + action（action.source 标记解析来源：ai=Dify / local=本地兜底）。"""
         import json
         import secrets
         import time
@@ -583,24 +674,37 @@ class EmployeeService:
                 session_id="new",
                 user_id=f"employee_{employee_id}",
             )
-        except Exception as exc:
-            raise BusinessError(code=50002, message=f"AI 解析失败：{exc}") from exc
-
-        content = (resp.content or "").strip()
-        try:
-            start = content.find("{")
-            end = content.rfind("}")
-            if start < 0 or end <= start:
-                raise ValueError("no json")
-            parsed = json.loads(content[start:end + 1])
+            source = "ai"
         except Exception:
-            raise BusinessError(code=40002, message="AI 未返回有效 JSON，请换个说法") from None
+            resp = None
+            source = "local"
+
+        if resp is not None:
+            content = (resp.content or "").strip()
+            try:
+                start = content.find("{")
+                end = content.rfind("}")
+                if start < 0 or end <= start:
+                    raise ValueError("no json")
+                parsed = json.loads(content[start:end + 1])
+            except Exception:
+                parsed = self._local_parse_command(text)
+                source = "local"
+        else:
+            parsed = self._local_parse_command(text)
 
         action_type = parsed.get("action_type") or "unknown"
         params = parsed.get("params") or {}
         summary = parsed.get("summary") or text
         if action_type == "unknown":
-            raise BusinessError(code=40002, message=f"无法识别指令：{params.get('reason', '请换个说法')}")
+            reason = params.get("reason", "请换个说法")
+            if source == "local":
+                raise BusinessError(code=40002,
+                                    message=f"AI 不可用且本地兜底无法识别指令：{reason}")
+            raise BusinessError(code=40002, message=f"无法识别指令：{reason}")
+
+        if source == "local":
+            summary = f"【本地兜底】{summary}"
 
         token = secrets.token_urlsafe(24)
         expire_at = time.time() + 600
@@ -616,7 +720,8 @@ class EmployeeService:
         }
         return {
             "token": token,
-            "action": {"action_type": action_type, "params": params, "summary": summary},
+            "action": {"action_type": action_type, "params": params,
+                       "summary": summary, "source": source},
             "expires_in": 600,
         }
 
@@ -705,6 +810,8 @@ class EmployeeService:
         )
         self.db.add(log)
         await self.db.commit()
+        # commit 后对象属性已过期（expired），必须 refresh 再读，否则异步上下文触发 MissingGreenlet
+        await self.db.refresh(customer)
         return {
             "customer_id": customer_id,
             "old_status": old_status_cn,
@@ -1391,6 +1498,9 @@ class EmployeeService:
         )).scalar_one()
 
         # ── 业绩概览（本月新增意向/转化率/在办学生数/投诉率） ──
+        # 对齐《promts/智能报告/report_package/02_一期指标口径表V1.md》：
+        # 期末意向=新录入+跟进中+意向强烈；期末成交=已签约+已入学；期末流失=已流失
+        intent = funnel[0]["count"] + funnel[1]["count"] + funnel[2]["count"]
         converted = funnel[-1]["count"] + funnel[-2]["count"]  # 已入学 + 已签约
         conversion_rate = round(converted / total * 100, 2) if total else 0.0
         active_students = (await self.db.execute(
@@ -1403,17 +1513,53 @@ class EmployeeService:
         )).scalar_one()
         complaint_rate = round(tickets_total / active_students * 100, 2) if active_students else 0.0
 
+        # 新增去向（口径表：本期新增客户按期末状态分为仍意向/已签约/已入学/已流失，合计=新增数）
+        new_status_rows = (await self.db.execute(
+            select(Customer.status).where(Customer.created_at >= month_start)
+        )).all()
+        new_outcomes = {"intent": 0, "signed": 0, "enrolled": 0, "lost": 0}
+        for (st,) in new_status_rows:
+            if st in ("已签约", "SIGNED", "CONVERTED"):
+                new_outcomes["signed"] += 1
+            elif st in ("已入学", "ENROLLED"):
+                new_outcomes["enrolled"] += 1
+            elif st in ("已流失", "LOST"):
+                new_outcomes["lost"] += 1
+            else:
+                new_outcomes["intent"] += 1  # 未签约未流失即仍意向
+
+        # 期末状态总览（与 M5 报告 status_overview 统一名称与结构，英文 6 态键）
+        status_overview = {
+            "NEW": funnel[0]["count"],
+            "FOLLOWING": funnel[1]["count"],
+            "STRONG": funnel[2]["count"],
+            "SIGNED": funnel[3]["count"],
+            "ENROLLED": funnel[4]["count"],
+            "LOST": lost,
+            "total": total,
+            "intent": intent,
+            "converted": converted,
+            "lost": lost,
+        }
+
         return {
             "overview": {
                 "new_prospects_this_month": new_this_month,
+                "new_this_period": new_this_month,
                 "conversion_rate": conversion_rate,
                 "active_students": active_students,
                 "complaint_rate": complaint_rate,
+                "intent": intent,
+                "converted": converted,
+                "lost": lost,
+                "new_outcomes": new_outcomes,
             },
             "customers": {
                 "total": total,
                 "new_this_month": new_this_month,
+                "new_this_period": new_this_month,
                 "by_status": status_counts,
+                "status_overview": status_overview,
                 "by_source": by_source,
                 "funnel": funnel,
                 "lost": lost,
