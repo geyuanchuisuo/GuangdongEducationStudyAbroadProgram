@@ -55,8 +55,8 @@ def upgrade() -> None:
         "sys_approval",
         sa.Column("id", sa.BigInteger, primary_key=True, autoincrement=True),
         sa.Column("approval_type", sa.String(32), nullable=False),
-        sa.Column("initiator_id", sa.BigInteger, sa.ForeignKey("sys_user.id"), nullable=False),
-        sa.Column("approver_id", sa.BigInteger, sa.ForeignKey("sys_user.id"), nullable=True),
+        sa.Column("initiator_id", sa.Integer, sa.ForeignKey("sys_user.id"), nullable=False),
+        sa.Column("approver_id", sa.Integer, sa.ForeignKey("sys_user.id"), nullable=True),
         sa.Column("target_id", sa.BigInteger, nullable=True),
         sa.Column("status", sa.String(16), server_default="pending"),
         sa.Column("remark", sa.Text, nullable=True),
@@ -71,7 +71,7 @@ def upgrade() -> None:
     op.create_table(
         "sys_operation_log",
         sa.Column("id", sa.BigInteger, primary_key=True, autoincrement=True),
-        sa.Column("user_id", sa.BigInteger, sa.ForeignKey("sys_user.id"), nullable=True),
+        sa.Column("user_id", sa.Integer, sa.ForeignKey("sys_user.id"), nullable=True),
         sa.Column("module", sa.String(32), nullable=False),
         sa.Column("action", sa.String(64), nullable=False),
         sa.Column("target_type", sa.String(32), nullable=True),
@@ -87,7 +87,7 @@ def upgrade() -> None:
     op.create_table(
         "sys_notification",
         sa.Column("id", sa.BigInteger, primary_key=True, autoincrement=True),
-        sa.Column("user_id", sa.BigInteger, sa.ForeignKey("sys_user.id"), nullable=False),
+        sa.Column("user_id", sa.Integer, sa.ForeignKey("sys_user.id"), nullable=False),
         sa.Column("type", sa.String(32), nullable=False),
         sa.Column("title", sa.String(255), nullable=True),
         sa.Column("content", sa.Text, nullable=True),

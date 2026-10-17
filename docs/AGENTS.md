@@ -10,7 +10,7 @@
 
 **M5 移交待办清单（v6.9.0，接手者从这里继续）**：
 1. ✅ **环境级验收（v6.9.3 已实测完成）**：Docker E2E `tests/e2e_m3m4_test.py` **80/80**（含 Section 5.5 M5 报告链路 10 检查）；production 冒烟 `REPORT_DATA_SOURCE=production` 显式传「上一自然周」**7/7**（4/5 类 completed，complaint_weekly 按设计显式拒绝）。**但默认周期调用仅 2/7**——见第 6 项两条 P1，切 production 前必须先修（LOG-040）
-2. 🔴 **转告 M0/M1/anho**：修 `migrations/versions/002_customer_approval.py` 4 处 FK 列 BigInteger→Integer（customer.owner_employee_id/sys_user_id、approval_instance.initiator_id、approval_task.approver_id）——BIGINT→INT(sys_user.id) errno 150，**空库 alembic upgrade head 必失败**，M5 的 003 迁移空库验收被阻塞（LOG-033）
+2. ✅ ~~**转告 M0/M1/anho**：修 `migrations/versions/002_customer_approval.py` 4 处 FK 列 BigInteger→Integer~~ **v6.9.7 已修复（anhoa，2026-10-17）**：002 的 4 处 + 实测发现的 001 同类 4 处（sys_approval.initiator_id/approver_id、sys_operation_log.user_id、sys_notification.user_id，经用户批准「修类型保留表」）全部 BigInteger→Integer；另修 002.downgrade 的 FK/索引顺序缺陷（errno 1553/1828，先摘 FK 再删列）；空库 upgrade head + downgrade base + upgrade head 三步验收全过，ORM 逐列比对一致——**003 迁移空库验收阻塞解除，可切 `REPORT_DATA_SOURCE=production` 前置条件 +1（仍待清单第 4 项业务确认）**；遗留迁移漂移债见 LOG-045
 3. ✅ ~~P1 缺陷 M3/M4 Agent 断链~~ **已修复**：v6.8.8 上游在 ai_service.py 尾部恢复 M0 网关符号（与 M2 客服 AiService 双服务共存），并随本次合并（eaaea94）进入本分支（LOG-031）
 4. 🟡 **业务确认**：`docs/M5_字段映射表.md` 交 M1/M3/M4 负责人逐行确认（投诉 9 字段落库、画像 4→3 映射拍板、客户状态历史来源）→ 确认 + 修完第 6 项后才可切 `REPORT_DATA_SOURCE=production`
 5. ✅ ~~ZNBG 分支本地提交未推送~~ **已推送**（v6.9.3 起本分支已同步远端；git 凭据本机已恢复，`git ls-remote` 免交互即通）
@@ -26,7 +26,7 @@
 3. `promts/lon/提示词整合测试_demo/docs/基础架构方案_五人并行开发.md` — **主基线，权重最高**
 4. `docs/开发路线图.md` — 当前进度、下一步任务
 5. `docs/接口契约v1.md` — API接口契约（v2.9.2 合并并集版）
-6. `docs/更新记录.md` — 最近变更（v6.9.0 anhoa M2 二期 + 主线 v6.9.5/v6.9.6）
+6. `docs/更新记录.md` — 最近变更（v6.9.7 迁移链修复 + 第五次合并 + 主线 v6.9.5/v6.9.6）
 
 **重要规则**：
 - 主基线文档（基础架构方案）权重 > 其他参考文档（共用基座方案、公共框架等）
@@ -728,7 +728,9 @@ chore: 构建
 
 ---
 
-**最后更新**：2026-10-17（anhoa 第五次合并 origin/master（e6c06d0→0edd5e9，34 提交）：M5 批次 A~E + v6.9.6 修复 + 远端访问 + v6.9.5 共用模型网关并入，**公共模块 7 项更新经用户批准**（config 3 项 DIFY_MODEL_*/ai_service 追回 AIService/新增 model_ai_service.py/.env.example/依赖组/verify_all 动态断言/compose nginx）；冲突 10 文件并集解决（ai_service.py 客服 AiService 与通用 AIService 双服务共存、verify_all 取 master 动态断言、文档并集）；我方 M1/M2 模块零被改动，32 表/101 paths 不变；pytest 130/130 + verify_all 29/29 + build 通过；**待办：002 迁移 4 处 FK BigInteger→Integer 修复待用户批准（M5 移交清单第 2 项）、Dify 阶段B 待 Docker、推送待用户指令**；下一版本 v6.9.7（修复）/v6.10.0（新功能），日志 LOG-045 起编；详见更新记录 merge 条目与 LOG-044）  
+**最后更新**：2026-10-17（anhoa v6.9.7 迁移链修复：**M5 移交清单第 2 项闭环**——002 迁移 4 处 FK BigInteger→Integer + 实测扩大的 001 同类 4 处（sys_approval/sys_operation_log/sys_notification，经用户批准「修类型保留表」）+ 002.downgrade 两轮顺序修复（errno 1553 索引依赖 FK、errno 1828 列依赖 FK，先摘 FK 再删列，`_drop_column_fks` 运行时探测）；**空库 upgrade head + downgrade base + upgrade head 三步验收全过**，ORM 44 个 FK 列逐列比对一致，回归 pytest 130/130 + verify_all 29/29；模型/业务代码/契约零变更；遗留迁移漂移债（2 处 session_id 类型 + 5 项 ORM 演进未进迁移）见 LOG-045，建议后续专项对齐；详见更新记录 v6.9.7 与 LOG-045）  
+
+**上一版记录（第五次合并）**：2026-10-17（anhoa 第五次合并 origin/master（e6c06d0→0edd5e9，34 提交）：M5 批次 A~E + v6.9.6 修复 + 远端访问 + v6.9.5 共用模型网关并入，**公共模块 7 项更新经用户批准**（config 3 项 DIFY_MODEL_*/ai_service 追回 AIService/新增 model_ai_service.py/.env.example/依赖组/verify_all 动态断言/compose nginx）；冲突 10 文件并集解决（ai_service.py 客服 AiService 与通用 AIService 双服务共存、verify_all 取 master 动态断言、文档并集）；我方 M1/M2 模块零被改动，32 表/101 paths 不变；pytest 130/130 + verify_all 29/29 + build 通过；详见更新记录 merge 条目与 LOG-044）  
 
 **上一版记录（v6.9.6）**：2026-10-17 17:20（**v6.9.6 M5 三项缺陷修复**，未触碰其他模块代码：①production 缺省周期改用 `default_completed_week()`=上一完整自然周（原 `week_range(now)` 恒落未来必 40002）②`normalize_customer_status()` 复用 M1 的 `STATUS_CN_TO_EN` 做中英 6 态归一 + `fetch_customers` 逐行容错（脏行跳过并写入口径，不再拖垮 5 类报告）③三处下钻改 `_drilldown_dataset()` 与报告同源（production 读真实表、mock 读模拟），前端说明同步；新增 `tests/test_services/test_report_fixes_v696.py` 11 项含防回退断言；回归 compileall / verify_all **27/27** / pytest **124/124** / `npm run build` / Docker E2E **80/80** / **production 冒烟全过**（4 类默认周期 completed、中文状态行不再 500、客户下钻 122 条真实数据脱敏、PDF 5373 bytes、未来周期仍 40002）；详见更新记录 v6.9.6 与 LOG-043）  
 

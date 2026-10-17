@@ -27,7 +27,7 @@ def upgrade() -> None:
         sa.Column("age", sa.Integer, nullable=True, comment="年龄"),
         sa.Column("education", sa.String(50), nullable=True, comment="学历"),
         sa.Column("source_channel", sa.String(32), nullable=True, comment="来源渠道"),
-        sa.Column("owner_employee_id", sa.BigInteger, sa.ForeignKey("sys_user.id"), nullable=True, comment="负责员工"),
+        sa.Column("owner_employee_id", sa.Integer, sa.ForeignKey("sys_user.id"), nullable=True, comment="负责员工"),
         sa.Column("status", sa.String(20), server_default="NEW", comment="客户状态(6态)"),
         sa.Column("phone_status", sa.String(20), server_default="normal", comment="手机号状态"),
         sa.Column("first_register_at", sa.DateTime, nullable=True, comment="首次注册时间"),
@@ -36,7 +36,7 @@ def upgrade() -> None:
         sa.Column("auto_churned", sa.Boolean, server_default=sa.text("0"), comment="系统自动流失标记"),
         sa.Column("churned_at", sa.DateTime, nullable=True, comment="流失时间"),
         sa.Column("reflowed_at", sa.DateTime, nullable=True, comment="回流时间"),
-        sa.Column("sys_user_id", sa.BigInteger, sa.ForeignKey("sys_user.id"), nullable=True, comment="关联账号ID"),
+        sa.Column("sys_user_id", sa.Integer, sa.ForeignKey("sys_user.id"), nullable=True, comment="关联账号ID"),
         sa.Column("created_at", sa.DateTime, server_default=sa.func.now()),
         sa.Column("updated_at", sa.DateTime, server_default=sa.func.now()),
     )
@@ -66,7 +66,7 @@ def upgrade() -> None:
         sa.Column("biz_type", sa.String(32), nullable=False, comment="业务类型"),
         sa.Column("biz_id", sa.BigInteger, nullable=True, comment="关联业务ID"),
         sa.Column("title", sa.String(200), nullable=True, comment="审批标题"),
-        sa.Column("initiator_id", sa.BigInteger, sa.ForeignKey("sys_user.id"), nullable=False, comment="发起人"),
+        sa.Column("initiator_id", sa.Integer, sa.ForeignKey("sys_user.id"), nullable=False, comment="发起人"),
         sa.Column("status", sa.String(16), server_default="pending", comment="状态"),
         sa.Column("current_step", sa.Integer, server_default=sa.text("1"), comment="当前步骤"),
         sa.Column("total_steps", sa.Integer, server_default=sa.text("1"), comment="总步骤数"),
@@ -83,7 +83,7 @@ def upgrade() -> None:
         "approval_task",
         sa.Column("id", sa.BigInteger, primary_key=True, autoincrement=True),
         sa.Column("instance_id", sa.BigInteger, sa.ForeignKey("approval_instance.id"), nullable=False, comment="审批实例ID"),
-        sa.Column("approver_id", sa.BigInteger, sa.ForeignKey("sys_user.id"), nullable=False, comment="审批人"),
+        sa.Column("approver_id", sa.Integer, sa.ForeignKey("sys_user.id"), nullable=False, comment="审批人"),
         sa.Column("seq_no", sa.Integer, nullable=False, comment="审批顺序"),
         sa.Column("action", sa.String(16), nullable=True, comment="审批动作"),
         sa.Column("comment", sa.Text, nullable=True, comment="审批意见"),
@@ -151,11 +151,23 @@ def upgrade() -> None:
     op.add_column("cs_faq", sa.Column("updated_at", sa.DateTime, server_default=sa.func.now()))
 
 
+def _drop_column_fks(bind, table: str, column: str) -> None:
+    """删除 table.column 上的全部外键（FK 名为 MySQL 自动生成，需运行时探测）。"""
+    insp = sa.inspect(bind)
+    for fk in insp.get_foreign_keys(table):
+        if column in fk["constrained_columns"]:
+            op.execute(f"ALTER TABLE {table} DROP FOREIGN KEY {fk['name']}")
+
+
 def downgrade() -> None:
+    bind = op.get_bind()
     op.drop_column("cs_faq", "updated_at")
     op.drop_column("cs_faq", "created_at")
     op.drop_column("cs_faq", "enabled")
-    op.drop_index("ix_cs_intent_customer", "cs_intent_log")
+    # 注意：customer_id 各列的 FK 与单列索引必须先删 FK 再删列——
+    # MySQL 禁止删除 FK 依赖的索引（errno 1553）与 FK 依赖的列（errno 1828），
+    # drop_column 不会连带删 FK；索引在列删除时随列消失。
+    _drop_column_fks(bind, "cs_intent_log", "customer_id")
     op.drop_column("cs_intent_log", "created_at")
     op.drop_column("cs_intent_log", "customer_id")
     op.drop_column("cs_chat_message", "created_at")
@@ -163,16 +175,16 @@ def downgrade() -> None:
     op.drop_column("cs_chat_message", "citations_json")
     op.drop_column("cs_chat_message", "slots_json")
     op.drop_column("cs_chat_message", "intent")
-    op.drop_index("ix_cs_session_customer", "cs_chat_session")
+    _drop_column_fks(bind, "cs_chat_session", "customer_id")
     op.drop_column("cs_chat_session", "updated_at")
     op.drop_column("cs_chat_session", "created_at")
     op.drop_column("cs_chat_session", "dify_conversation_id")
     op.drop_column("cs_chat_session", "tags_json")
     op.drop_column("cs_chat_session", "intent_summary")
     op.drop_column("cs_chat_session", "customer_id")
-    op.drop_index("ix_crm_followup_customer", "crm_follow_up")
+    _drop_column_fks(bind, "crm_follow_up", "customer_id")
     op.drop_column("crm_follow_up", "customer_id")
-    op.drop_index("ix_assessment_customer", "customer_assessment")
+    _drop_column_fks(bind, "customer_assessment", "customer_id")
     op.drop_column("customer_assessment", "dify_run_id")
     op.drop_column("customer_assessment", "prompt_version")
     op.drop_column("customer_assessment", "follow_up_advice")
@@ -187,7 +199,7 @@ def downgrade() -> None:
     op.drop_column("customer_assessment", "input_source")
     op.drop_column("customer_assessment", "batch_no")
     op.drop_column("customer_assessment", "customer_id")
-    op.drop_index("ix_crm_lead_customer", "crm_lead")
+    _drop_column_fks(bind, "crm_lead", "customer_id")
     op.drop_column("crm_lead", "updated_at")
     op.drop_column("crm_lead", "created_at")
     op.drop_column("crm_lead", "raw_input")
