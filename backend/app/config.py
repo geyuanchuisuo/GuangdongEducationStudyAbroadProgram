@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     DIFY_STUDENT_AGENT_KEY: str = ""
     DIFY_EMPLOYEE_AGENT_KEY: str = ""
     DIFY_CUSTOMER_AGENT_KEY: str = ""
+    DIFY_MODEL_API_KEY: str = ""
+    DIFY_MODEL_BASE_URL: str = "https://apihub.agnes-ai.com/v1"
+    DIFY_MODEL_NAME: str = "agnes-2.5-flash"
 
     # M5 智能报告数据来源开关（M5-02.3）：mock=模拟数据（默认）；production=真实业务表取数
     REPORT_DATA_SOURCE: str = "mock"

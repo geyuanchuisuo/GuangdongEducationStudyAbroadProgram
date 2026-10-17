@@ -92,6 +92,9 @@ class ReportService:
                     content["ai_status"] = "available"
                 else:
                     content["ai_status"] = "unavailable"
+                # 差异字段（M5-10.6）：标注 AI 文字的实际来源，与共用网关命名对齐
+                # model=共用模型网关 / mock=本地模拟 / unavailable=不可用
+                content["ai_source"] = getattr(self.ai, "source", "unavailable")
 
                 report = AiReport(
                     report_type=report_type,

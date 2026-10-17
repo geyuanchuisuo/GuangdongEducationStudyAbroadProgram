@@ -42,8 +42,11 @@ def _src_label(v: str) -> str:
     return "正式" if v == "production" else "模拟"
 
 
-def _ai_label(v: str) -> str:
-    return "可用" if v == "available" else "不可用"
+def _ai_label(v: str, source: str = "") -> str:
+    """AI 文字来源标注（M5-10.6 差异字段 ai_source）。"""
+    if v != "available":
+        return "不可用"
+    return {"model": "可用（共用模型网关）", "mock": "可用（模拟数据）"}.get(source, "可用")
 
 
 def _make_table(data: list[list], col_widths: list[float]) -> Table:
@@ -186,7 +189,7 @@ def generate_report_pdf(content: dict) -> bytes:
         f"周期：{escape(period)}　|　版本：V{int(h.get('version', 1))}　|　"
         f"生成时间：{escape(h.get('generated_at', '')[:19])}　|　"
         f"数据来源：{_src_label(h.get('data_source_status', 'mock'))}　|　"
-        f"AI：{_ai_label(content.get('ai_status', 'unavailable'))}"
+        f"AI：{_ai_label(content.get('ai_status', 'unavailable'), content.get('ai_source', ''))}"
     )
     story.append(Paragraph(meta, st["meta"]))
     story.append(Spacer(1, 8))

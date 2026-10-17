@@ -54,6 +54,8 @@ async def test_generate_records_ai_status_and_mock_source(svc_db):
     report = await svc.generate("complaint_weekly", None, None, user_id=1)
     content = report.report_content
     assert content["ai_status"] == "available"
+    # M5-10.6 差异字段：无 model key 时回落模拟输出，来源标注 mock
+    assert content["ai_source"] == "mock"
     assert report.data_source_status == "mock"
     assert content["header"]["data_source_status"] == "mock"
 
@@ -69,6 +71,8 @@ async def test_ai_degradation_marks_unavailable(svc_db):
     svc = rs_module.ReportService(ReportRepository(svc_db), ai=_DownAI())
     report = await svc.generate("psych_weekly", None, None, user_id=1)
     assert report.report_content["ai_status"] == "unavailable"
+    # M5-10.6 差异字段：AI 不可用时来源同样显式标注
+    assert report.report_content["ai_source"] == "unavailable"
     # 确定性指标保留（不因 AI 失败丢数字）
     assert "covered_students" in report.report_content["metrics"]
 

@@ -10,6 +10,18 @@ const router = useRouter()
 const userStore = useUserStore()
 const mobileOpen = ref(false)
 
+function goCenter() {
+  mobileOpen.value = false
+  const role = userStore.userType.toLowerCase()
+  router.push("/app/" + role + "/home")
+}
+
+function logout() {
+  mobileOpen.value = false
+  userStore.logout()
+  router.push("/login")
+}
+
 const links = [
   { path: '/', label: '首页' },
   { path: '/company', label: '公司介绍' },
@@ -36,11 +48,18 @@ function go(path: string) {
         <button v-for="item in links" :key="item.path" :class="{ active: route.path === item.path }" @click="go(item.path)">
           {{ item.label }}
         </button>
+      <div class="mobile-auth">
+        <el-button v-if="!userStore.isLoggedIn" @click="go('/login')">登录</el-button>
+        <el-button v-if="!userStore.isLoggedIn" type="primary" @click="go('/register')">注册</el-button>
+        <el-button v-if="userStore.isLoggedIn" @click="goCenter">我的中心</el-button>
+        <el-button v-if="userStore.isLoggedIn" @click="logout">退出登录</el-button>
+      </div>
       </nav>
       <div class="header-actions">
         <el-button v-if="!userStore.isLoggedIn" text @click="go('/login')">登录</el-button>
         <el-button v-if="!userStore.isLoggedIn" type="primary" round @click="go('/register')">注册</el-button>
-        <el-button v-else text :icon="User" @click="go('/app/prospect')">我的中心</el-button>
+        <el-button v-else text :icon="User" @click="goCenter()">我的中心</el-button>
+        <el-button v-if="userStore.isLoggedIn" text @click="logout">退出登录</el-button>
         <el-button class="mobile-menu" text :icon="Menu" @click="mobileOpen = !mobileOpen" />
       </div>
     </header>
@@ -67,6 +86,7 @@ nav button:hover, nav button.active { color: #2d2b73; background: #efeff9; font-
 .header-actions { display: flex; align-items: center; gap: 6px; }
 .mobile-menu { display: none; }
 main { min-height: calc(100vh - 280px); }
+.mobile-auth { display: none; }
 .public-footer { display: grid; grid-template-columns: 1.2fr 1fr .6fr; gap: 30px; padding: 54px max(24px, calc((100vw - 1220px) / 2)); background: #25235e; color: #dcdcf1; }
 .public-footer p { margin: 10px 0 0; line-height: 1.8; color: #b8b7d5; font-size: 14px; }
 .public-footer button { display: block; margin: 8px 0; padding: 0; border: 0; color: #fff; background: transparent; cursor: pointer; }
@@ -76,6 +96,7 @@ main { min-height: calc(100vh - 280px); }
   nav.open { display: flex; }
   .mobile-menu { display: inline-flex; }
   .header-actions .el-button:not(.mobile-menu) { display: none; }
+  .mobile-auth { display: flex; gap: 8px; padding: 8px 4px 2px; border-top: 1px solid #eee; }
   .public-footer { grid-template-columns: 1fr; padding: 42px 22px; }
 }
 </style>
