@@ -44,8 +44,10 @@ from app.schemas.employee import (
     LateReviewCreate,
     OralReportCreate,
     OralReportOut,
+    OrgMemberItem,
     OrgNode,
     PasswordChange,
+    PhoneRevealOut,
     ProfileUpdate,
     PsychAlertHandle,
     PsychAlertOut,
@@ -194,6 +196,7 @@ async def update_todo(
 # ── 组织架构 ──────────────────────────────────────────
 @router.get("/org", summary="组织架构树")
 async def get_org(
+    keyword: str | None = Query(None, description="按部门名称模糊搜索（命中节点及其祖先保留）"),
     current_user: User = Depends(get_current_user),
     service: EmployeeService = Depends(_get_service),
 ):
@@ -204,6 +207,16 @@ async def get_org(
             leader_id=r.leader_id, sort_order=r.sort_order, status=r.status, children=[]
         ) for r in rows
     }
+    if keyword:
+        # 保留命中节点及其祖先链
+        keep: set[int] = set()
+        for node in nodes.values():
+            if keyword.lower() in node.name.lower():
+                cur: OrgNode | None = node
+                while cur is not None:
+                    keep.add(cur.id)
+                    cur = nodes.get(cur.parent_id) if cur.parent_id else None
+        nodes = {nid: n for nid, n in nodes.items() if nid in keep}
     roots: list[OrgNode] = []
     for node in nodes.values():
         if node.parent_id and node.parent_id in nodes:
@@ -211,6 +224,53 @@ async def get_org(
         else:
             roots.append(node)
     return success_response(data={"items": roots})
+
+
+@router.get("/org/members", summary="同事人员查询（按部门/姓名搜索，电话脱敏）")
+async def list_org_members(
+    department_id: int | None = Query(None, description="部门节点ID（对应 employee_org）"),
+    keyword: str | None = Query(None, description="姓名模糊搜索"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    current_user: User = Depends(get_current_user),
+    service: EmployeeService = Depends(_get_service),
+):
+    department_name: str | None = None
+    if department_id is not None:
+        rows = await service.get_org_tree()
+        org_node = next((r for r in rows if r.id == department_id), None)
+        if not org_node:
+            from app.core.exceptions import NotFoundError
+            raise NotFoundError(message="部门节点不存在")
+        department_name = org_node.name
+    users, total = await service.list_org_members(department_name, keyword, page, page_size)
+    return success_response(
+        data={
+            "items": [
+                OrgMemberItem(
+                    user_id=u.id,
+                    real_name=u.real_name,
+                    user_type=u.user_type,
+                    employee_role=u.employee_role,
+                    department=u.department,
+                    phone_masked=EmployeeService.mask_phone(u.phone),
+                ) for u in users
+            ],
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+        }
+    )
+
+
+@router.post("/org/members/{user_id}/reveal-phone", summary="展示完整电话（需前端二次确认，写操作日志）")
+async def reveal_member_phone(
+    user_id: int,
+    current_user: User = Depends(require_user_type("EMPLOYEE", "MANAGER")),
+    service: EmployeeService = Depends(_get_service),
+):
+    result = await service.reveal_member_phone(user_id, current_user)
+    return success_response(data=PhoneRevealOut(**result), message="已展示完整电话并记录操作日志")
 
 
 # ── 成绩 ──────────────────────────────────────────────
@@ -388,15 +448,20 @@ async def list_my_customers(
     status: str | None = Query(None),
     source_channel: str | None = Query(None),
     score_min: int | None = Query(None, ge=0, le=100),
+    last_follow_start: date | None = Query(None, description="最后跟进时间起（含，仅命中已有跟进的客户）"),
+    last_follow_end: date | None = Query(None, description="最后跟进时间止（含当天）"),
+    employee_id: int | None = Query(None, description="按员工下钻，仅 MANAGER 生效"),
     sort_by: str = Query("created_at", description="created_at/updated_at/score"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     current_user: User = Depends(require_user_type("EMPLOYEE", "MANAGER")),
     service: EmployeeService = Depends(_get_service),
 ):
-    employee_id = current_user.id if current_user.user_type == "EMPLOYEE" else None
+    # 数据隔离：员工强制只看自己；MANAGER 可传 employee_id 下钻
+    effective_employee_id = current_user.id if current_user.user_type == "EMPLOYEE" else employee_id
     items, total = await service.list_my_customers(
-        employee_id, status, source_channel, score_min, sort_by, page, page_size
+        effective_employee_id, status, source_channel, score_min, sort_by,
+        page, page_size, last_follow_start, last_follow_end,
     )
     return success_response(
         data={
@@ -563,8 +628,18 @@ async def export_follow_ups(
     current_user: User = Depends(require_user_type("EMPLOYEE", "MANAGER")),
     service: EmployeeService = Depends(_get_service),
 ):
-    csv_text = await service.export_followups_csv(current_user)
-    return _csv_response(csv_text, "follow_ups.csv")
+    csv_content = await service.export_followups_csv(current_user)
+    return _csv_response(csv_content, "follow_ups.csv")
+
+
+@router.get("/export/tickets", summary="导出投诉记录 CSV（需求口径三项导出之一）")
+async def export_tickets(
+    status: str | None = Query(None, description="按工单状态筛选（待处理/已处理）"),
+    current_user: User = Depends(require_user_type("EMPLOYEE", "MANAGER")),
+    service: EmployeeService = Depends(_get_service),
+):
+    csv_content = await service.export_tickets_csv(current_user, status)
+    return _csv_response(csv_content, "tickets.csv")
 
 
 # ── 企业智能助手 Agent（权限感知 + 降级） ────────────────

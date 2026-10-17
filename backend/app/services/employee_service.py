@@ -722,8 +722,10 @@ class EmployeeService:
         sort_by: str,
         page: int,
         page_size: int,
+        last_follow_start: date | None = None,
+        last_follow_end: date | None = None,
     ) -> tuple[list, int]:
-        """员工查询自己名下客户，支持筛选排序。MANAGER 传 employee_id=None 查全部。"""
+        """员工查询自己名下客户，支持筛选排序。MANAGER 传 employee_id=None 查全部（v6.6.0 支持按员工下钻）。"""
         from app.models.crm import CrmFollowUp, CustomerAssessment
 
         stmt = select(Customer)
@@ -751,6 +753,25 @@ class EmployeeService:
             stmt = stmt.join(latest_score, Customer.id == latest_score.c.customer_id).where(
                 latest_score.c.max_score >= score_min
             )
+
+        # 按最后跟进时间筛选（v6.6.0）：last_follow_at ∈ [start, end]，仅命中已有跟进的客户
+        if last_follow_start is not None or last_follow_end is not None:
+            last_follow_sq = (
+                select(
+                    CrmFollowUp.customer_id,
+                    func.max(CrmFollowUp.created_at).label("last_follow"),
+                )
+                .group_by(CrmFollowUp.customer_id)
+                .subquery()
+            )
+            stmt = stmt.join(last_follow_sq, Customer.id == last_follow_sq.c.customer_id)
+            count_stmt = count_stmt.join(last_follow_sq, Customer.id == last_follow_sq.c.customer_id)
+            if last_follow_start is not None:
+                stmt = stmt.where(last_follow_sq.c.last_follow >= last_follow_start)
+                count_stmt = count_stmt.where(last_follow_sq.c.last_follow >= last_follow_start)
+            if last_follow_end is not None:
+                stmt = stmt.where(last_follow_sq.c.last_follow < last_follow_end + timedelta(days=1))
+                count_stmt = count_stmt.where(last_follow_sq.c.last_follow < last_follow_end + timedelta(days=1))
 
         total = (await self.db.execute(count_stmt)).scalar_one()
 
@@ -790,6 +811,14 @@ class EmployeeService:
                 select(func.max(CustomerAssessment.score)).where(CustomerAssessment.customer_id == c.id)
             )
             score = score_result.scalar_one_or_none()
+            # 最新研判的推荐产品（v6.6.0：对齐需求"查看研判结果（匹配度评分、推荐产品）"）
+            rec_result = await self.db.execute(
+                select(CustomerAssessment.recommended_json)
+                .where(CustomerAssessment.customer_id == c.id)
+                .order_by(CustomerAssessment.created_at.desc())
+                .limit(1)
+            )
+            recommended = rec_result.scalar_one_or_none()
             items.append({
                 "id": c.id,
                 "phone": c.phone,
@@ -803,6 +832,7 @@ class EmployeeService:
                 "owner_employee_id": c.owner_employee_id,
                 "last_follow_at": last_follow,
                 "assessment_score": score,
+                "recommended": recommended,
                 "created_at": c.created_at,
             })
         return items, total
@@ -1047,6 +1077,93 @@ class EmployeeService:
               str(f.next_date) if f.next_date else "",
               f.created_at.strftime("%Y-%m-%d %H:%M") if f.created_at else ""] for f in follows],
         )
+
+    async def export_tickets_csv(self, user: User, status: str | None) -> str:
+        """导出投诉记录 CSV（v6.6.0，对齐需求"客户列表、日报、投诉记录"三项导出口径）。"""
+        from app.models.student import StudentFeedbackTicket
+        stmt = select(StudentFeedbackTicket)
+        if status:
+            stmt = stmt.where(StudentFeedbackTicket.status == status)
+        stmt = stmt.order_by(StudentFeedbackTicket.create_time.desc())
+        tickets = list((await self.db.execute(stmt)).scalars().all())
+        return self._to_csv(
+            ["工单ID", "学生ID", "内容", "状态", "解决方案", "创建时间"],
+            [[t.id, t.student_id, t.content, t.status,
+              t.solution if t.solution else "",
+              t.create_time.strftime("%Y-%m-%d %H:%M") if t.create_time else ""] for t in tickets],
+        )
+
+    # ── 组织架构成员 + 电话脱敏（v6.6.0） ────────────────
+    @staticmethod
+    def mask_phone(phone: str | None) -> str | None:
+        if not phone or len(phone) < 7:
+            return phone
+        return f"{phone[:3]}****{phone[-4:]}"
+
+    async def list_org_members(
+        self, department: str | None, keyword: str | None, page: int, page_size: int
+    ) -> tuple[list[User], int]:
+        """按部门/姓名查同事，电话脱敏返回。"""
+        stmt = select(User).where(User.user_type.in_(["EMPLOYEE", "MANAGER"]))
+        count_stmt = select(func.count()).select_from(User).where(User.user_type.in_(["EMPLOYEE", "MANAGER"]))
+        if department:
+            stmt = stmt.where(User.department == department)
+            count_stmt = count_stmt.where(User.department == department)
+        if keyword:
+            stmt = stmt.where(User.real_name.like(f"%{keyword}%"))
+            count_stmt = count_stmt.where(User.real_name.like(f"%{keyword}%"))
+        total = (await self.db.execute(count_stmt)).scalar_one()
+        stmt = stmt.order_by(User.id).offset((page - 1) * page_size).limit(page_size)
+        users = list((await self.db.execute(stmt)).scalars().all())
+        return users, total
+
+    async def reveal_member_phone(self, user_id: int, operator: User) -> dict:
+        """二次确认后返回完整电话，写操作日志留痕（敏感操作审计）。"""
+        result = await self.db.execute(select(User).where(User.id == user_id))
+        target = result.scalar_one_or_none()
+        if not target or target.user_type not in ("EMPLOYEE", "MANAGER"):
+            raise NotFoundError(message="同事不存在")
+        from app.models.system import SysOperationLog
+        self.db.add(SysOperationLog(
+            user_id=operator.id,
+            module="M3",
+            action="phone_reveal",
+            target_type="user",
+            target_id=user_id,
+            detail={"target_real_name": target.real_name},
+        ))
+        await self.db.commit()
+        return {"user_id": target.id, "real_name": target.real_name, "phone": target.phone}
+
+    async def list_operation_logs(
+        self,
+        action_type: str | None,
+        operator_id: int | None,
+        start: date | None,
+        end: date | None,
+        page: int,
+        page_size: int,
+    ) -> tuple[list, int]:
+        """操作日志查询（MANAGER，Phase 1.3 管理层端）。"""
+        from app.models.system import SysOperationLog
+        stmt = select(SysOperationLog)
+        count_stmt = select(func.count()).select_from(SysOperationLog)
+        if action_type:
+            stmt = stmt.where(SysOperationLog.action == action_type)
+            count_stmt = count_stmt.where(SysOperationLog.action == action_type)
+        if operator_id is not None:
+            stmt = stmt.where(SysOperationLog.user_id == operator_id)
+            count_stmt = count_stmt.where(SysOperationLog.user_id == operator_id)
+        if start:
+            stmt = stmt.where(SysOperationLog.created_at >= start)
+            count_stmt = count_stmt.where(SysOperationLog.created_at >= start)
+        if end:
+            stmt = stmt.where(SysOperationLog.created_at < end + timedelta(days=1))
+            count_stmt = count_stmt.where(SysOperationLog.created_at < end + timedelta(days=1))
+        total = (await self.db.execute(count_stmt)).scalar_one()
+        stmt = stmt.order_by(SysOperationLog.created_at.desc()).offset((page - 1) * page_size).limit(page_size)
+        logs = list((await self.db.execute(stmt)).scalars().all())
+        return logs, total
 
     # ── 企业智能助手 Agent（权限感知 + 降级） ─────────────
     EMPLOYEE_CAPABILITIES: list[str] = [

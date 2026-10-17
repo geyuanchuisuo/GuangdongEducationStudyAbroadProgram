@@ -271,6 +271,7 @@ class CustomerQueryItem(BaseModel):
     owner_employee_id: Optional[int] = None
     last_follow_at: Optional[datetime] = None
     assessment_score: Optional[int] = None
+    recommended: Optional[dict] = Field(None, description="最新研判的推荐项目与理由（recommended_json）")
     created_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}
@@ -374,3 +375,31 @@ class RemindersOut(BaseModel):
     admin_services_pending: int = Field(0, description="待我审批的学生行政服务单数")
     psych_alerts_pending: int = Field(0, description="未处理心理预警数")
     approvals_pending: Optional[int] = Field(None, description="待我审批的审批单数（仅 MANAGER 返回）")
+
+
+# ── 组织架构成员（v6.6.0：同事查询 + 电话脱敏） ──────────
+class OrgMemberItem(BaseModel):
+    user_id: int
+    real_name: str
+    user_type: str
+    employee_role: Optional[str] = None
+    department: Optional[str] = None
+    phone_masked: Optional[str] = Field(None, description="脱敏电话，如 138****5678")
+
+
+class PhoneRevealOut(BaseModel):
+    user_id: int
+    real_name: str
+    phone: Optional[str] = Field(None, description="完整电话（敏感操作，已写操作日志）")
+
+
+# ── 操作日志查询（v6.6.0，Phase 1.3 管理层端） ──────────
+class OperationLogItem(BaseModel):
+    id: int
+    user_id: Optional[int] = None
+    module: str
+    action: str
+    target_type: Optional[str] = None
+    target_id: Optional[int] = None
+    detail: Optional[dict] = None
+    created_at: Optional[datetime] = None
