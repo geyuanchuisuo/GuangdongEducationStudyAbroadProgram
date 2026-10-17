@@ -1,0 +1,95 @@
+<script setup lang="ts">
+import { computed, ref, watch } from 'vue'
+import { ChatDotRound, Close, Promotion } from '@element-plus/icons-vue'
+
+const props = defineProps<{ type?: 'public' | 'student' | 'employee' | 'manager'; autoOpen?: boolean }>()
+const open = ref(false)
+watch(() => props.autoOpen, (value) => {
+  if (value) window.setTimeout(() => { open.value = true }, 450)
+}, { immediate: true })
+const input = ref('')
+const messages = ref<Array<{ role: 'user' | 'agent'; text: string }>>([
+  { role: 'agent', text: '你好，我是粤教智能助手。可以帮你查询项目、处理待办或了解服务进度。' },
+])
+
+const name = computed(() => {
+  if (props.type === 'student') return '粤伴 · 学生智能助手'
+  if (props.type === 'employee' || props.type === 'manager') return '粤助 · 企业智能助手'
+  return '小粤 · 智能留学顾问'
+})
+
+const quick = computed(() => {
+  if (props.type === 'student') return ['帮我列个学习计划', '我想请个假', '查看最近DDL']
+  if (props.type === 'employee' || props.type === 'manager') return ['看看今天待办', '帮我整理日报', '查询客户状态']
+  return ['推荐适合我的项目', '近期有什么活动', '咨询报名条件']
+})
+
+function send(text = input.value) {
+  const value = text.trim()
+  if (!value) return
+  messages.value.push({ role: 'user', text: value })
+  input.value = ''
+  window.setTimeout(() => {
+    messages.value.push({ role: 'agent', text: '收到。我会基于当前权限和演示数据为你整理信息；涉及写操作时会先请你确认。' })
+  }, 320)
+}
+</script>
+
+<template>
+  <div class="agent-dock">
+    <transition name="fade">
+      <section v-if="open" class="agent-panel">
+        <header>
+          <div>
+            <strong>{{ name }}</strong>
+            <small>在线 · 实时服务</small>
+          </div>
+          <el-button text :icon="Close" @click="open = false" />
+        </header>
+        <div class="messages">
+          <div v-for="(item, index) in messages" :key="index" class="message" :class="item.role">
+            {{ item.text }}
+          </div>
+        </div>
+        <div class="quick">
+          <el-button v-for="item in quick" :key="item" size="small" round @click="send(item)">{{ item }}</el-button>
+        </div>
+        <div class="composer">
+          <el-input v-model="input" placeholder="输入你的问题..." @keyup.enter="send()" />
+          <el-button type="primary" :icon="Promotion" @click="send()" />
+        </div>
+      </section>
+    </transition>
+    <el-button class="agent-trigger" type="primary" :icon="ChatDotRound" circle size="large" @click="open = !open" />
+  </div>
+</template>
+
+<style scoped>
+.agent-dock { position: fixed; right: 24px; bottom: 24px; z-index: 1000; }
+.agent-trigger { width: 58px; height: 58px; box-shadow: 0 12px 30px rgba(45,43,115,.28); }
+.agent-panel {
+  position: absolute;
+  right: 0;
+  bottom: 72px;
+  width: min(380px, calc(100vw - 32px));
+  height: 540px;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border: 1px solid #e4e2ef;
+  border-radius: 22px;
+  box-shadow: 0 24px 60px rgba(37,35,94,.22);
+  overflow: hidden;
+}
+header { display: flex; justify-content: space-between; align-items: center; padding: 18px 20px; background: #2d2b73; color: #fff; }
+header small { display: block; margin-top: 4px; color: #cfcdf1; }
+.messages { flex: 1; padding: 18px; overflow: auto; background: #f7f7fb; }
+.message { max-width: 82%; margin: 10px 0; padding: 11px 14px; border-radius: 14px; line-height: 1.65; font-size: 14px; }
+.message.agent { background: #fff; border: 1px solid #e8e6f1; }
+.message.user { margin-left: auto; background: #5a50b8; color: #fff; }
+.quick { display: flex; gap: 8px; padding: 10px 14px; overflow-x: auto; }
+.composer { display: flex; gap: 8px; padding: 12px 14px 16px; border-top: 1px solid #eeeef4; }
+.fade-enter-active, .fade-leave-active { transition: opacity .2s, transform .2s; }
+.fade-enter-from, .fade-leave-to { opacity: 0; transform: translateY(12px); }
+</style>
+

@@ -1,0 +1,94 @@
+<script setup lang="ts">
+import { computed, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { ArrowLeft, Check, Phone } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { projects } from '../../data/mock'
+import { useUserStore } from '../../stores/user'
+
+const route = useRoute()
+const router = useRouter()
+const userStore = useUserStore()
+const dialog = ref(false)
+const project = computed(() => projects.find((item) => item.id === Number(route.params.id)) || projects[0])
+const form = ref({ name: '', phone: '', note: '' })
+
+function apply() {
+  if (!userStore.isLoggedIn) {
+    sessionStorage.setItem('redirect-after-login', route.fullPath)
+    ElMessageBox.confirm('报名项目需要先登录，登录后会自动返回当前项目继续报名。', '需要登录', { confirmButtonText: '去登录', cancelButtonText: '暂不登录' })
+      .then(() => router.push({ path: '/login', query: { redirect: route.fullPath } }))
+      .catch(() => undefined)
+    return
+  }
+  form.value.name = userStore.userInfo?.real_name || ''
+  form.value.phone = userStore.userInfo?.contact_info || ''
+  dialog.value = true
+}
+
+function submit() {
+  if (!form.value.name || !form.value.phone) {
+    ElMessage.warning('请补充联系人和手机号')
+    return
+  }
+  ElMessageBox.confirm('确认提交该项目的报名咨询吗？', '二次确认', { type: 'warning' })
+    .then(() => {
+      dialog.value = false
+      ElMessage.success('报名信息已提交，顾问将尽快联系你')
+    })
+    .catch(() => undefined)
+}
+</script>
+
+<template>
+  <div class="page-wrap detail">
+    <el-button text :icon="ArrowLeft" @click="router.push('/projects')">返回项目列表</el-button>
+    <header>
+      <div><span class="badge">{{ project.category }} · {{ project.tag }}</span><h1>{{ project.title }}</h1><p>{{ project.summary }}</p></div>
+      <div class="apply-box"><small>费用说明</small><strong>{{ project.fee }}</strong><el-button type="primary" size="large" round @click="apply">立即报名咨询</el-button></div>
+    </header>
+    <section class="content-grid">
+      <article class="surface main-content">
+        <h2>项目介绍</h2><p>项目面向不同教育背景和发展目标的人群，提供从评估、材料准备到入学或就业衔接的全流程服务。具体方案由顾问结合个人情况确认。</p>
+        <h2>适合人群</h2><p>{{ project.audience }}</p>
+        <h2>项目优势</h2>
+        <div class="check-list"><div v-for="item in project.highlights" :key="item"><el-icon><Check /></el-icon>{{ item }}</div></div>
+        <h2>办理流程</h2>
+        <ol><li>提交基本资料并完成适配评估</li><li>顾问确认项目和费用方案</li><li>准备申请材料与相关测试</li><li>完成录取、签证或入学衔接</li></ol>
+      </article>
+      <aside>
+        <div class="surface side-card"><h3>项目关键信息</h3><p><span>项目周期</span><b>{{ project.duration }}</b></p><p><span>适合人群</span><b>{{ project.audience }}</b></p><p><span>服务范围</span><b>评估 · 申请 · 入学衔接</b></p></div>
+        <div class="surface contact-card"><el-icon><Phone /></el-icon><h3>需要进一步了解？</h3><p>提交报名后由专属顾问联系，也可以直接拨打 020-37628058。</p></div>
+      </aside>
+    </section>
+    <el-dialog v-model="dialog" title="项目报名咨询" width="min(520px, 92vw)">
+      <el-form label-position="top"><el-form-item label="联系人"><el-input v-model="form.name" /></el-form-item><el-form-item label="手机号"><el-input v-model="form.phone" /></el-form-item><el-form-item label="补充说明"><el-input v-model="form.note" type="textarea" :rows="4" /></el-form-item></el-form>
+      <template #footer><el-button @click="dialog = false">取消</el-button><el-button type="primary" @click="submit">确认提交</el-button></template>
+    </el-dialog>
+  </div>
+</template>
+
+<style scoped>
+.detail header { display: grid; grid-template-columns: 1fr 300px; gap: 32px; margin: 28px 0; }
+.detail h1 { margin: 18px 0 12px; color: var(--ink-deep); font-size: clamp(38px, 5vw, 64px); }
+.detail header p { max-width: 720px; color: var(--muted); line-height: 1.9; font-size: 18px; }
+.apply-box { padding: 26px; color: #fff; background: var(--ink); border-radius: 20px; }
+.apply-box small, .apply-box strong { display: block; }
+.apply-box strong { margin: 12px 0 22px; color: #8dd933; font-size: 22px; }
+.content-grid { display: grid; grid-template-columns: 1fr 320px; gap: 22px; }
+.main-content { padding: 38px; }
+.main-content h2 { margin: 32px 0 12px; color: var(--ink-deep); }
+.main-content h2:first-child { margin-top: 0; }
+.main-content p, .main-content li { color: var(--muted); line-height: 1.9; }
+.check-list { display: grid; gap: 11px; }
+.check-list div { display: flex; gap: 9px; align-items: center; color: var(--ink-deep); }
+.check-list .el-icon { color: var(--lime); }
+.side-card, .contact-card { padding: 25px; margin-bottom: 18px; }
+.side-card p { display: flex; justify-content: space-between; gap: 15px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.side-card span { color: var(--muted); }
+.side-card b { text-align: right; color: var(--ink-deep); }
+.contact-card .el-icon { color: var(--lime); font-size: 30px; }
+.contact-card p { color: var(--muted); line-height: 1.8; }
+@media (max-width: 850px) { .detail header, .content-grid { grid-template-columns: 1fr; } }
+</style>
+
