@@ -403,3 +403,38 @@ class OperationLogItem(BaseModel):
     target_id: Optional[int] = None
     detail: Optional[dict] = None
     created_at: Optional[datetime] = None
+
+
+# ── 用户管理（v6.7.0，Phase 1.3 管理层端） ──────────────
+class ManagerUserCreate(BaseModel):
+    username: str = Field(..., min_length=3, max_length=50, description="用户名（唯一）")
+    password: str = Field(..., min_length=6, max_length=100, description="初始密码（至少6位）")
+    real_name: str = Field(..., min_length=2, max_length=50, description="真实姓名")
+    user_type: str = Field(..., pattern="^(EMPLOYEE|MANAGER)$", description="用户类型（管理层仅可创建这两种）")
+    phone: Optional[str] = Field(None, max_length=20, description="手机号（唯一）")
+    employee_role: Optional[str] = Field(None, max_length=50, description="岗位角色")
+    department: Optional[str] = Field(None, max_length=100, description="部门")
+    permissions: Optional[list[str]] = Field(None, description="额外权限列表（MANAGER 的 permissions JSON）")
+
+
+class ManagerUserStatusUpdate(BaseModel):
+    status: str = Field(..., pattern="^(正常|禁用)$", description="目标状态")
+
+
+class ManagerUserPermissionsUpdate(BaseModel):
+    permissions: list[str] = Field(..., description="权限列表（覆盖式写入 permissions JSON，传 [] 清空）")
+
+
+class ManagerUserOut(BaseModel):
+    id: int
+    username: str
+    real_name: str
+    user_type: str
+    phone: Optional[str] = None
+    employee_role: Optional[str] = None
+    department: Optional[str] = None
+    permissions: Optional[list[str]] = None
+    status: str
+    create_time: Optional[datetime] = None
+
+    model_config = {"from_attributes": True}
