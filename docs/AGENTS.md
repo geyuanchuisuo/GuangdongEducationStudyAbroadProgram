@@ -725,8 +725,7 @@ chore: 构建
 
 ---
 
-**最后更新**：2026-10-17 21:55（v6.9.2 master 快进合并 longtrying_test：b84acf3..4c27071，13 文件 +406/-14，无冲突，compileall + verify_all 27/27 通过，LOG-032；v6.9.1 远端访问实测修正：nginx 端口 80→8080 避让 Dify + localtunnel 免注册穿透实测成功，commit f0752ff，LOG-031；v6.9.0 远端访问方案基础：docker-compose nginx 统一入口 + ngrok 脚本 + 一键构建启动 + REMOTE_ACCESS.md 指南；v6.8.8 P1 运行时缺陷修复：ai_service.py 恢复 M3/M4 依赖的 AgentType/AIService/ai_service，verify_all 27/27 + pytest 64/64 + 容器内真实 Dify 调用成功）
-**最后更新**：2026-10-17 21:36（v6.9.0——M5 批次 A~E 连续交付：批次 A 契约/文档/003 迁移对齐（6/7，空库验收待上游 002 修复）+ 批次 B 口径健壮性 11 项 + 批次 C 真实数据适配器骨架（REPORT_DATA_SOURCE 开关/三态质量标注/投诉域不可得拒绝生成/字段映射表 docs/M5_字段映射表.md）+ 批次 D 前端报告闭环（列表/详情/生成/三下钻/真实 PDF/演示标签四态/双入口合并）+ 批次 E 测试资产（全仓 **113/113**+E2E Section 5.5）；M0-M4 代码零改动；测试：compileall OK+verify_all 27/27+pytest 113/113+npm build 通过；⏸️ 环境级验收（Docker E2E/production 冒烟）待用户拉合并后补做；⚠️ P1 缺陷 M3/M4 Agent 断链待 M3/M4 修复；详见更新记录 v6.9.0 与 LOG-033/034）  
+**最后更新**：2026-10-17 22:11（第五次同步 origin/master eaaea94→master_ZNBG——并入 v6.8.8 **P1 修复**（ai_service.py 尾部恢复 M0 网关符号，M3/M4 Agent 断链关闭，移交清单第 3 项销，导入实测通过）+ v6.9.0~v6.9.2 远端访问（nginx 8080/ngrok+localtunnel 脚本/REMOTE_ACCESS.md）+ dev 组依赖并集（aiosqlite+pytest-asyncio）；冲突 7 文件并集解决（v6.9.0 双线同名异义已注明：master=远端访问、ZNBG=M5 批次 A~E，ZNBG 线 pytest 113/113+verify_all 27/27）；遗留：推送待用户凭据、002 迁移 FK 未修（上游）、E2E/production 冒烟待环境、M5 字段映射表待业务确认；详见更新记录 merge 条目与 LOG-039）  
 
 **维护人**：开发团队
 
