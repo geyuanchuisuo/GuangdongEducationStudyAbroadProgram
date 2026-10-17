@@ -20,6 +20,7 @@ sys.path.insert(0, ".")
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 
 BASE = "http://localhost:8000/api/v1"
+TAG = datetime.now().strftime("%H%M%S")  # 幂等重跑：注册/建号用户名与手机号加运行时间戳
 PASSED = 0
 FAILED = 0
 SKIPPED = 0
@@ -99,7 +100,7 @@ def prepare_student_fixture() -> int | None:
     2) 清掉 user005 的种子请假单，保证「新建请假→审批」链路确定；
     3) 清理种子审批实例与新业务 ID 的撞车（种子 biz_id 随机 1~500，生产环境不存在此重叠）。
     """
-    from sqlalchemy import delete as sa_delete
+    from sqlalchemy import delete as sa_delete, update as sa_update
 
     from app.config import settings
     from app.models.customer import Customer
@@ -121,6 +122,10 @@ def prepare_student_fixture() -> int | None:
                     StudentAdminService.student_id == sid,
                     StudentAdminService.service_type == "请假",
                 ))
+                # 幂等重跑：上轮 E2E 客户可能已被再分配/状态流转，还原归属与状态（CRM 录入按手机号去重）
+                await s.execute(sa_update(Customer).where(
+                    Customer.phone.in_(("13900001111", "13900002222"))
+                ).values(owner_employee_id=eid, status="新录入"))
                 # 种子实例 biz_id 1~500 会与新创建的服务单(>100)/工单(>100)/日报(>120)/客户(>120)撞车
                 colliding_rows = (await s.execute(
                     select(ApprovalInstance.id).where(
@@ -141,14 +146,40 @@ def prepare_student_fixture() -> int | None:
     return asyncio.run(_q())
 
 
+def _free_report_day() -> str:
+    """找一个该员工没有日报的历史日期（幂等重跑：固定日期上轮已提交会 40901）。"""
+    from app.config import settings
+    from app.models.employee import EmployeeDailyReport
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+    async def _q():
+        engine = create_async_engine(settings.DATABASE_URL)
+        try:
+            maker = async_sessionmaker(engine, expire_on_commit=False)
+            async with maker() as s:
+                used = set((await s.execute(
+                    select(EmployeeDailyReport.report_date).where(EmployeeDailyReport.employee_id == eid)
+                )).scalars().all())
+                base = date.today() - timedelta(days=45)
+                for i in range(400):
+                    cand = base - timedelta(days=i)
+                    if cand not in used:
+                        return cand
+                return base
+        finally:
+            await engine.dispose()
+
+    return asyncio.run(_q())
+
+
 linked_customer_id = prepare_student_fixture()
 print(f"INFO 测试前置：客户挂接 student->employee（customer_id={linked_customer_id}），种子请假单已清理")
 
 # 员工注册新员工账号（公开注册允许 STUDENT/EMPLOYEE）
 ok, bj = call(client, "POST", "/auth/register",
-              body={"username": "e2e_stu01", "password": "e2e123456",
+              body={"username": f"e2e_stu01_{TAG}", "password": "e2e123456",
                     "real_name": "端到端学生", "user_type": "STUDENT",
-                    "contact_info": "13999990000"})
+                    "contact_info": f"1{TAG}0002"})
 check("register 新账号", ok, str(bj)[:160])
 
 print()
@@ -233,7 +264,7 @@ if mid:
     check("M3 完整电话二次确认（留日志）", ok, str(bj)[:160])
 
 # 日报（历史日期不能直接补提 → 先存草稿再走补报申请，即完整补报链路）
-old_day = date.today() - timedelta(days=45)
+old_day = _free_report_day()
 ok, bj = call(client, "POST", "/employee/reports", emp_tok, body={
     "report_date": str(old_day), "content": "E2E 补录日报草稿：回访客户并整理资料", "status": "draft"})
 check("M3 存日报草稿（历史日期）", ok, str(bj)[:160])
@@ -349,15 +380,14 @@ for name, path in [("客户", "/employee/export/customers"), ("日报", "/employ
     except Exception as exc:
         check(f"M3 导出{name}CSV", False, str(exc)[:120])
 
-# 指令式业务（AI 不可用时 50002 为设计现状：该端点无本地解析兜底）
+# 指令式业务（v6.8.3：AI 不可用自动本地规则兜底，不再 50002；当前环境无 Dify，source 预期 local）
 ok, bj = call(client, "POST", "/employee/commands/parse", emp_tok, body={
-    "text": "给客户张三E2E添加一条跟进记录：明天上午电话回访"}, expect=(200, 50002))
-if ok and bj.get("code") == 50002:
-    skip("M3 指令解析", "AI 不可用且该端点无本地兜底（设计现状）")
-    cmd_token = None
-else:
-    check("M3 指令解析", ok, str(bj)[:160])
-    cmd_token = bj.get("data", {}).get("token") if ok else None
+    "text": "给客户12添加一条跟进记录：明天上午电话回访"})
+_action = bj.get("data", {}).get("action", {}) if ok else {}
+check("M3 指令解析（本地兜底）",
+      ok and _action.get("action_type") == "follow_up.create" and _action.get("source") == "local",
+      str(bj)[:160])
+cmd_token = bj.get("data", {}).get("token") if ok else None
 if cmd_token:
     ok, bj = call(client, "POST", "/employee/commands/execute", emp_tok,
                   body={"token": cmd_token, "confirm": False})
@@ -411,8 +441,8 @@ else:
 
 # 用户管理
 ok, bj = call(client, "POST", "/employee/users", mgr_tok, body={
-    "username": "e2e_emp01", "password": "e2e123456", "real_name": "端到端员工",
-    "user_type": "EMPLOYEE", "phone": "13911112222", "department": "咨询部"})
+    "username": f"e2e_emp01_{TAG}", "password": "e2e123456", "real_name": "端到端员工",
+    "user_type": "EMPLOYEE", "phone": f"1{TAG}0001", "department": "咨询部"})
 check("M3 创建员工账号", ok, str(bj)[:160])
 new_uid = bj.get("data", {}).get("id") if ok else None
 if new_uid:

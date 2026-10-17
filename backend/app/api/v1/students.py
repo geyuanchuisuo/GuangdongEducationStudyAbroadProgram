@@ -33,6 +33,7 @@ from app.schemas.student import (
     ServiceItem,
     TicketCreate,
     TicketOut,
+    TicketUpdateItem,
 )
 from app.services.student_service import StudentService
 
