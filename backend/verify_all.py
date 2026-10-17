@@ -174,9 +174,19 @@ test('/api/v1/crm + /ai + /courses + /events (15 paths, M1/M2 v6.7.3)',
      lambda: None if all(p in routes for p in expected_m1m2_paths) else
      (_ for _ in ()).throw(Exception('missing')))
 
-test(f'total paths = 78 (77 API + 1 health, got {len(routes)})',
-     lambda: None if len(routes) == 78 else
-     (_ for _ in ()).throw(Exception(f'expected 78')))
+# ── M1 客户模块 6 态流转 + 待补全线索（3 paths，v6.8.0） ─────────
+expected_customer_v680_paths = [
+    '/api/v1/customers/pending-leads',
+    '/api/v1/customers/pending-leads/{lead_id}/merge',
+    '/api/v1/customers/{customer_id}/status',
+]
+test('/api/v1/customers 6态流转 + pending-leads (3 paths, M1 v6.8.0)',
+     lambda: None if all(p in routes for p in expected_customer_v680_paths) else
+     (_ for _ in ()).throw(Exception('missing')))
+
+test(f'total paths = 81 (80 API + 1 health, got {len(routes)})',
+     lambda: None if len(routes) == 81 else
+     (_ for _ in ()).throw(Exception(f'expected 81')))
 
 # ===== Suite 3: MVC Layer =====
 print()

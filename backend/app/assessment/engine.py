@@ -97,7 +97,22 @@ class CustomerAssessmentEngine:
             value = getattr(facts, key)
             if value:
                 other.append(f"{label}：{value}")
-        return {"name": facts.name, "phone": facts.phone, "gender": facts.gender, "age": facts.age_text, "education": facts.education, "other_info": "；".join(other) or None}
+        return {
+            "name": facts.name,
+            "phone": facts.phone,
+            "gender": facts.gender,
+            "age": facts.age_text,
+            "education": facts.education,
+            "economy": facts.economy,
+            "needs": facts.needs,
+            "study_intent": facts.study_intent,
+            "german_ability": facts.german_ability,
+            "english_ability": facts.english_ability,
+            "closed_training": facts.closed_training,
+            "criminal_record": facts.criminal_record,
+            "belt_and_road": facts.belt_and_road,
+            "other_info": "；".join(other) or None,
+        }
 
     def _assess_singapore(self, f: CustomerFacts) -> dict[str, Any]:
         dimensions: list[dict[str, str]] = []

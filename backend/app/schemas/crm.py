@@ -10,6 +10,14 @@ class CrmLeadCreate(BaseModel):
     gender: str | None = None
     age: int | None = None
     education: str | None = None
+    economy: str | None = None
+    needs: str | None = None
+    study_intent: str | None = None
+    german_ability: str | None = None
+    english_ability: str | None = None
+    closed_training: str | None = None
+    criminal_record: str | None = None
+    belt_and_road: str | None = None
     source: str | None = Field(None, max_length=32, description="线索来源")
     raw_input: str | None = None
     background_info: str | None = None
@@ -21,6 +29,14 @@ class CrmLeadUpdate(BaseModel):
     gender: str | None = None
     age: int | None = None
     education: str | None = None
+    economy: str | None = None
+    needs: str | None = None
+    study_intent: str | None = None
+    german_ability: str | None = None
+    english_ability: str | None = None
+    closed_training: str | None = None
+    criminal_record: str | None = None
+    belt_and_road: str | None = None
     source: str | None = None
     raw_input: str | None = None
     background_info: str | None = None

@@ -47,7 +47,7 @@ class CsIntentLog(Base):
 
     id: Mapped[int] = mapped_column(BigInt, primary_key=True, autoincrement=True)
     session_id: Mapped[int] = mapped_column(BigInt, ForeignKey("cs_chat_session.id"), nullable=False, index=True)
-    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("sys_user.id"), nullable=False, index=True)
+    user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("sys_user.id"), nullable=True, index=True)
     customer_id: Mapped[int | None] = mapped_column(BigInt, ForeignKey("customer.id"), nullable=True, index=True, comment="关联客户")
     intent_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     confidence: Mapped[float | None] = mapped_column(nullable=True)

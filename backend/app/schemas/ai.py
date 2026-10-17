@@ -11,3 +11,4 @@ class ChatResponse(BaseModel):
     answer: str
     conversation_id: str
     intent: str | None = None
+    recommendations: list[dict] | None = None

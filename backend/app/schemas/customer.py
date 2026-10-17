@@ -11,6 +11,14 @@ class CustomerBase(BaseModel):
     gender: Optional[str] = Field(None, max_length=10, description="性别")
     age: Optional[int] = Field(None, ge=0, le=150, description="年龄")
     education: Optional[str] = Field(None, max_length=50, description="学历")
+    economy: Optional[str] = Field(None, max_length=100, description="家庭经济状况")
+    needs: Optional[str] = Field(None, max_length=200, description="职业/教育需求")
+    study_intent: Optional[str] = Field(None, max_length=200, description="留学意愿及意向国家")
+    german_ability: Optional[str] = Field(None, max_length=100, description="德语能力")
+    english_ability: Optional[str] = Field(None, max_length=100, description="英语能力")
+    closed_training: Optional[str] = Field(None, max_length=100, description="是否接受封闭式实训")
+    criminal_record: Optional[str] = Field(None, max_length=100, description="有无犯罪记录")
+    belt_and_road: Optional[str] = Field(None, max_length=200, description="一带一路/政策认知")
     source_channel: Optional[str] = Field(None, max_length=32, description="来源渠道")
 
 
@@ -26,6 +34,14 @@ class CustomerUpdate(BaseModel):
     gender: Optional[str] = Field(None, max_length=10)
     age: Optional[int] = Field(None, ge=0, le=150)
     education: Optional[str] = Field(None, max_length=50)
+    economy: Optional[str] = Field(None, max_length=100)
+    needs: Optional[str] = Field(None, max_length=200)
+    study_intent: Optional[str] = Field(None, max_length=200)
+    german_ability: Optional[str] = Field(None, max_length=100)
+    english_ability: Optional[str] = Field(None, max_length=100)
+    closed_training: Optional[str] = Field(None, max_length=100)
+    criminal_record: Optional[str] = Field(None, max_length=100)
+    belt_and_road: Optional[str] = Field(None, max_length=200)
     owner_employee_id: Optional[int] = None
     status: Optional[str] = Field(None, max_length=20)
 
@@ -39,6 +55,8 @@ class CustomerOut(CustomerBase):
     first_submit_at: Optional[datetime] = None
     last_login_at: Optional[datetime] = None
     auto_churned: bool
+    churned_at: Optional[datetime] = None
+    reflowed_at: Optional[datetime] = None
     sys_user_id: Optional[int] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
@@ -101,3 +119,36 @@ class FollowUpOut(BaseModel):
     created_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}
+
+
+class CustomerStatusChange(BaseModel):
+    status: str = Field(..., max_length=20, description="目标状态（英文或中文 6 态）")
+
+
+class PendingLeadCreate(BaseModel):
+    wechat: Optional[str] = Field(None, max_length=100, description="微信号")
+    name: Optional[str] = Field(None, max_length=100, description="姓名")
+    raw_info: Optional[str] = Field(None, description="原始信息")
+    source_session_id: Optional[int] = Field(None, description="来源客服会话ID")
+
+
+class PendingLeadOut(BaseModel):
+    id: int
+    wechat: Optional[str] = None
+    name: Optional[str] = None
+    raw_info: Optional[str] = None
+    source_session_id: Optional[int] = None
+    merged_customer_id: Optional[int] = None
+    status: str
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+    model_config = {"from_attributes": True}
+
+
+class PendingLeadMerge(BaseModel):
+    phone: str = Field(..., min_length=11, max_length=20, description="手机号(必填，业务唯一键)")
+    name: Optional[str] = Field(None, max_length=100)
+    gender: Optional[str] = Field(None, max_length=10)
+    age: Optional[int] = Field(None, ge=0, le=150)
+    education: Optional[str] = Field(None, max_length=50)

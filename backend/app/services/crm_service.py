@@ -29,6 +29,18 @@ LEAD_STATUS_TRANSITIONS = {
     "processing": {"converted", "invalid"},
 }
 
+# 客户研判画像字段（与 app/assessment/extractors.py CustomerFacts 一致，落在 customer 主表）
+CUSTOMER_FACT_FIELDS = (
+    "economy",
+    "needs",
+    "study_intent",
+    "german_ability",
+    "english_ability",
+    "closed_training",
+    "criminal_record",
+    "belt_and_road",
+)
+
 
 class CrmService:
     def __init__(self, repo: CrmRepository, customer_repo: CustomerRepository):
@@ -48,11 +60,11 @@ class CrmService:
         )
         return {"total": total, "items": [CrmLeadOut.model_validate(i).model_dump() for i in items]}
 
-    async def create_lead(self, data: CrmLeadCreate, current_user: User) -> dict:
+    async def create_lead(self, data: CrmLeadCreate, current_user: User | None = None) -> dict:
         if not data.phone or not PHONE_REGEX.match(data.phone):
             raise ValidationError(message="手机号不合规，需1开头11位大陆手机号")
 
-        owner_id = data.owner_employee_id or current_user.id
+        owner_id = data.owner_employee_id or (current_user.id if current_user else None)
         customer = await self.customer_repo.get_by_phone(data.phone)
         created_customer = customer is None
         if customer is None:
@@ -62,6 +74,14 @@ class CrmService:
                 gender=data.gender,
                 age=data.age,
                 education=data.education,
+                economy=data.economy,
+                needs=data.needs,
+                study_intent=data.study_intent,
+                german_ability=data.german_ability,
+                english_ability=data.english_ability,
+                closed_training=data.closed_training,
+                criminal_record=data.criminal_record,
+                belt_and_road=data.belt_and_road,
                 source_channel=data.source,
                 owner_employee_id=owner_id,
                 status="NEW",
@@ -70,7 +90,7 @@ class CrmService:
             customer = await self.customer_repo.create(customer)
         else:
             updates = {}
-            for field in ("name", "gender", "age", "education"):
+            for field in ("name", "gender", "age", "education", *CUSTOMER_FACT_FIELDS):
                 value = getattr(data, field, None)
                 if value is not None:
                     updates[field] = value
@@ -123,7 +143,7 @@ class CrmService:
             customer = await self.customer_repo.get_by_id(lead.customer_id)
             if customer:
                 updates = {}
-                for field in ("name", "gender", "age", "education"):
+                for field in ("name", "gender", "age", "education", *CUSTOMER_FACT_FIELDS):
                     value = getattr(data, field, None)
                     if value is not None:
                         updates[field] = value
