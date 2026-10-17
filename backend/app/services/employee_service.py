@@ -263,3 +263,173 @@ class EmployeeService:
             "session_id": session_id,
             "saved_report_id": saved_id,
         }
+
+    # ── CRM 客户录入（多格式 + AI 研判） ─────────────────
+    async def create_crm_lead(self, employee_id: int, data: dict) -> dict:
+        """员工录入线索：
+        1. 按 phone 查/建 customer（先录入者获跟进权，已存在则不抢）
+        2. 落 crm_lead（owner=当前员工）
+        3. auto_assess=True 时调 AI 网关做客户研判，写 customer_assessment
+        """
+        import json
+        from app.models.crm import CrmLead, CustomerAssessment
+
+        phone = (data.get("phone") or "").strip() or None
+        customer = None
+        customer_existed = False
+
+        if phone:
+            result = await self.db.execute(select(Customer).where(Customer.phone == phone))
+            customer = result.scalar_one_or_none()
+            if customer:
+                customer_existed = True
+                # 已存在客户：不抢 owner，但补全缺省字段
+                if not customer.owner_employee_id:
+                    customer.owner_employee_id = employee_id
+
+        if customer is None:
+            customer = Customer(
+                phone=phone,
+                wechat=data.get("wechat"),
+                name=data.get("name"),
+                gender=data.get("gender"),
+                age=data.get("age"),
+                education=data.get("education"),
+                source_channel=data.get("source_channel"),
+                owner_employee_id=employee_id,
+                status="NEW",
+            )
+            self.db.add(customer)
+            await self.db.flush()
+
+        # 落 lead
+        raw_input_parts = []
+        if data.get("raw_text"):
+            raw_input_parts.append(data["raw_text"])
+        if data.get("file_urls"):
+            raw_input_parts.append(f"附件 {len(data['file_urls'])} 个：{'; '.join(data['file_urls'])}")
+        raw_input = "\n".join(raw_input_parts) or "无内容"
+
+        lead = CrmLead(
+            customer_id=customer.id,
+            source=data.get("source_channel") or "employee",
+            raw_input=raw_input,
+            background_info=data.get("background_info"),
+            owner_employee_id=employee_id,
+            status="new",
+        )
+        self.db.add(lead)
+        await self.db.flush()
+
+        # AI 研判（可选）
+        assessment_id = None
+        assessment_status = "skipped"
+        if data.get("auto_assess", True):
+            if not phone:
+                assessment_status = "invalid_phone"
+            else:
+                try:
+                    from app.services.ai_service import AgentType, ai_service
+                    prompt = (
+                        "请基于以下客户原始信息，输出客户研判报告（JSON 格式）："
+                        "包含 overview（客户速览）、score（匹配度评分 90/70/50/20 之一）、"
+                        "follow_up_advice（跟进建议）、recommended_programs（推荐项目列表）。\n\n"
+                        f"客户信息：\n姓名：{data.get('name') or '未知'}\n"
+                        f"手机：{phone}\n学历：{data.get('education') or '未知'}\n"
+                        f"年龄：{data.get('age') or '未知'}\n"
+                        f"背景：{data.get('background_info') or '无'}\n"
+                        f"原始录入：{data.get('raw_text') or '无'}"
+                    )
+                    ai_resp = await ai_service.chat(
+                        agent=AgentType.EMPLOYEE,
+                        message=prompt,
+                        session_id="new",
+                        user_id=f"employee_{employee_id}",
+                    )
+                    content = ai_resp.content or ""
+                    overview = ""
+                    score = None
+                    follow_up_advice = ""
+                    # 尝试解析 JSON；失败则塞原文
+                    try:
+                        start = content.find("{")
+                        end = content.rfind("}")
+                        if start >= 0 and end > start:
+                            parsed = json.loads(content[start:end + 1])
+                            overview = parsed.get("overview", "")
+                            score = parsed.get("score")
+                            follow_up_advice = parsed.get("follow_up_advice", "")
+                        else:
+                            overview = content[:500]
+                    except Exception:
+                        overview = content[:500]
+
+                    assessment = CustomerAssessment(
+                        customer_id=customer.id,
+                        input_source="employee",
+                        status="valid",
+                        overview=overview,
+                        score=score if isinstance(score, int) else None,
+                        follow_up_advice=follow_up_advice or content[:500],
+                        employee_id=employee_id,
+                        prompt_version="v1",
+                        dify_run_id=ai_resp.session_id,
+                    )
+                    self.db.add(assessment)
+                    await self.db.flush()
+                    assessment_id = assessment.id
+                    assessment_status = "valid"
+                except Exception as exc:
+                    assessment_status = f"failed: {exc}"
+        else:
+            if not phone:
+                assessment_status = "invalid_phone"
+
+        await self.db.commit()
+
+        message = "录入成功"
+        if customer_existed:
+            message = "客户已存在，已关联并保留原跟进员工"
+        if assessment_status.startswith("failed"):
+            message += f"；研判失败：{assessment_status}"
+        elif assessment_status == "invalid_phone":
+            message += "；无手机号，未做 AI 研判"
+
+        return {
+            "lead_id": lead.id,
+            "customer_id": customer.id,
+            "customer_existed": customer_existed,
+            "assessment_id": assessment_id,
+            "status": assessment_status,
+            "message": message,
+        }
+
+    async def create_follow_up(self, employee_id: int, data: dict) -> "object":
+        """新增跟进记录。"""
+        from app.models.crm import CrmFollowUp
+        # 客户必须存在
+        result = await self.db.execute(select(Customer).where(Customer.id == data["customer_id"]))
+        customer = result.scalar_one_or_none()
+        if not customer:
+            raise NotFoundError(message="客户不存在")
+
+        follow = CrmFollowUp(employee_id=employee_id, **data)
+        self.db.add(follow)
+        await self.db.commit()
+        await self.db.refresh(follow)
+        return follow
+
+    async def list_my_follow_ups(
+        self, employee_id: int, customer_id: int | None, page: int, page_size: int
+    ) -> tuple[list, int]:
+        """员工查询自己的跟进记录。"""
+        from app.models.crm import CrmFollowUp
+        stmt = select(CrmFollowUp).where(CrmFollowUp.employee_id == employee_id)
+        count_stmt = select(CrmFollowUp.id).where(CrmFollowUp.employee_id == employee_id)
+        if customer_id:
+            stmt = stmt.where(CrmFollowUp.customer_id == customer_id)
+            count_stmt = count_stmt.where(CrmFollowUp.customer_id == customer_id)
+        total = len((await self.db.execute(count_stmt)).all())
+        stmt = stmt.order_by(CrmFollowUp.created_at.desc()).offset((page - 1) * page_size).limit(page_size)
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all()), total

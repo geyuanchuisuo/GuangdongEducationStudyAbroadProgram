@@ -143,3 +143,55 @@ class OralReportOut(BaseModel):
     report_date: date
     session_id: Optional[str] = None
     saved_report_id: Optional[int] = Field(None, description="如同时落库，返回日报 ID")
+
+
+# ── CRM 客户录入（多格式：文字 + 已上传文件） ──────────
+class CrmLeadCreate(BaseModel):
+    """员工录入线索。
+
+    多格式支持：
+    - 纯文字：raw_text 必填
+    - 文件（PDF/照片/Word/Excel）：先调 POST /api/v1/files/upload 拿 file_url，再传入 file_urls
+    - 客户基础字段（phone/name/wechat 等）可选；若 phone 已有 customer，自动关联
+    """
+    raw_text: Optional[str] = Field(None, description="原始录入文本")
+    file_urls: Optional[list[str]] = Field(None, description="已上传文件的 URL 列表")
+    phone: Optional[str] = Field(None, max_length=20, description="手机号（有效性标准）")
+    name: Optional[str] = Field(None, max_length=100)
+    wechat: Optional[str] = Field(None, max_length=100)
+    gender: Optional[str] = Field(None, max_length=10)
+    age: Optional[int] = Field(None, ge=0, le=150)
+    education: Optional[str] = Field(None, max_length=50)
+    source_channel: Optional[str] = Field(None, max_length=32, description="来源渠道")
+    background_info: Optional[str] = Field(None, description="背景信息")
+    auto_assess: bool = Field(True, description="是否自动调 AI 研判")
+
+
+class CrmLeadOut(BaseModel):
+    lead_id: int
+    customer_id: Optional[int] = None
+    customer_existed: bool = Field(..., description="手机号是否已存在客户")
+    assessment_id: Optional[int] = None
+    status: str
+    message: str
+
+
+class CrmFollowUpCreate(BaseModel):
+    customer_id: int
+    follow_type: Optional[str] = Field(None, max_length=32)
+    content: str = Field(..., min_length=1)
+    next_action: Optional[str] = None
+    next_date: Optional[datetime] = None
+
+
+class CrmFollowUpOut(BaseModel):
+    id: int
+    customer_id: int
+    employee_id: int
+    follow_type: Optional[str] = None
+    content: Optional[str] = None
+    next_action: Optional[str] = None
+    next_date: Optional[datetime] = None
+    created_at: Optional[datetime] = None
+
+    model_config = {"from_attributes": True}

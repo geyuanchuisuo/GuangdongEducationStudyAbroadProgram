@@ -18,6 +18,10 @@ from app.schemas.employee import (
     AdminServiceOut,
     ConvertApplyCreate,
     ConvertApplyOut,
+    CrmFollowUpCreate,
+    CrmFollowUpOut,
+    CrmLeadCreate,
+    CrmLeadOut,
     DailyReportCreate,
     DailyReportOut,
     DailyReportSummaryItem,
@@ -240,3 +244,47 @@ async def oral_report(
         current_user.id, data.raw_text, data.report_date, save=save
     )
     return success_response(data=OralReportOut(**result), message="整理完成")
+
+
+# ── CRM 客户录入（多格式 + AI 研判） ───────────────────
+@router.post("/crm/leads", summary="员工录入客户线索（多格式 + AI 研判）")
+async def create_crm_lead(
+    data: CrmLeadCreate,
+    current_user: User = Depends(require_user_type("EMPLOYEE", "MANAGER")),
+    service: EmployeeService = Depends(_get_service),
+):
+    if not data.raw_text and not data.file_urls:
+        from app.core.exceptions import BusinessError
+        raise BusinessError(code=40002, message="raw_text 与 file_urls 至少填一项")
+    result = await service.create_crm_lead(current_user.id, data.model_dump(exclude_unset=True))
+    return success_response(data=CrmLeadOut(**result), message=result["message"])
+
+
+# ── CRM 跟进记录 ──────────────────────────────────────
+@router.post("/crm/follow-ups", summary="新增客户跟进记录")
+async def create_follow_up(
+    data: CrmFollowUpCreate,
+    current_user: User = Depends(require_user_type("EMPLOYEE", "MANAGER")),
+    service: EmployeeService = Depends(_get_service),
+):
+    follow = await service.create_follow_up(current_user.id, data.model_dump(exclude_unset=True))
+    return success_response(data=CrmFollowUpOut.model_validate(follow), message="已记录")
+
+
+@router.get("/crm/follow-ups", summary="我的跟进记录")
+async def list_follow_ups(
+    customer_id: int | None = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    current_user: User = Depends(require_user_type("EMPLOYEE", "MANAGER")),
+    service: EmployeeService = Depends(_get_service),
+):
+    items, total = await service.list_my_follow_ups(current_user.id, customer_id, page, page_size)
+    return success_response(
+        data={
+            "items": [CrmFollowUpOut.model_validate(f) for f in items],
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+        }
+    )
