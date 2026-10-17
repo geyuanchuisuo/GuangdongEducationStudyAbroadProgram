@@ -36,10 +36,10 @@ if (!$hasToken) {
     Write-Host "[成功] authtoken 已配置`n" -ForegroundColor Green
 }
 
-# 3. 检查本地服务是否已启动
-$port80 = Test-NetConnection -ComputerName localhost -Port 80 -InformationLevel Quiet -WarningAction SilentlyContinue
-if (!$port80) {
-    Write-Host "[警告] 本地 80 端口未监听，请先启动服务：" -ForegroundColor Yellow
+# 3. 检查本地服务是否已启动（项目 nginx 用 8080，80 被本机 Dify 占用）
+$port8080 = Test-NetConnection -ComputerName localhost -Port 8080 -InformationLevel Quiet -WarningAction SilentlyContinue
+if (!$port8080) {
+    Write-Host "[警告] 本地 8080 端口未监听，请先启动服务：" -ForegroundColor Yellow
     Write-Host "  .\scripts\build-and-serve.ps1"
     Write-Host ""
     $continue = Read-Host "是否仍要启动 ngrok？（y/N）"
@@ -47,7 +47,7 @@ if (!$port80) {
 }
 
 # 4. 启动 ngrok
-Write-Host "`n[启动] ngrok http 80 ..." -ForegroundColor Green
+Write-Host "`n[启动] ngrok http 8080 ..." -ForegroundColor Green
 Write-Host "  等待公网 URL 分配（见下方 Forwarding 行）"
 Write-Host "  按 Ctrl+C 停止穿透`n"
-ngrok http 80
+ngrok http 8080

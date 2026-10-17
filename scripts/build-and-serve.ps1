@@ -44,7 +44,7 @@ $waited = 0
 $healthy = $false
 while ($waited -lt $maxWait) {
     try {
-        $resp = Invoke-WebRequest -Uri "http://localhost/api/v1/health" -UseBasicParsing -TimeoutSec 2 -ErrorAction SilentlyContinue
+        $resp = Invoke-WebRequest -Uri "http://localhost:8080/api/v1/health" -UseBasicParsing -TimeoutSec 2 -ErrorAction SilentlyContinue
         if ($resp.StatusCode -eq 200) {
             $healthy = $true
             break
@@ -59,8 +59,8 @@ while ($waited -lt $maxWait) {
 Write-Host ""
 if ($healthy) {
     Write-Host "[成功] 服务已启动！" -ForegroundColor Green
-    Write-Host "  本地访问：http://localhost"
-    Write-Host "  后端 API：http://localhost/api/v1/docs"
+    Write-Host "  本地访问：http://localhost:8080  （80 端口被本机 Dify 占用，项目 nginx 用 8080）"
+    Write-Host "  后端 API：http://localhost:8080/api/v1/docs"
     Write-Host ""
     Write-Host "如需公网访问，请运行：" -ForegroundColor Cyan
     Write-Host "  .\scripts\start-ngrok.ps1"
