@@ -1,6 +1,6 @@
 from datetime import date
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Body, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_user_type
@@ -26,12 +26,17 @@ from app.schemas.employee import (
     CrmFollowUpOut,
     CrmLeadCreate,
     CrmLeadOut,
+    CustomerQueryItem,
+    CustomerStatusOut,
+    CustomerStatusUpdate,
     DailyReportCreate,
     DailyReportOut,
     DailyReportSummaryItem,
     OralReportCreate,
     OralReportOut,
     OrgNode,
+    PsychAlertHandle,
+    PsychAlertOut,
     ScoreCreate,
     ScoreOut,
     TodoCreate,
@@ -313,3 +318,86 @@ async def execute_command(
 ):
     result = await service.execute_command(current_user.id, data.token, data.confirm)
     return success_response(data=CommandExecuteOut(**result), message=result["message"])
+
+
+# ── 客户状态机（6 态流转） ────────────────────────────
+@router.patch("/customers/{customer_id}/status", summary="更新客户状态（6 态流转，写操作日志）")
+async def update_customer_status(
+    customer_id: int,
+    data: CustomerStatusUpdate,
+    current_user: User = Depends(require_user_type("EMPLOYEE", "MANAGER")),
+    service: EmployeeService = Depends(_get_service),
+):
+    result = await service.update_customer_status(
+        current_user.id, customer_id, data.status, data.reason
+    )
+    return success_response(data=CustomerStatusOut(**result), message=f"已更新为「{data.status}」")
+
+
+# ── 意向客户查询（数据隔离 + 筛选排序） ────────────────
+@router.get("/customers", summary="我的客户列表（员工看自己/MANAGER 看全部）")
+async def list_my_customers(
+    status: str | None = Query(None),
+    source_channel: str | None = Query(None),
+    score_min: int | None = Query(None, ge=0, le=100),
+    sort_by: str = Query("created_at", description="created_at/updated_at/score"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    current_user: User = Depends(require_user_type("EMPLOYEE", "MANAGER")),
+    service: EmployeeService = Depends(_get_service),
+):
+    employee_id = current_user.id if current_user.user_type == "EMPLOYEE" else None
+    items, total = await service.list_my_customers(
+        employee_id, status, source_channel, score_min, sort_by, page, page_size
+    )
+    return success_response(
+        data={
+            "items": [CustomerQueryItem(**item) for item in items],
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+        }
+    )
+
+
+# ── 投诉工单处理 ──────────────────────────────────────
+@router.get("/tickets", summary="投诉工单列表（员工查看）")
+async def list_tickets(
+    status: str | None = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    current_user: User = Depends(require_user_type("EMPLOYEE", "MANAGER")),
+    service: EmployeeService = Depends(_get_service),
+):
+    items, total = await service.list_tickets(current_user.id, status, page, page_size)
+    return success_response(
+        data={
+            "items": items,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+        }
+    )
+
+
+@router.post("/tickets/{ticket_id}/handle", summary="处理投诉工单（写解决方案）")
+async def handle_ticket(
+    ticket_id: int,
+    solution: str = Body(..., embed=True),
+    current_user: User = Depends(require_user_type("EMPLOYEE", "MANAGER")),
+    service: EmployeeService = Depends(_get_service),
+):
+    result = await service.handle_ticket(current_user.id, ticket_id, solution)
+    return success_response(data=result, message="工单已处理")
+
+
+# ── 心理关怀待办标记 ──────────────────────────────────
+@router.post("/psych-alerts/{alert_id}/handle", summary="标记心理预警处理（communicated/referred/resolved）")
+async def handle_psych_alert(
+    alert_id: int,
+    data: PsychAlertHandle,
+    current_user: User = Depends(require_user_type("EMPLOYEE", "MANAGER")),
+    service: EmployeeService = Depends(_get_service),
+):
+    result = await service.handle_psych_alert(current_user.id, alert_id, data.action, data.note)
+    return success_response(data=result, message="心理关怀已记录")

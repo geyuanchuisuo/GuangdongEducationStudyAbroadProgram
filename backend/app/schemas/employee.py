@@ -225,3 +225,55 @@ class CommandExecuteOut(BaseModel):
     executed: bool
     result: Optional[dict] = None
     message: str
+
+
+# ── 客户状态机（6 态流转） ────────────────────────────
+class CustomerStatusUpdate(BaseModel):
+    status: str = Field(..., description="目标状态：新录入/跟进中/意向强烈/已签约/已入学/已流失")
+    reason: Optional[str] = Field(None, description="变更原因")
+
+
+class CustomerStatusOut(BaseModel):
+    customer_id: int
+    old_status: str
+    new_status: str
+    changed_at: Optional[datetime] = None
+
+
+# ── 意向客户查询（数据隔离 + 筛选排序） ────────────────
+class CustomerQueryItem(BaseModel):
+    id: int
+    phone: Optional[str] = None
+    wechat: Optional[str] = None
+    name: Optional[str] = None
+    gender: Optional[str] = None
+    age: Optional[int] = None
+    education: Optional[str] = None
+    source_channel: Optional[str] = None
+    status: str
+    owner_employee_id: Optional[int] = None
+    last_follow_at: Optional[datetime] = None
+    assessment_score: Optional[int] = None
+    created_at: Optional[datetime] = None
+
+    model_config = {"from_attributes": True}
+
+
+# ── 心理关怀待办标记 ─────────────────────────────────
+class PsychAlertHandle(BaseModel):
+    action: str = Field(..., description="处理动作：communicated/referred/resolved")
+    note: Optional[str] = Field(None, description="处理备注")
+
+
+class PsychAlertOut(BaseModel):
+    id: int
+    student_id: int
+    trigger_reason: str
+    risk_level: str
+    status: str
+    teacher_id: Optional[int] = None
+    handled_action: Optional[str] = None
+    handled_at: Optional[datetime] = None
+    create_time: Optional[datetime] = None
+
+    model_config = {"from_attributes": True}

@@ -163,6 +163,22 @@ class EmployeeService:
         if action not in ("approve", "reject"):
             raise BusinessError(code=40002, message="action 必须是 approve 或 reject")
 
+        # 请假去重：同学生同时段已有待审批/已通过的请假记录
+        if action == "approve" and svc.service_type == "请假":
+            dup_result = await self.db.execute(
+                select(StudentAdminService).where(
+                    StudentAdminService.student_id == svc.student_id,
+                    StudentAdminService.service_type == "请假",
+                    StudentAdminService.id != svc.id,
+                    StudentAdminService.status.in_(["待审批", "已通过"]),
+                )
+            )
+            dup = dup_result.scalars().first()
+            if dup:
+                raise ConflictError(
+                    message=f"该学生已有一条请假记录（id={dup.id}，状态={dup.status}），请先处理"
+                )
+
         # 同步走 approval_engine，biz_id = service.id
         # 先找到对应的 approval_instance（如果学生端已发起），否则现场创建
         from app.models.system import ApprovalInstance
@@ -539,3 +555,209 @@ class EmployeeService:
             raise BusinessError(code=40002, message=f"暂不支持的动作类型：{action_type}")
 
         return {"executed": True, "result": result, "message": "已执行"}
+
+    # ── 客户状态机（6 态流转） ──────────────────────────
+    CUSTOMER_STATES = {"新录入", "跟进中", "意向强烈", "已签约", "已入学", "已流失"}
+    CUSTOMER_TRANSITIONS: dict[str, list[str]] = {
+        "新录入": ["跟进中", "已流失"],
+        "跟进中": ["意向强烈", "已流失"],
+        "意向强烈": ["已签约", "已流失"],
+        "已签约": ["已入学", "已流失"],
+        "已入学": ["已流失"],
+        "已流失": ["跟进中"],
+    }
+
+    async def update_customer_status(
+        self, employee_id: int, customer_id: int, new_status: str, reason: str | None
+    ) -> dict:
+        """更新客户状态，校验状态机约束，写操作日志。"""
+        if new_status not in self.CUSTOMER_STATES:
+            raise BusinessError(code=40002, message=f"无效状态：{new_status}，可选：{self.CUSTOMER_STATES}")
+
+        result = await self.db.execute(select(Customer).where(Customer.id == customer_id))
+        customer = result.scalar_one_or_none()
+        if not customer:
+            raise NotFoundError(message="客户不存在")
+
+        old_status = customer.status
+        # 兼容旧数据英文状态
+        old_status_cn = {"NEW": "新录入", "FOLLOWING": "跟进中", "CONVERTED": "已签约"}.get(old_status, old_status)
+        allowed = self.CUSTOMER_TRANSITIONS.get(old_status_cn, [])
+        if new_status not in allowed:
+            raise ConflictError(
+                message=f"不能从「{old_status_cn}」流转到「{new_status}」，允许：{allowed}"
+            )
+
+        customer.status = new_status
+        # 写操作日志
+        from app.models.system import SysOperationLog
+        log = SysOperationLog(
+            user_id=employee_id,
+            module="M3",
+            action="customer_status_change",
+            target_type="customer",
+            target_id=customer_id,
+            detail={"old_status": old_status_cn, "new_status": new_status, "reason": reason},
+        )
+        self.db.add(log)
+        await self.db.commit()
+        return {
+            "customer_id": customer_id,
+            "old_status": old_status_cn,
+            "new_status": new_status,
+            "changed_at": customer.updated_at,
+        }
+
+    # ── 意向客户查询（数据隔离 + 筛选排序） ───────────────
+    async def list_my_customers(
+        self,
+        employee_id: int,
+        status: str | None,
+        source_channel: str | None,
+        score_min: int | None,
+        sort_by: str,
+        page: int,
+        page_size: int,
+    ) -> tuple[list, int]:
+        """员工查询自己名下客户，支持筛选排序。MANAGER 传 employee_id=None 查全部。"""
+        from app.models.crm import CrmFollowUp, CustomerAssessment
+
+        stmt = select(Customer)
+        count_stmt = select(func.count()).select_from(Customer)
+        if employee_id is not None:
+            stmt = stmt.where(Customer.owner_employee_id == employee_id)
+            count_stmt = count_stmt.where(Customer.owner_employee_id == employee_id)
+        if status:
+            stmt = stmt.where(Customer.status == status)
+            count_stmt = count_stmt.where(Customer.status == status)
+        if source_channel:
+            stmt = stmt.where(Customer.source_channel == source_channel)
+            count_stmt = count_stmt.where(Customer.source_channel == source_channel)
+
+        # 按匹配度筛选：join 最新 assessment
+        if score_min is not None:
+            latest_score = (
+                select(
+                    CustomerAssessment.customer_id,
+                    func.max(CustomerAssessment.score).label("max_score"),
+                )
+                .group_by(CustomerAssessment.customer_id)
+                .subquery()
+            )
+            stmt = stmt.join(latest_score, Customer.id == latest_score.c.customer_id).where(
+                latest_score.c.max_score >= score_min
+            )
+
+        total = (await self.db.execute(count_stmt)).scalar_one()
+
+        # 排序
+        if sort_by == "updated_at":
+            stmt = stmt.order_by(Customer.updated_at.desc())
+        elif sort_by == "score":
+            latest_score = (
+                select(
+                    CustomerAssessment.customer_id,
+                    func.max(CustomerAssessment.score).label("max_score"),
+                )
+                .group_by(CustomerAssessment.customer_id)
+                .subquery()
+            )
+            stmt = stmt.outerjoin(latest_score, Customer.id == latest_score.c.customer_id).order_by(
+                latest_score.c.max_score.is_(None),
+                latest_score.c.max_score.desc(),
+            )
+        else:
+            stmt = stmt.order_by(Customer.created_at.desc())
+
+        stmt = stmt.offset((page - 1) * page_size).limit(page_size)
+        result = await self.db.execute(stmt)
+        customers = list(result.scalars().all())
+
+        # 补充 last_follow_at 和 assessment_score
+        items = []
+        for c in customers:
+            # 最新跟进时间
+            follow_result = await self.db.execute(
+                select(func.max(CrmFollowUp.created_at)).where(CrmFollowUp.customer_id == c.id)
+            )
+            last_follow = follow_result.scalar_one_or_none()
+            # 最新研判分
+            score_result = await self.db.execute(
+                select(func.max(CustomerAssessment.score)).where(CustomerAssessment.customer_id == c.id)
+            )
+            score = score_result.scalar_one_or_none()
+            items.append({
+                "id": c.id,
+                "phone": c.phone,
+                "wechat": c.wechat,
+                "name": c.name,
+                "gender": c.gender,
+                "age": c.age,
+                "education": c.education,
+                "source_channel": c.source_channel,
+                "status": c.status,
+                "owner_employee_id": c.owner_employee_id,
+                "last_follow_at": last_follow,
+                "assessment_score": score,
+                "created_at": c.created_at,
+            })
+        return items, total
+
+    # ── 投诉工单处理 ──────────────────────────────────
+    async def list_tickets(self, employee_id: int, status: str | None, page: int, page_size: int) -> tuple[list, int]:
+        """员工查看名下学生的投诉工单。"""
+        from app.models.student import StudentFeedbackTicket
+        stmt = select(StudentFeedbackTicket)
+        count_stmt = select(func.count()).select_from(StudentFeedbackTicket)
+        if status:
+            stmt = stmt.where(StudentFeedbackTicket.status == status)
+            count_stmt = count_stmt.where(StudentFeedbackTicket.status == status)
+        total = (await self.db.execute(count_stmt)).scalar_one()
+        stmt = stmt.order_by(StudentFeedbackTicket.create_time.desc()).offset((page - 1) * page_size).limit(page_size)
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all()), total
+
+    async def handle_ticket(self, employee_id: int, ticket_id: int, solution: str) -> dict:
+        """处理投诉工单，写解决方案，发事件。"""
+        from app.models.student import StudentFeedbackTicket
+        result = await self.db.execute(
+            select(StudentFeedbackTicket).where(StudentFeedbackTicket.id == ticket_id)
+        )
+        ticket = result.scalar_one_or_none()
+        if not ticket:
+            raise NotFoundError(message="工单不存在")
+        ticket.status = "已处理"
+        ticket.solution = solution
+        await self.db.commit()
+        # 发事件
+        try:
+            await self.event_bus.publish(
+                event_type="complaint.resolved",
+                source_module="M3",
+                payload={"ticket_id": ticket.id, "student_id": ticket.student_id, "handler_id": employee_id},
+            )
+        except Exception:
+            pass
+        return {"ticket_id": ticket.id, "status": "已处理"}
+
+    # ── 心理关怀待办标记 ───────────────────────────────
+    VALID_PSYCH_ACTIONS = {"communicated", "referred", "resolved"}
+
+    async def handle_psych_alert(self, employee_id: int, alert_id: int, action: str, note: str | None) -> dict:
+        """标记心理预警处理动作，形成关怀记录。"""
+        from app.models.student import StudentPsychAlert
+        from datetime import datetime, timezone
+        if action not in self.VALID_PSYCH_ACTIONS:
+            raise BusinessError(code=40002, message=f"无效动作：{action}，可选：{self.VALID_PSYCH_ACTIONS}")
+        result = await self.db.execute(
+            select(StudentPsychAlert).where(StudentPsychAlert.id == alert_id)
+        )
+        alert = result.scalar_one_or_none()
+        if not alert:
+            raise NotFoundError(message="预警不存在")
+        alert.handled_action = action
+        alert.handled_at = datetime.now(timezone.utc)
+        alert.teacher_id = employee_id
+        alert.status = "已处理"
+        await self.db.commit()
+        return {"alert_id": alert.id, "action": action, "status": "已处理"}

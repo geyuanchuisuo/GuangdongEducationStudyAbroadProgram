@@ -99,8 +99,34 @@ test('/api/v1/files (3 paths, contract §8.3)',
      lambda: None if all(p in routes for p in expected_file_paths) else
      (_ for _ in ()).throw(Exception('missing')))
 
-test(f'total paths = 20 (19 API + 1 health, got {len(routes)})',
-     lambda: None if len(routes) == 20 else
+# ── M3 员工模块路由（20 paths） ─────────────────────────
+expected_employee_paths = [
+    '/api/v1/employee/reports',
+    '/api/v1/employee/reports/summary',
+    '/api/v1/employee/reports/oral',
+    '/api/v1/employee/todos',
+    '/api/v1/employee/todos/{todo_id}',
+    '/api/v1/employee/org',
+    '/api/v1/employee/scores',
+    '/api/v1/employee/convert-applies',
+    '/api/v1/employee/admin-services',
+    '/api/v1/employee/admin-services/{service_id}/review',
+    '/api/v1/employee/crm/leads',
+    '/api/v1/employee/crm/follow-ups',
+    '/api/v1/employee/commands/parse',
+    '/api/v1/employee/commands/execute',
+    '/api/v1/employee/customers',
+    '/api/v1/employee/customers/{customer_id}/status',
+    '/api/v1/employee/tickets',
+    '/api/v1/employee/tickets/{ticket_id}/handle',
+    '/api/v1/employee/psych-alerts/{alert_id}/handle',
+]
+test('/api/v1/employee (19 paths, M3 v6.2.0)',
+     lambda: None if all(p in routes for p in expected_employee_paths) else
+     (_ for _ in ()).throw(Exception('missing')))
+
+test(f'total paths = 39 (38 API + 1 health, got {len(routes)})',
+     lambda: None if len(routes) == 39 else
      (_ for _ in ()).throw(Exception(f'expected 20')))
 
 # ===== Suite 3: MVC Layer =====
