@@ -6,8 +6,8 @@
 
 ## 零、快速定位（打开项目先看这里）
 
-**当前进度**：Phase 0 公共地基已完成（v6.0.1），Phase 1 模块并行开发中；M3 员工模块全部交付（v6.5.0 收官）；v6.6.0 需求对齐差异全部落地（org 搜索/脱敏电话/客户下钻/推荐产品/投诉导出/操作日志查询）；**v6.7.0 Phase 1.3 管理层端三项落地（经营看板/审批中心/用户管理权限配置）**；master 已合并 longtrying 全部工作（cba3303，2026-10-17）；**v6.7.3 M1/M2 字段统一到新架构 + 补注册 5 路由**；**v6.8.0 M1 客户模块 + M2 客服 Agent 一期补齐（客户 8 研判字段/6 态流转/pending_lead 待补全线索/客服 Agent 4 出口）**  
-**数据库**：31张表，81个路由端点（employee 42），MVC分层结构就绪  
+**当前进度**：Phase 0 公共地基已完成（v6.0.1），Phase 1 模块并行开发中；M3 员工模块全部交付（v6.5.0 收官）；v6.6.0 需求对齐差异全部落地；v6.7.0~v6.7.2 管理层端三项+需求核对 52/52；master 已合并 longtrying（62d4cff）与 longtrying_stu（a23fc49，第三次合并）全部工作；**M4 学生模块一期全部交付（v6.8.0 第一批 7 子模块 + v6.8.1 第二批 学生助手Agent/提醒聚合，11 paths / 13 endpoints）；v6.8.2 Docker 环境搭建 + M3/M4 数据库端到端验证通过（E2E 69/69，修复 7 项缺陷）；v6.8.3 指令解析本地兜底 + 提醒聚合缺陷修复（E2E 71/71 幂等全过）；v6.8.4 文件存储改本地磁盘后端（docker compose 移除 MinIO，零额外镜像三容器直跑）+ DIFY_BASE_URL 根因修正（3 个 Dify Agent Key 待用户补充）；v6.8.5 引入 M5 智能报告 7 paths 与前端界面，M3 dashboard 与《一期指标口径表V1》统一名称+新增差异字段（verify_all 25/25 + M5 测试 32/32 + 对齐 14/14）**；**anhoa 分支 v6.8.0：M1 客户模块 + M2 客服 Agent 一期补齐（客户 8 研判字段/6 态流转/pending_lead 待补全线索/客服 Agent 4 出口），2026-10-17 合并 origin/master 并线（v6.8.0 被两条分支并行使用，路由 81→99）**  
+**数据库**：31张表（customer 加 8 研判画像列、cs_intent_log.user_id 放宽可空、AiReport 表加 version/data_source_status/error_message 3 列），99条路由路径（98 API + 1 health；employee 42 paths，student 11 paths/13 endpoints，reports 7 paths，crm/ai/courses/events 15 paths），MVC分层结构就绪；**Docker 环境：edu-mysql/edu-redis/edu-backend 全部健康，`docker compose up -d` 三容器零额外镜像直跑（文件存储默认本地磁盘 backend_storage 卷，不再依赖 MinIO）**  
 **主基线文档**：`promts/lon/提示词整合测试_demo/docs/基础架构方案_五人并行开发.md`（v1.2.0，28项决策）
 
 **接手阅读顺序**：
@@ -15,8 +15,8 @@
 2. `docs/项目需求文档.md` — 完整业务需求
 3. `promts/lon/提示词整合测试_demo/docs/基础架构方案_五人并行开发.md` — **主基线，权重最高**
 4. `docs/开发路线图.md` — 当前进度、下一步任务
-5. `docs/接口契约v1.md` — API接口契约（v2.8.0）
-6. `docs/更新记录.md` — 最近变更（v6.8.0）
+5. `docs/接口契约v1.md` — API接口契约（v2.8.5 并集）
+6. `docs/更新记录.md` — 最近变更（v6.8.5 主线 + anhoa v6.8.0 并线）
 
 **重要规则**：
 - 主基线文档（基础架构方案）权重 > 其他参考文档（共用基座方案、公共框架等）
@@ -27,7 +27,7 @@
 1. **文档同步**：每次执行完毕都要同步更新对应的 6 份文档——更新记录.md、AGENTS.md（根目录+docs副本）、接口契约v1.md、开发路线图.md、项目需求文档.md、运行日志.md，方便后续人员/新窗口接手（每个 Agent 和人开工前必须先读 AGENTS.md）
 2. **必须测试**：每次执行完毕都要进行测试（本地快速验证优先：compileall + verify_all + 静态功能脚本；不优先启动 docker）
 3. **先记录再推送**：测试没有问题，先把测试结果写入文档（更新记录.md「测试结果」行 + 运行日志），然后推送到 git 云仓分支
-4. **分支绑定模块**：各自的分支接手各自的模块，其他人的模块不要动（longtrying=M3，ZNBG/anhoa/architecture/研判等分支勿动）
+4. **分支绑定模块**：各自的分支接手各自的模块，其他人的模块不要动（longtrying=M3，longtrying_stu=M4，ZNBG/anhoa/architecture/研判等分支勿动）
 5. **共用模块先确认**：如果改动影响到共用模块（M0 审批引擎/事件总线/AI网关/通知中心等），暂时绕过并主动提醒，经确认之后才可以动——否则会影响其他模块开发
 6. **固定开发顺序**：开发 → 写入相应的文档（更新、agents等）→ 测试 → 测试问题修复 → 写入相应的文档（更新、agents等）→ 推送 git
 7. **牢记硬性规则**：开发过程中随时对照本清单执行，不得跳步
@@ -78,7 +78,7 @@
 ### 部署
 - **容器化**：Docker + Docker Compose
 - **反向代理**：Nginx
-- **对象存储**：MinIO
+- **对象存储**：一期本地磁盘（STORAGE_BACKEND=local，落盘 storage_data 卷，零外部依赖）；二期可选 MinIO/S3（STORAGE_BACKEND=s3，代码路径已保留）
 
 ---
 
@@ -216,6 +216,7 @@ GuangdongEducationStudyAbroadProgram/
 - `/api/v1/approvals/*` - 审批引擎（v6.0.0 升级双表设计）
 - `/api/v1/notifications/*` - 通知中心
 - `/api/v1/files/*` - 文件存储
+- `/api/v1/reports/*` - 智能报告（M5，v6.8.5 合并 master 引入；与 `/employee/reports` 员工日报区分）
 
 ### 4.3.1 模块划分与职责边界（v5.0.0新增）
 
@@ -228,7 +229,7 @@ GuangdongEducationStudyAbroadProgram/
 | **M2 客服模块** | 7大场景对话、知识库RAG、活动报名闭环、转线索 | `GET /api/v1/cs/courses`, `GET /api/v1/cs/events` |
 | **M3 员工模块** | CRM管理、日报、成绩、审批、口述日报 | `GET /api/v1/employee/reports`, `GET /api/v1/employee/reports/summary` |
 | **M4 学生模块** | 请假、心理关怀、售后反馈、学业考务 | `GET /api/v1/student/psych/stats`, `GET /api/v1/student/tickets/stats` |
-| **M5 报告模块** | 5类报告生成、经营看板 | 只调各模块接口取数，不直接查别人的表 |
+| **M5 报告模块** | 5类报告生成、经营看板 | **v6.8.5 已实现**（合并 master：7 paths，一期 mock 数据，口径见 promts/智能报告/report_package） |
 
 **模块间解耦原则**：
 - 模块间业务流转走事件总线（`sys_event`），不直接import对方service
@@ -410,8 +411,9 @@ cp .env.example .env
 #   DATABASE_URL - MySQL数据库连接地址（端口59000，库名GuangdongEducationStudyAbroadProgram）
 #   REDIS_URL - Redis连接地址
 #   SECRET_KEY - JWT密钥（请用随机字符串）
-#   DIFY_BASE_URL - Dify服务地址（版本1.16.0-rc1，OpenAI协议）
-#   DIFY_*_AGENT_KEY - 各Agent的API Key
+#   DIFY_BASE_URL - Dify API 地址（nginx 80 的 /v1 路由；本机 http://localhost，容器内由 compose 覆盖为 http://host.docker.internal）
+#   DIFY_*_AGENT_KEY - 各Agent的API Key（控制台各应用「API 访问」页生成，app-开头）
+#   STORAGE_BACKEND - 文件存储后端：local（默认，本地磁盘）/ s3（MinIO，二期可选）
 ```
 
 #### 第七步：启动开发服务器
@@ -480,29 +482,35 @@ npm run dev
 # 1. 部署Dify（参考官方文档）
 # https://docs.dify.ai/getting-started/install-self-hosted
 
-# 2. 创建3个Agent应用
-# - 留学生智能管家
-# - 企业员工助手
-# - 客服Agent
+# 2. 控制台 http://localhost 注册管理员，创建3个「聊天助手」应用
+# - 客服Agent（DIFY_CUSTOMER_AGENT_KEY）：7大场景应答，年轻化人设
+# - 企业员工助手（DIFY_EMPLOYEE_AGENT_KEY）：读 inputs.capabilities，记忆窗口5轮
+# - 留学生智能管家（DIFY_STUDENT_AGENT_KEY）：读 inputs.restrictions，不承诺退费/不给医疗级建议
 
-# 3. 导入知识库文档
-# 将 dify/knowledge_base/ 下的文档导入Dify知识库
+# 3. 导入知识库文档（可选）
+# 将 dify/knowledge_base/ 下的文档（如《公司新人指南》）导入知识库并关联企业助手
 
 # 4. 获取API Key
-# 在Dify后台获取每个应用的API Key，填入后端 .env
+# 各应用左侧「API 访问」→「API 密钥」生成 app-xxx Key，填入后端 .env
 ```
 
 ### 5.4 Docker一键启动
 
 ```bash
-# 构建并启动所有服务
-docker-compose up -d
+# 启动全部服务（mysql + redis + backend，文件存储用本地磁盘卷，零额外镜像）
+docker compose up -d
+
+# 只启动核心三件套（Dify 独立部署时）
+docker compose up -d mysql redis backend
 
 # 查看日志
-docker-compose logs -f
+docker compose logs -f backend
 
 # 停止服务
-docker-compose down
+docker compose down
+
+# 上传文件持久化位置：命名卷 backend_storage（容器内 /app/storage_data）
+docker volume inspect guangdongeducationstudyabroadprogram_backend_storage
 ```
 
 ---
@@ -522,18 +530,23 @@ REDIS_URL=redis://localhost:6379
 SECRET_KEY=your-secret-key-here
 ACCESS_TOKEN_EXPIRE_MINUTES=1440
 
-# Dify（版本1.16.0-rc1，使用OpenAI协议）
-DIFY_BASE_URL=http://localhost:3000
+# Dify（版本1.16.0-rc1，Service API：/v1/chat-messages）
+# API 走 Dify nginx(80) 的 /v1 路由（3000 是 web 控制台端口且未映射宿主机，不能作 API 地址）
+DIFY_BASE_URL=http://localhost
 DIFY_VERSION=1.16.0-rc1
 DIFY_API_PROTOCOL=openai
 DIFY_STUDENT_AGENT_KEY=app-xxx
 DIFY_EMPLOYEE_AGENT_KEY=app-yyy
 DIFY_CUSTOMER_AGENT_KEY=app-zzz
 
-# MinIO
+# 文件存储（local=本地磁盘，默认零外部依赖；s3=MinIO，仅二期生产需要时切换）
+STORAGE_BACKEND=local
+STORAGE_LOCAL_DIR=./storage_data
+# 以下仅 STORAGE_BACKEND=s3 时生效
 MINIO_ENDPOINT=localhost:9000
 MINIO_ACCESS_KEY=admin
 MINIO_SECRET_KEY=password
+MINIO_BUCKET=education
 ```
 
 ### 6.2 前端环境变量（.env）
@@ -549,8 +562,9 @@ VITE_API_BASE_URL=http://localhost:8000/api/v1
 ### 7.1 Git规范
 
 **分支**：
-- `master` - 主干（**2026-10-17 已合并 longtrying 全部工作，cba3303**；保护分支已由管理员解除，当前可直推；后续如需防误推可在 gitea 后台恢复保护）
-- `longtrying` - 开发分支（当前主线，M3 全部工作在此）
+- `master` - 主干（**2026-10-17 三次合并：cba3303（v6.5.0+v6.6.0）→ 62d4cff（v6.7.0~v6.7.2+硬性规则）→ a23fc49（v6.8.2~v6.8.5 全量：M4 学生模块+Docker E2E+存储本地化+M5 智能报告+前端界面+口径统一），均无冲突**；保护分支已解除，当前可直推）
+- `longtrying` - 开发分支（M3 员工模块，已全部收官并合入 master）
+- `longtrying_stu` - 开发分支（**M4 学生模块，2026-10-17 从 longtrying e3b0160 新建**；v6.8.2~v6.8.5 全量工作已合入 master a23fc49）
 - `develop` - 开发（预留）
 - `feature/*` - 功能
 - `fix/*` - 修复
@@ -633,10 +647,11 @@ chore: 构建
 ### Q2: Dify接口调用失败？
 
 检查：
-1. DIFY_BASE_URL是否正确
-2. API Key是否正确
+1. DIFY_BASE_URL是否正确（本机 http://localhost；容器内 http://host.docker.internal。**不是 3000**——3000 是 web 控制台且未映射宿主机）
+2. API Key是否正确（app-开头，在各应用「API 访问」页生成）
 3. Agent应用是否已发布
-4. 网络是否可达
+4. 网络是否可达（容器内验证：docker exec edu-backend python -c "import socket;socket.create_connection(('host.docker.internal',80))"）
+5. Key 未配置/AI 不可用时系统自动降级：agent/chat 返回能力清单话术，commands/parse 走本地规则兜底（source=local），不阻断业务
 
 ### Q3: 前端跨域问题？
 
@@ -668,10 +683,11 @@ chore: 构建
 | **AGENTS.md** | **./AGENTS.md**（根目录） | **项目接手指南（agent自动读取，这是主文件）** |
 | AGENTS.md 副本 | docs/AGENTS.md | 与根目录保持同步的副本 |
 | 项目需求文档 | docs/项目需求文档.md | 完整需求、架构、接口、数据库 |
-| 更新记录 | docs/更新记录.md | 版本变更记录（当前v6.8.0） |
-| 开发路线图 | docs/开发路线图.md | 分期任务表（Phase 0已完成，M3 收官，Phase 1.3 管理层端已落地） |
-| 运行日志 | docs/运行日志.md | 排查记录与教训 |
-| 接口契约v2 | docs/接口契约v1.md | API接口契约（v2.8.0，31张表，81路由） |
+| 更新记录 | docs/更新记录.md | 版本变更记录（当前 v6.8.5 主线 + anhoa v6.8.0 并线条目） |
+| 开发路线图 | docs/开发路线图.md | 分期任务表（Phase 0已完成，M3 收官，M1/M2 v6.8.0 补齐，Phase 1.4 M4 一期已交付，M5 后端已合入） |
+| 运行日志 | docs/运行日志.md | 排查记录与教训（当前 LOG-019） |
+| 测试报告 | docs/测试报告_v6.8.2_M3M4端到端.md | v6.8.2 Docker E2E 69/69 检查明细+7项缺陷+7轮迭代留档 |
+| 接口契约v2 | docs/接口契约v1.md | API接口契约（v2.8.5 并集，31张表，99路由路径=98 API+1 health） |
 | **基础架构方案** | **promts/lon/提示词整合测试_demo/docs/基础架构方案_五人并行开发.md** | **主基线文档（v1.2.0，28项决策），所有参考文档权重低于此文件** |
 
 > **文档优先级**：基础架构方案_五人并行开发.md > 其他参考文档（共用基座方案、公共框架等）
@@ -699,5 +715,5 @@ chore: 构建
 
 ---
 
-**最后更新**：2026-10-17（v6.8.0：M1 客户模块 + M2 客服 Agent 一期补齐——客户 8 个研判画像字段落库、6 态流转状态机、pending_lead 待补全线索建档/查询/合并、客服 Agent 4 出口（意图落库/多轮上限/高意向转线索/推荐），pytest 32/32；v6.7.4：全项目审查报告落档）  
+**最后更新**：2026-10-17（anhoa 合并 origin/master 并线：anhoa v6.8.0（M1 客户模块 + M2 客服 Agent 一期补齐——客户 8 个研判画像字段落库、6 态流转状态机、pending_lead 待补全线索建档/查询/合并、客服 Agent 4 出口，pytest 32/32）与 master v6.8.2~v6.8.5 主线（M4 学生模块全量+Docker E2E+存储本地化+M5 智能报告+前端界面+指标口径统一）双向合流；冲突 main.py/verify_all.py/6 份文档并集解决，路由 81→99；详见更新记录双方条目与 LOG-019）  
 **维护人**：开发团队

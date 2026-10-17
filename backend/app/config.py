@@ -12,13 +12,16 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "change-this-to-a-secure-random-string"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
 
-    DIFY_BASE_URL: str = "http://localhost:3000"
+    DIFY_BASE_URL: str = "http://localhost"
     DIFY_VERSION: str = "1.16.0-rc1"
     DIFY_API_PROTOCOL: str = "openai"
     DIFY_STUDENT_AGENT_KEY: str = ""
     DIFY_EMPLOYEE_AGENT_KEY: str = ""
     DIFY_CUSTOMER_AGENT_KEY: str = ""
 
+    # 文件存储后端：local=本地磁盘（默认，一期单机 Docker 零外部依赖）/ s3=MinIO 等 S3 兼容存储（二期生产可选）
+    STORAGE_BACKEND: str = "local"
+    STORAGE_LOCAL_DIR: str = "./storage_data"
     MINIO_ENDPOINT: str = "localhost:9000"
     MINIO_ACCESS_KEY: str = "admin"
     MINIO_SECRET_KEY: str = "password"

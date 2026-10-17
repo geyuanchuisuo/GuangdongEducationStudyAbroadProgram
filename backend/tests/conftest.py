@@ -12,6 +12,10 @@ from app.models.course import CourseProject
 from app.models.event import EventLecture
 from app.models.user import User
 
+# e2e_m3m4_test.py 是 Docker 容器内直接执行的脚本（import 时替换 sys.stdout），
+# 不应被 pytest 收集（默认 *_test.py 模式会 import 它，破坏捕获导致全套收集失败）
+collect_ignore = ["e2e_m3m4_test.py"]
+
 
 @pytest_asyncio.fixture
 async def client(tmp_path):

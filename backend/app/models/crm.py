@@ -73,6 +73,9 @@ class AiReport(Base):
     time_range_end = mapped_column(DateTime, nullable=True)
     generated_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("sys_user.id"), nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="generating", index=True)
+    version: Mapped[int] = mapped_column(Integer, default=1, comment="版本号（同类型同周期递增）")
+    data_source_status: Mapped[str] = mapped_column(String(20), default="mock", comment="数据来源状态(mock/production)")
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True, comment="生成失败原因")
     created_at = mapped_column(DateTime, server_default=func.now())
 
 
