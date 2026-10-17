@@ -102,6 +102,24 @@ export const platformApi = {
     specialCases: (id: number) => toData(request.get('/reports/' + id + '/special_cases')),
     download: (id: number) => request.get('/reports/' + id + '/download', { responseType: 'blob' }),
   },
+  student: {
+    submitAdminService: (data: AnyRecord) => toData(request.post('/student/admin-services', data)),
+    listAdminServices: (params: AnyRecord = {}) => toData(request.get('/student/admin-services', { params: query(params) })),
+    psychChat: (data: AnyRecord) => toData(request.post('/student/psych/chat', data)),
+    psychProfile: () => toData(request.get('/student/psych/profile')),
+    submitTicket: (data: AnyRecord) => toData(request.post('/student/tickets', data)),
+    listTickets: (params: AnyRecord = {}) => toData(request.get('/student/tickets', { params: query(params) })),
+    academic: () => toData(request.get('/student/academic')),
+    progress: () => toData(request.get('/student/progress')),
+    updateProgress: (studentId: number, data: AnyRecord) => toData(request.put('/employee/students/' + studentId + '/progress', data)),
+    lifeFaq: () => toData(request.get('/student/life/faq')),
+    moreServices: () => toData(request.get('/student/services')),
+    agentChat: (data: AnyRecord) => toData(request.post('/student/agent/chat', data)),
+    reminders: () => toData(request.get('/student/reminders')),
+  },
+  users: {
+    updateMe: (data: AnyRecord) => toData(request.put('/users/me', data)),
+  },
   files: {
     upload: (module: string, file: File) => {
       const form = new FormData()

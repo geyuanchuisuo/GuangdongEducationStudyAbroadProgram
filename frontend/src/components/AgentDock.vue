@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { ChatDotRound, Close, Promotion } from '@element-plus/icons-vue'
+import { platformApi } from '../api/platform'
 
 const props = defineProps<{ type?: 'public' | 'student' | 'employee' | 'manager'; autoOpen?: boolean }>()
 const open = ref(false)
@@ -8,6 +9,7 @@ watch(() => props.autoOpen, (value) => {
   if (value) window.setTimeout(() => { open.value = true }, 450)
 }, { immediate: true })
 const input = ref('')
+const sessionId = ref('new')
 const messages = ref<Array<{ role: 'user' | 'agent'; text: string }>>([
   { role: 'agent', text: '你好，我是粤教智能助手。可以帮你查询项目、处理待办或了解服务进度。' },
 ])
@@ -24,14 +26,26 @@ const quick = computed(() => {
   return ['推荐适合我的项目', '近期有什么活动', '咨询报名条件']
 })
 
-function send(text = input.value) {
+async function send(text = input.value) {
   const value = text.trim()
   if (!value) return
   messages.value.push({ role: 'user', text: value })
   input.value = ''
-  window.setTimeout(() => {
-    messages.value.push({ role: 'agent', text: '收到。我会基于当前权限和演示数据为你整理信息；涉及写操作时会先请你确认。' })
-  }, 320)
+  try {
+    let reply = '收到。我会基于当前权限和业务数据为你整理信息；涉及写操作时会先请你确认。'
+    if (props.type === 'student') {
+      const result: any = await platformApi.student.agentChat({ message: value, session_id: sessionId.value })
+      sessionId.value = result?.session_id || sessionId.value
+      reply = result?.reply || reply
+    } else if (props.type === 'employee' || props.type === 'manager') {
+      const result: any = await platformApi.employee.agentChat({ message: value, session_id: sessionId.value })
+      sessionId.value = result?.session_id || sessionId.value
+      reply = result?.reply || reply
+    }
+    messages.value.push({ role: 'agent', text: reply })
+  } catch {
+    messages.value.push({ role: 'agent', text: '当前助手服务暂不可用，请稍后重试。' })
+  }
 }
 </script>
 
