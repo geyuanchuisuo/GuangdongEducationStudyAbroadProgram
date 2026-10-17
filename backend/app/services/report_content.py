@@ -57,10 +57,19 @@ def build_report_content(
     period_end: datetime,
     version: int,
     generated_at: datetime,
+    data_quality: dict | None = None,
+    extra_notes: list[str] | None = None,
 ) -> dict:
-    """组装统一报告内容。summary / trend / analysis / suggestions 由阶段 5 AI 填充。"""
+    """组装统一报告内容。summary / trend / analysis / suggestions 由阶段 5 AI 填充。
+
+    data_quality（M5-02.5 三态）：各数据域 ok/empty/read_failed/data_unavailable 如实标注；
+    extra_notes：生产模式下各数据域的取数说明，追加到口径说明之后。
+    """
     data_source_status = "production" if not ds.is_mock else "mock"
-    return {
+    notes = DATA_NOTES[report_type]
+    if extra_notes:
+        notes = notes + "　｜　" + " ".join(extra_notes)
+    content = {
         "header": {
             "report_name": REPORT_TYPE_NAMES[report_type],
             "report_type": report_type,
@@ -76,5 +85,8 @@ def build_report_content(
         "trend": None,
         "analysis": None,
         "suggestions": None,
-        "data_notes": DATA_NOTES[report_type],
+        "data_notes": notes,
     }
+    if data_quality is not None:
+        content["data_quality"] = data_quality
+    return content
