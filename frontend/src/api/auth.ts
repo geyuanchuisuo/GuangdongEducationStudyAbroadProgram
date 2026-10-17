@@ -21,3 +21,4 @@ export function getMe() {
 export function updateMe(data: Record<string, any>) {
   return request.put('/users/me', data)
 }
+
