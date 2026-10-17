@@ -14,11 +14,15 @@ from app.repositories.employee_repo import (
     TodoRepository,
 )
 from app.schemas.employee import (
+    AdminServiceAction,
+    AdminServiceOut,
     ConvertApplyCreate,
     ConvertApplyOut,
     DailyReportCreate,
     DailyReportOut,
     DailyReportSummaryItem,
+    OralReportCreate,
+    OralReportOut,
     OrgNode,
     ScoreCreate,
     ScoreOut,
@@ -188,3 +192,51 @@ async def apply_convert(
 ):
     result = await service.apply_convert(current_user.id, data.customer_id, data.approver_id, data.title)
     return success_response(data=ConvertApplyOut(**result), message="已提交经理审批")
+
+
+# ── 学生行政服务审批（请假/转班/复学等） ───────────────
+@router.get("/admin-services", summary="我需审批的学生行政服务单")
+async def list_admin_services(
+    status: str | None = Query(None, description="待审批/已通过/已拒绝"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    current_user: User = Depends(require_user_type("EMPLOYEE", "MANAGER")),
+    service: EmployeeService = Depends(_get_service),
+):
+    items, total = await service.list_admin_services(current_user.id, status, page, page_size)
+    return success_response(
+        data={
+            "items": [AdminServiceOut.model_validate(s) for s in items],
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+        }
+    )
+
+
+@router.post("/admin-services/{service_id}/review", summary="审批学生行政服务单（走 approval leave）")
+async def review_admin_service(
+    service_id: int,
+    data: AdminServiceAction,
+    current_user: User = Depends(require_user_type("EMPLOYEE", "MANAGER")),
+    service: EmployeeService = Depends(_get_service),
+):
+    result = await service.review_admin_service(
+        service_id, current_user.id, data.action, data.comment
+    )
+    msg = "已批准" if data.action == "approve" else "已拒绝"
+    return success_response(data=result, message=msg)
+
+
+# ── 口述日报（AI 整理） ───────────────────────────────
+@router.post("/reports/oral", summary="口述日报（AI 整理，可选落库）")
+async def oral_report(
+    data: OralReportCreate,
+    save: bool = Query(False, description="是否同时落库到 employee_daily_report"),
+    current_user: User = Depends(require_user_type("EMPLOYEE", "MANAGER")),
+    service: EmployeeService = Depends(_get_service),
+):
+    result = await service.generate_oral_report(
+        current_user.id, data.raw_text, data.report_date, save=save
+    )
+    return success_response(data=OralReportOut(**result), message="整理完成")

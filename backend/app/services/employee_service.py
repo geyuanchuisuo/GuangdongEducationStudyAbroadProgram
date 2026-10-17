@@ -127,3 +127,139 @@ class EmployeeService:
             "biz_id": instance.biz_id,
             "status": instance.status,
         }
+
+    # ── 学生行政服务审批（请假/转班/复学等） ─────────────
+    async def list_admin_services(
+        self, employee_id: int, status: str | None, page: int, page_size: int
+    ) -> tuple[list, int]:
+        """员工查询自己作为 approver 的学生行政服务审批单（学生请假等）。"""
+        from app.models.student import StudentAdminService
+        stmt = select(StudentAdminService).where(StudentAdminService.approver_id == employee_id)
+        count_stmt = select(StudentAdminService.id).where(StudentAdminService.approver_id == employee_id)
+        if status:
+            stmt = stmt.where(StudentAdminService.status == status)
+            count_stmt = count_stmt.where(StudentAdminService.status == status)
+        total = (await self.db.execute(count_stmt)).all()
+        stmt = stmt.order_by(StudentAdminService.create_time.desc()).offset((page - 1) * page_size).limit(page_size)
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all()), len(total)
+
+    async def review_admin_service(
+        self, service_id: int, employee_id: int, action: str, comment: str | None
+    ) -> dict:
+        """审批学生行政服务单。走 approval_engine.leave，同步更新 student_admin_service.status。"""
+        from app.models.student import StudentAdminService
+        result = await self.db.execute(
+            select(StudentAdminService).where(StudentAdminService.id == service_id)
+        )
+        svc = result.scalar_one_or_none()
+        if not svc:
+            raise NotFoundError(message="审批单不存在")
+        if svc.approver_id != employee_id:
+            raise ForbiddenError(message="你不是该单的审批人")
+        if svc.status != "待审批":
+            raise ConflictError(message=f"该单已处理，当前状态：{svc.status}")
+
+        if action not in ("approve", "reject"):
+            raise BusinessError(code=40002, message="action 必须是 approve 或 reject")
+
+        # 同步走 approval_engine，biz_id = service.id
+        # 先找到对应的 approval_instance（如果学生端已发起），否则现场创建
+        from app.models.system import ApprovalInstance
+        inst_result = await self.db.execute(
+            select(ApprovalInstance).where(
+                ApprovalInstance.biz_type == ApprovalBizType.LEAVE.value,
+                ApprovalInstance.biz_id == service_id,
+            )
+        )
+        instance = inst_result.scalar_one_or_none()
+        if instance is None:
+            # 学生端未走引擎，员工侧补建（initiator 用学生 id）
+            instance = await approval_engine.create(
+                biz_type=ApprovalBizType.LEAVE,
+                initiator_id=svc.student_id,
+                approver_id=employee_id,
+                biz_id=service_id,
+                title=f"学生{svc.student_id} {svc.service_type} 申请",
+            )
+
+        if action == "approve":
+            instance = await approval_engine.approve(instance.id, employee_id, comment)
+            svc.status = "已通过"
+            from app.services.event_bus import event_bus
+            from app.services.event_contracts import EventType
+            await event_bus.publish(
+                EventType.LEAVE_APPROVED,
+                source_module="M3",
+                payload={"student_id": svc.student_id, "leave_id": svc.id, "status": svc.status},
+            )
+        else:
+            instance = await approval_engine.reject(instance.id, employee_id, comment)
+            svc.status = "已拒绝"
+            from app.services.event_bus import event_bus
+            from app.services.event_contracts import EventType
+            await event_bus.publish(
+                EventType.LEAVE_REJECTED,
+                source_module="M3",
+                payload={"student_id": svc.student_id, "leave_id": svc.id, "status": svc.status},
+            )
+
+        await self.db.commit()
+        return {
+            "service_id": svc.id,
+            "status": svc.status,
+            "approval_id": instance.id,
+            "approval_status": instance.status,
+        }
+
+    # ── 口述日报（AI 整理） ──────────────────────────────
+    async def generate_oral_report(
+        self, employee_id: int, raw_text: str, report_date: date | None, save: bool = False
+    ) -> dict:
+        """调 AI 网关把口述文本整理成结构化日报。
+
+        save=True 时同时落库到 employee_daily_report（沿用唯一约束）。
+        """
+        from datetime import date as _date
+        from app.services.ai_service import AgentType, ai_service
+
+        target_date = report_date or _date.today()
+        prompt = (
+            "请将以下员工口述内容整理为结构化工作日报，"
+            "包含三个部分：一、今日完成事项（按条列出）；二、遇到的问题；三、明日计划。"
+            "保持简洁专业，不添加未提及的内容。\n\n"
+            f"口述原文：{raw_text}"
+        )
+        try:
+            resp = await ai_service.chat(
+                agent=AgentType.EMPLOYEE,
+                message=prompt,
+                session_id="new",
+                user_id=f"employee_{employee_id}",
+            )
+            structured = resp.content
+            session_id = resp.session_id
+        except Exception as exc:
+            raise BusinessError(code=50002, message=f"AI 整理失败：{exc}") from exc
+
+        saved_id = None
+        if save:
+            # 沿用日报唯一约束，重复抛 40901
+            existing = await self.report_repo.get_by_emp_date(employee_id, target_date)
+            if existing:
+                raise ConflictError(message=f"{target_date} 日报已存在，请直接修改而非新建")
+            report = EmployeeDailyReport(
+                employee_id=employee_id,
+                report_date=target_date,
+                content=structured,
+            )
+            report = await self.report_repo.create(report)
+            saved_id = report.id
+
+        return {
+            "raw_text": raw_text,
+            "structured": structured,
+            "report_date": target_date,
+            "session_id": session_id,
+            "saved_report_id": saved_id,
+        }

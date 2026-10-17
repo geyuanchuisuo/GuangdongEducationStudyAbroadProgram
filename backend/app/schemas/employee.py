@@ -109,3 +109,37 @@ class ConvertApplyOut(BaseModel):
     biz_type: str
     biz_id: int
     status: str
+
+
+# ── 学生行政服务审批（员工代处理/审批） ───────────────
+class AdminServiceOut(BaseModel):
+    id: int
+    student_id: int
+    service_type: str
+    start_time: Optional[datetime] = None
+    end_time: Optional[datetime] = None
+    reason: Optional[str] = None
+    status: str
+    approver_id: Optional[int] = None
+    create_time: Optional[datetime] = None
+
+    model_config = {"from_attributes": True}
+
+
+class AdminServiceAction(BaseModel):
+    action: str = Field(..., description="approve / reject")
+    comment: Optional[str] = None
+
+
+# ── 口述日报（AI 整理） ───────────────────────────────
+class OralReportCreate(BaseModel):
+    raw_text: str = Field(..., min_length=1, description="员工口述/随意记录原文")
+    report_date: Optional[date] = Field(None, description="日报日期，缺省今天")
+
+
+class OralReportOut(BaseModel):
+    raw_text: str
+    structured: str = Field(..., description="AI 整理后的结构化日报文本")
+    report_date: date
+    session_id: Optional[str] = None
+    saved_report_id: Optional[int] = Field(None, description="如同时落库，返回日报 ID")

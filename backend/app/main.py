@@ -11,6 +11,12 @@ from app.core.middleware import RequestLogMiddleware
 from app.core.response import error_response
 from app.database import engine
 from app.models import Base
+from app.services.event_bus import event_bus
+from app.services.event_contracts import EventType
+from app.services.employee_event_handlers import (
+    handle_customer_registered,
+    handle_psych_alert_created,
+)
 from app.utils.logger import logger
 
 
@@ -20,6 +26,12 @@ async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     logger.info("数据库表初始化完成（共 %d 张表）", len(Base.metadata.tables))
+
+    # M3 员工模块：订阅事件 → 生成员工待办
+    event_bus.subscribe(EventType.CUSTOMER_REGISTERED.value, handle_customer_registered)
+    event_bus.subscribe(EventType.PSYCH_ALERT_CREATED.value, handle_psych_alert_created)
+    logger.info("M3 事件订阅完成：customer.registered / psych_alert.created")
+
     yield
     await engine.dispose()
     logger.info("应用关闭")
