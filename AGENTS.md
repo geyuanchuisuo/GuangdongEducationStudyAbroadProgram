@@ -6,8 +6,8 @@
 
 ## 零、快速定位（打开项目先看这里）
 
-**当前进度**：Phase 0 公共地基已完成（v6.0.1），Phase 1 模块并行开发中；M3 员工模块全部交付（v6.5.0 收官）；v6.6.0 需求对齐差异全部落地；v6.7.0~v6.7.2 管理层端三项+需求核对 52/52；**M4 学生模块一期全部交付（v6.8.0 第一批 7 子模块 + v6.8.1 第二批 学生助手Agent/提醒聚合，11 paths / 13 endpoints）；v6.8.2 Docker 环境搭建 + M3/M4 数据库端到端验证通过（E2E 69/69，修复 7 项缺陷）；v6.8.3 指令解析本地兜底 + 提醒聚合 TicketUpdateItem 缺陷修复（E2E 71/71 幂等全过）；v6.8.4 文件存储改本地磁盘后端（docker compose 移除 MinIO，零额外镜像三容器直跑，静态 17/17+HTTP 11/11+E2E 71/71）+ DIFY_BASE_URL 根因修正（3 个 Dify Agent Key 待用户补充）**；master 已合并 longtrying 全部工作（62d4cff，2026-10-17，无冲突）  
-**数据库**：31张表，74条路由路径（73 API + 1 health；employee 42 paths，student 11 paths/13 endpoints），MVC分层结构就绪；**Docker 环境：edu-mysql/edu-redis/edu-backend 全部健康，`docker compose up -d` 三容器零额外镜像直跑（文件存储默认本地磁盘 backend_storage 卷，不再依赖 MinIO）**  
+**当前进度**：Phase 0 公共地基已完成（v6.0.1），Phase 1 模块并行开发中；M3 员工模块全部交付（v6.5.0 收官）；v6.6.0 需求对齐差异全部落地；v6.7.0~v6.7.2 管理层端三项+需求核对 52/52；**M4 学生模块一期全部交付（v6.8.0 第一批 7 子模块 + v6.8.1 第二批 学生助手Agent/提醒聚合，11 paths / 13 endpoints）；v6.8.2 Docker 环境搭建 + M3/M4 数据库端到端验证通过（E2E 69/69，修复 7 项缺陷）；v6.8.3 指令解析本地兜底 + 提醒聚合 TicketUpdateItem 缺陷修复（E2E 71/71 幂等全过）；v6.8.4 文件存储改本地磁盘后端（docker compose 移除 MinIO，零额外镜像三容器直跑）+ DIFY_BASE_URL 根因修正（3 个 Dify Agent Key 待用户补充）；v6.8.5 合并 master（frontend-design #7+ZNBG）引入 M5 智能报告 7 paths 与前端界面，M3 dashboard 与《一期指标口径表V1》统一名称+新增差异字段（verify_all 25/25 + M5 测试 32/32 + 对齐 14/14）**；master 已合并 longtrying 全部工作（62d4cff，2026-10-17，无冲突）  
+**数据库**：31张表（AiReport 表 v6.8.5 加 version/data_source_status/error_message 3 列），81条路由路径（80 API + 1 health；employee 42 paths，student 11 paths/13 endpoints，reports 7 paths），MVC分层结构就绪；**Docker 环境：edu-mysql/edu-redis/edu-backend 全部健康，`docker compose up -d` 三容器零额外镜像直跑（文件存储默认本地磁盘 backend_storage 卷，不再依赖 MinIO）**  
 **主基线文档**：`promts/lon/提示词整合测试_demo/docs/基础架构方案_五人并行开发.md`（v1.2.0，28项决策）
 
 **接手阅读顺序**：
@@ -15,8 +15,8 @@
 2. `docs/项目需求文档.md` — 完整业务需求
 3. `promts/lon/提示词整合测试_demo/docs/基础架构方案_五人并行开发.md` — **主基线，权重最高**
 4. `docs/开发路线图.md` — 当前进度、下一步任务
-5. `docs/接口契约v1.md` — API接口契约（v2.8.4）
-6. `docs/更新记录.md` — 最近变更（v6.8.4）
+5. `docs/接口契约v1.md` — API接口契约（v2.8.5）
+6. `docs/更新记录.md` — 最近变更（v6.8.5）
 
 **重要规则**：
 - 主基线文档（基础架构方案）权重 > 其他参考文档（共用基座方案、公共框架等）
@@ -216,6 +216,7 @@ GuangdongEducationStudyAbroadProgram/
 - `/api/v1/approvals/*` - 审批引擎（v6.0.0 升级双表设计）
 - `/api/v1/notifications/*` - 通知中心
 - `/api/v1/files/*` - 文件存储
+- `/api/v1/reports/*` - 智能报告（M5，v6.8.5 合并 master 引入；与 `/employee/reports` 员工日报区分）
 
 ### 4.3.1 模块划分与职责边界（v5.0.0新增）
 
@@ -228,7 +229,7 @@ GuangdongEducationStudyAbroadProgram/
 | **M2 客服模块** | 7大场景对话、知识库RAG、活动报名闭环、转线索 | `GET /api/v1/cs/courses`, `GET /api/v1/cs/events` |
 | **M3 员工模块** | CRM管理、日报、成绩、审批、口述日报 | `GET /api/v1/employee/reports`, `GET /api/v1/employee/reports/summary` |
 | **M4 学生模块** | 请假、心理关怀、售后反馈、学业考务 | `GET /api/v1/student/psych/stats`, `GET /api/v1/student/tickets/stats` |
-| **M5 报告模块** | 5类报告生成、经营看板 | 只调各模块接口取数，不直接查别人的表 |
+| **M5 报告模块** | 5类报告生成、经营看板 | **v6.8.5 已实现**（合并 master：7 paths，一期 mock 数据，口径见 promts/智能报告/report_package） |
 
 **模块间解耦原则**：
 - 模块间业务流转走事件总线（`sys_event`），不直接import对方service
@@ -682,11 +683,11 @@ chore: 构建
 | **AGENTS.md** | **./AGENTS.md**（根目录） | **项目接手指南（agent自动读取，这是主文件）** |
 | AGENTS.md 副本 | docs/AGENTS.md | 与根目录保持同步的副本 |
 | 项目需求文档 | docs/项目需求文档.md | 完整需求、架构、接口、数据库 |
-| 更新记录 | docs/更新记录.md | 版本变更记录（当前v6.8.4） |
-| 开发路线图 | docs/开发路线图.md | 分期任务表（Phase 0已完成，M3 收官，Phase 1.4 M4 一期已交付） |
-| 运行日志 | docs/运行日志.md | 排查记录与教训（当前 LOG-017） |
+| 更新记录 | docs/更新记录.md | 版本变更记录（当前v6.8.5） |
+| 开发路线图 | docs/开发路线图.md | 分期任务表（Phase 0已完成，M3 收官，Phase 1.4 M4 一期已交付，M5 后端已合入） |
+| 运行日志 | docs/运行日志.md | 排查记录与教训（当前 LOG-018） |
 | 测试报告 | docs/测试报告_v6.8.2_M3M4端到端.md | v6.8.2 Docker E2E 69/69 检查明细+7项缺陷+7轮迭代留档 |
-| 接口契约v2 | docs/接口契约v1.md | API接口契约（v2.8.4，31张表，74路由路径） |
+| 接口契约v2 | docs/接口契约v1.md | API接口契约（v2.8.5，31张表，81路由路径） |
 | **基础架构方案** | **promts/lon/提示词整合测试_demo/docs/基础架构方案_五人并行开发.md** | **主基线文档（v1.2.0，28项决策），所有参考文档权重低于此文件** |
 
 > **文档优先级**：基础架构方案_五人并行开发.md > 其他参考文档（共用基座方案、公共框架等）
@@ -714,5 +715,5 @@ chore: 构建
 
 ---
 
-**最后更新**：2026-10-17 16:29（v6.8.4——文件存储默认改本地磁盘后端：file_storage.py 双后端 local/s3（s3 延迟 import，路径穿越白名单+resolve 双校验），docker-compose 移除 minio 服务与卷、backend 增 backend_storage 卷与 STORAGE_* 环境变量，三容器零额外镜像直跑；DIFY_BASE_URL 根因修正 3000→http://localhost（容器内 host.docker.internal，已实测连通），3 个 Dify Agent Key 待用户控制台创建后补充；测试：静态 17/17、HTTP 端到端 11/11、verify_all 24/24、E2E 71/71 无回归；路由 74 不变）  
+**最后更新**：2026-10-17 17:02（v6.8.5——拉取 master 合并：引入 M5 智能报告模块全套（reports.py 7 paths + report_* 服务/schemas + AiReport 表加 version/data_source_status/error_message + 32 用例 + report_package 口径文档）与前端界面更新，唯一冲突 main.py 双向路由注册合并保留双方；按用户指令功能相似统一名称+新增差异字段：M3 dashboard 对齐《一期指标口径表V1》（customers.status_overview/new_this_period 同名同构，overview 补 intent/converted/lost/new_outcomes，旧字段向下兼容），术语统一 /reports=智能报告 vs /employee/reports=员工日报；依赖 uv sync 补 reportlab；测试：verify_all 25/25（路由 81）、M5 测试 32/32、dashboard 对齐 14/14）  
 **维护人**：开发团队

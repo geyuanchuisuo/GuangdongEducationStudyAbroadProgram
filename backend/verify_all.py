@@ -170,9 +170,23 @@ test('/api/v1/student (11 paths, M4 v6.8.1 学生端+进度员工端)',
      lambda: None if all(p in routes for p in expected_student_paths) else
      (_ for _ in ()).throw(Exception('missing')))
 
-test(f'total paths = 74 (73 API + 1 health, got {len(routes)})',
-     lambda: None if len(routes) == 74 else
-     (_ for _ in ()).throw(Exception(f'expected 74')))
+# ── M5 智能报告路由（7 paths，合并 master frontend-design #7 引入） ─────────────────────────
+expected_report_paths = [
+    '/api/v1/reports',
+    '/api/v1/reports/generate',
+    '/api/v1/reports/{report_id}',
+    '/api/v1/reports/{report_id}/customers',
+    '/api/v1/reports/{report_id}/psych_cases',
+    '/api/v1/reports/{report_id}/special_cases',
+    '/api/v1/reports/{report_id}/download',
+]
+test('/api/v1/reports (7 paths, M5 智能报告)',
+     lambda: None if all(p in routes for p in expected_report_paths) else
+     (_ for _ in ()).throw(Exception('missing')))
+
+test(f'total paths = 81 (80 API + 1 health, got {len(routes)})',
+     lambda: None if len(routes) == 81 else
+     (_ for _ in ()).throw(Exception(f'expected 81')))
 
 # ===== Suite 3: MVC Layer =====
 print()
@@ -191,7 +205,8 @@ from app.schemas.student import (AdminServiceCreate, AdminServiceOut, PsychChatC
                                  PsychProfileOut, TicketCreate, TicketOut, AcademicItemOut,
                                  AcademicOut, ProgressStageOut, ProgressUpdate, RemindersOut,
                                  AgentChatCreate, AgentChatOut)
-test('schemas (6 modules, M4 v6.8.1 included)', lambda: None)
+from app.schemas.report import (ReportGenerateRequest, ReportOut, MockReportDataset)
+test('schemas (7 modules, M4 v6.8.1 + M5 合并引入)', lambda: None)
 
 from app.repositories.user_repo import UserRepository
 from app.repositories.customer_repo import CustomerRepository
@@ -206,7 +221,9 @@ from app.services.event_contracts import EventType
 from app.services.file_storage import FileStorageService, FileModule, FileStorageError
 from app.services.notification_service import NotificationService, NotificationType
 from app.services.student_service import StudentService, STUDENT_CAPABILITIES, PROGRESS_STAGES
-test('services (9 modules, M4 included)', lambda: None)
+from app.services.report_service import ReportService
+from app.services.report_calculator import calculate_customer_stats
+test('services (10 modules, M4 + M5 合并引入)', lambda: None)
 
 # ===== Suite 4: Migration =====
 print()

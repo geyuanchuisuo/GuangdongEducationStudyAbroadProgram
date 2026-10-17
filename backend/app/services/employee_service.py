@@ -1498,6 +1498,9 @@ class EmployeeService:
         )).scalar_one()
 
         # ── 业绩概览（本月新增意向/转化率/在办学生数/投诉率） ──
+        # 对齐《promts/智能报告/report_package/02_一期指标口径表V1.md》：
+        # 期末意向=新录入+跟进中+意向强烈；期末成交=已签约+已入学；期末流失=已流失
+        intent = funnel[0]["count"] + funnel[1]["count"] + funnel[2]["count"]
         converted = funnel[-1]["count"] + funnel[-2]["count"]  # 已入学 + 已签约
         conversion_rate = round(converted / total * 100, 2) if total else 0.0
         active_students = (await self.db.execute(
@@ -1510,17 +1513,53 @@ class EmployeeService:
         )).scalar_one()
         complaint_rate = round(tickets_total / active_students * 100, 2) if active_students else 0.0
 
+        # 新增去向（口径表：本期新增客户按期末状态分为仍意向/已签约/已入学/已流失，合计=新增数）
+        new_status_rows = (await self.db.execute(
+            select(Customer.status).where(Customer.created_at >= month_start)
+        )).all()
+        new_outcomes = {"intent": 0, "signed": 0, "enrolled": 0, "lost": 0}
+        for (st,) in new_status_rows:
+            if st in ("已签约", "SIGNED", "CONVERTED"):
+                new_outcomes["signed"] += 1
+            elif st in ("已入学", "ENROLLED"):
+                new_outcomes["enrolled"] += 1
+            elif st in ("已流失", "LOST"):
+                new_outcomes["lost"] += 1
+            else:
+                new_outcomes["intent"] += 1  # 未签约未流失即仍意向
+
+        # 期末状态总览（与 M5 报告 status_overview 统一名称与结构，英文 6 态键）
+        status_overview = {
+            "NEW": funnel[0]["count"],
+            "FOLLOWING": funnel[1]["count"],
+            "STRONG": funnel[2]["count"],
+            "SIGNED": funnel[3]["count"],
+            "ENROLLED": funnel[4]["count"],
+            "LOST": lost,
+            "total": total,
+            "intent": intent,
+            "converted": converted,
+            "lost": lost,
+        }
+
         return {
             "overview": {
                 "new_prospects_this_month": new_this_month,
+                "new_this_period": new_this_month,
                 "conversion_rate": conversion_rate,
                 "active_students": active_students,
                 "complaint_rate": complaint_rate,
+                "intent": intent,
+                "converted": converted,
+                "lost": lost,
+                "new_outcomes": new_outcomes,
             },
             "customers": {
                 "total": total,
                 "new_this_month": new_this_month,
+                "new_this_period": new_this_month,
                 "by_status": status_counts,
+                "status_overview": status_overview,
                 "by_source": by_source,
                 "funnel": funnel,
                 "lost": lost,
