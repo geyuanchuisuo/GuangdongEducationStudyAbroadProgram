@@ -59,6 +59,19 @@ services:
       - backend_storage:/app/storage_data
     command: /app/.venv/bin/uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
+  nginx:
+    image: nginx:alpine
+    container_name: edu-nginx
+    # 80 端口被本机 Dify 占用，改用 8080
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./frontend/dist:/usr/share/nginx/html:ro
+    depends_on:
+      - backend
+    restart: unless-stopped
+
 volumes:
   mysql_data:
   redis_data:

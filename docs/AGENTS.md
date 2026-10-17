@@ -6,7 +6,7 @@
 
 ## 零、快速定位（打开项目先看这里）
 
-**当前进度**：Phase 0 公共地基已完成（v6.0.1），Phase 1 模块并行开发中；M3 员工模块全部交付（v6.5.0 收官）；v6.6.0 需求对齐差异全部落地；v6.7.0~v6.7.2 管理层端三项+需求核对 52/52；master 已合并 longtrying（62d4cff）与 longtrying_stu（a23fc49，第三次合并）全部工作；**M4 学生模块一期全部交付（v6.8.0 第一批 7 子模块 + v6.8.1 第二批 学生助手Agent/提醒聚合，11 paths / 13 endpoints）；v6.8.2 Docker 环境搭建 + M3/M4 数据库端到端验证通过（E2E 69/69，修复 7 项缺陷）；v6.8.3 指令解析本地兜底 + 提醒聚合缺陷修复（E2E 71/71 幂等全过）；v6.8.4 文件存储改本地磁盘后端（docker compose 移除 MinIO，零额外镜像三容器直跑）+ DIFY_BASE_URL 根因修正；v6.8.5 引入 M5 智能报告 7 paths 与前端界面，M3 dashboard 与《一期指标口径表V1》统一名称+新增差异字段（verify_all 25/25 + M5 测试 32/32 + 对齐 14/14）；v6.8.6 AI 全链路打通：Dify 绑定 mimo-v2.6-flash（api.xiaomimimo.com），3 个 Agent 应用创建并回填 app key，真实 AI 链路 6/6 验证通过，环境缺口全部关闭**；**anhoa 分支 v6.8.0：M1 客户模块 + M2 客服 Agent 一期补齐（客户 8 研判字段/6 态流转/pending_lead 待补全线索/客服 Agent 4 出口），2026-10-17 两次合并 origin/master 并线（v6.8.0 被两条分支并行使用，路由 81→99）**；**v6.8.8 P1 运行时缺陷修复：ai_service.py 恢复 M3/M4 依赖的 AgentType/AIService/ai_service（anhoa 合并重写所致，函数内延迟导入绕过静态检查），客服 AiService 与通用 AIService 双服务共存，容器内真实 Dify 调用成功（verify_all 27/27 + pytest 64/64）**
+**当前进度**：Phase 0 公共地基已完成（v6.0.1），Phase 1 模块并行开发中；M3 员工模块全部交付（v6.5.0 收官）；v6.6.0 需求对齐差异全部落地；v6.7.0~v6.7.2 管理层端三项+需求核对 52/52；master 已合并 longtrying（62d4cff）与 longtrying_stu（a23fc49，第三次合并）全部工作；**M4 学生模块一期全部交付（v6.8.0 第一批 7 子模块 + v6.8.1 第二批 学生助手Agent/提醒聚合，11 paths / 13 endpoints）；v6.8.2 Docker 环境搭建 + M3/M4 数据库端到端验证通过（E2E 69/69，修复 7 项缺陷）；v6.8.3 指令解析本地兜底 + 提醒聚合缺陷修复（E2E 71/71 幂等全过）；v6.8.4 文件存储改本地磁盘后端（docker compose 移除 MinIO，零额外镜像三容器直跑）+ DIFY_BASE_URL 根因修正；v6.8.5 引入 M5 智能报告 7 paths 与前端界面，M3 dashboard 与《一期指标口径表V1》统一名称+新增差异字段（verify_all 25/25 + M5 测试 32/32 + 对齐 14/14）；v6.8.6 AI 全链路打通：Dify 绑定 mimo-v2.6-flash（api.xiaomimimo.com），3 个 Agent 应用创建并回填 app key，真实 AI 链路 6/6 验证通过，环境缺口全部关闭**；**anhoa 分支 v6.8.0：M1 客户模块 + M2 客服 Agent 一期补齐（客户 8 研判字段/6 态流转/pending_lead 待补全线索/客服 Agent 4 出口），2026-10-17 两次合并 origin/master 并线（v6.8.0 被两条分支并行使用，路由 81→99）**；**v6.8.8 P1 运行时缺陷修复：ai_service.py 恢复 M3/M4 依赖的 AgentType/AIService/ai_service（anhoa 合并重写所致，函数内延迟导入绕过静态检查），客服 AiService 与通用 AIService 双服务共存，容器内真实 Dify 调用成功（verify_all 27/27 + pytest 64/64）**；**v6.9.0 远端访问方案（longtrying_test 分支）：docker-compose 增加 nginx 统一 80 入口 + ngrok 内网穿透脚本 + 一键构建启动脚本 + 完整使用指南（REMOTE_ACCESS.md），本地执行 `.\scripts\build-and-serve.ps1` + `.\scripts\start-ngrok.ps1` 即可获得公网 URL**；**v6.9.1 远端访问实测修正：nginx 端口 80→8080（本机 80 被 Dify 占用），新增 localtunnel 免注册方案，公网实测通过（https://wide-cameras-pay.loca.lt 前端 200/API 正常）**；**v6.9.2 master 快进合并 longtrying_test（b84acf3..4c27071，13 文件 +406/-14，无冲突，verify_all 27/27），远端访问能力并入主干**
 **数据库**：31张表（customer 加 8 研判画像列、cs_intent_log.user_id 放宽可空、AiReport 表加 version/data_source_status/error_message 3 列），99条路由路径（98 API + 1 health；employee 42 paths，student 11 paths/13 endpoints，reports 7 paths，crm/ai/courses/events 15 paths），MVC分层结构就绪；**Docker 环境：edu-mysql/edu-redis/edu-backend 全部健康，`docker compose up -d` 三容器零额外镜像直跑（文件存储默认本地磁盘 backend_storage 卷，不再依赖 MinIO）**
 **主基线文档**：`promts/lon/提示词整合测试_demo/docs/基础架构方案_五人并行开发.md`（v1.2.0，28项决策）
 
@@ -716,7 +716,7 @@ chore: 构建
 
 ---
 
-**最后更新**：2026-10-17 20:19（v6.8.8 P1 运行时缺陷修复：ai_service.py 恢复 M3/M4 依赖的 AgentType/AIService/ai_service——anhoa 合并将其重写为客服专用 AiService，M3/M4 函数内延迟导入使启动与静态检查无法暴露，运行时 50001；修复保留云端客服逻辑、文件末尾追加通用多 Agent 接口，调用方零改动；dev 依赖补 pytest-asyncio+aiosqlite；verify_all 27/27 + pytest 64/64 + 容器内真实 Dify 调用成功；教训记入 LOG-029：跨分支合并重写公共模块后必须做容器内运行时导入冒烟）
+**最后更新**：2026-10-17 21:55（v6.9.2 master 快进合并 longtrying_test：b84acf3..4c27071，13 文件 +406/-14，无冲突，compileall + verify_all 27/27 通过，LOG-032；v6.9.1 远端访问实测修正：nginx 端口 80→8080 避让 Dify + localtunnel 免注册穿透实测成功，commit f0752ff，LOG-031；v6.9.0 远端访问方案基础：docker-compose nginx 统一入口 + ngrok 脚本 + 一键构建启动 + REMOTE_ACCESS.md 指南；v6.8.8 P1 运行时缺陷修复：ai_service.py 恢复 M3/M4 依赖的 AgentType/AIService/ai_service，verify_all 27/27 + pytest 64/64 + 容器内真实 Dify 调用成功）
 **维护人**：开发团队
 
 
@@ -754,12 +754,21 @@ chore: 构建
 4. 短信发送与验证码校验接口不存在。
 5. 非同一局域网访问需要公网部署或正式域名。
 
+## v6.9.3 merge and AI environment update - 2026-10-17
+- Merge baseline: master v6.9.2 remote access names are retained, including nginx, ngrok and localtunnel.
+- Local runtime uses MySQL 8 on localhost port 3306, database GuangdongEducationStudyAbroadProgram, user root, password 123456.
+- backend .env is ignored and contains the real Agnes model key. Never copy the key into Git or documentation.
+- Native Dify app keys remain placeholders until the Dify workspace publishes real app keys.
+- Agnes is the common model fallback for student agent, student psych chat, employee agent, employee guide and smart report analysis. Deterministic fallback remains the final layer.
+- A customer cannot submit more than one pending student conversion application. Duplicate submission returns business code 40901.
+- Regression result: compileall passed, verify_all 27 of 27, pytest 64 of 64, frontend build passed and live AI smoke passed.
 
-
-## v6.8.9 handover update - 2026-10-17
-- Current local runtime uses MySQL 8 on localhost port 3306, database GuangdongEducationStudyAbroadProgram, user root, password 123456.
-- backend .env is ignored and must be created locally. It contains the real Agnes model key supplied by the project owner. Never copy that key into Git or documentation.
-- Dify application keys DIFY_STUDENT_AGENT_KEY, DIFY_EMPLOYEE_AGENT_KEY and DIFY_CUSTOMER_AGENT_KEY are still placeholders until the Dify workspace publishes real app keys.
-- The Agnes OpenAI-compatible model is the runtime fallback for student agent, student psych chat, employee agent, employee guide and smart report analysis. Existing deterministic fallback remains the final safety layer.
-- A customer cannot submit more than one pending student conversion application. The backend returns business code 40901 for duplicate pending submissions.
-- Required regression set is compileall, verify_all, pytest, frontend build and real account API smoke. Current result is all passed, with only non-blocking aiomysql cleanup warnings in pytest.
+### v6.9.3 merge test result - 2026-10-17
+- Merged origin/master remote access capability with the existing AI environment and duplicate submission fixes.
+- Conflict policy applied: common deployment names nginx, ngrok and localtunnel are retained; AI model fallback and business difference fields are preserved.
+- Backend compileall passed.
+- verify_all passed 27 of 27.
+- pytest passed 64 of 64 with non-blocking aiomysql cleanup warnings.
+- Frontend production build passed.
+- Docker Compose configuration validation passed; Docker Desktop config access produced a non-blocking warning.
+- Live backend health check returned status ok.
