@@ -47,6 +47,8 @@ class CustomerAssessment(Base):
     customer_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     source_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
     source_file: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    phone: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
+    lead_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("crm_lead.id"), nullable=True, index=True)
     extracted_info = mapped_column(JSON, nullable=True)
     assessment_result = mapped_column(JSON, nullable=True)
     match_score: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)

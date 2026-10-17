@@ -71,6 +71,8 @@ class AssessmentOut(BaseModel):
     customer_name: str | None = None
     source_type: str | None = None
     source_file: str | None = None
+    phone: str | None = None
+    lead_id: int | None = None
     extracted_info: Any = None
     assessment_result: Any = None
     match_score: int | None = None
