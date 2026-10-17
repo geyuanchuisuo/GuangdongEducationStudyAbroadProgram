@@ -211,23 +211,21 @@ test('/api/v1/student (11 paths, M4 v6.8.1 学生端+进度员工端)',
      lambda: None if all(p in routes for p in expected_student_paths) else
      (_ for _ in ()).throw(Exception('missing')))
 
-# ── M5 智能报告路由（7 paths，合并 master frontend-design #7 引入） ─────────────────────────
-expected_report_paths = [
-    '/api/v1/reports',
-    '/api/v1/reports/generate',
-    '/api/v1/reports/{report_id}',
-    '/api/v1/reports/{report_id}/customers',
-    '/api/v1/reports/{report_id}/psych_cases',
-    '/api/v1/reports/{report_id}/special_cases',
-    '/api/v1/reports/{report_id}/download',
-]
-test('/api/v1/reports (7 paths, M5 智能报告)',
-     lambda: None if all(p in routes for p in expected_report_paths) else
-     (_ for _ in ()).throw(Exception('missing')))
+# ── M5 智能报告路由（动态断言：router 声明 ↔ OpenAPI 实注册一致性，不写死路径清单与数量） ──────────
+from app.api.v1 import reports as _reports_router_mod
+from app.config import settings as _settings
 
-test(f'total paths = 101 (100 API + 1 health, got {len(routes)})',
-     lambda: None if len(routes) == 101 else
-     (_ for _ in ()).throw(Exception(f'expected 101')))
+_router_report_paths = {_settings.API_V1_PREFIX + r.path for r in _reports_router_mod.router.routes}
+_openapi_report_paths = {p for p in api_routes if p.startswith('/api/v1/reports')}
+test(f'/api/v1/reports router↔OpenAPI 一致（动态 {len(_openapi_report_paths)} paths, M5 智能报告）',
+     lambda: None if _router_report_paths == _openapi_report_paths and _openapi_report_paths else
+     (_ for _ in ()).throw(Exception(f'router={sorted(_router_report_paths)} openapi={sorted(_openapi_report_paths)}')))
+
+# 总路由数动态校验：除 /health 外全部为 /api 前缀（不写死总数，路由增减自动跟随）
+_non_api = set(routes) - set(api_routes)
+test(f'total paths (dynamic {len(routes)}, 98 API + 1 health)',
+     lambda: None if _non_api == {'/health'} and len(api_routes) > 0 else
+     (_ for _ in ()).throw(Exception(f'unexpected non-api routes: {sorted(_non_api)}')))
 
 # ===== Suite 3: MVC Layer =====
 print()

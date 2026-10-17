@@ -7,6 +7,8 @@ AI 只负责摘要 / 趋势 / 分析 / 建议的文字归纳，数字一律由�
 """
 import logging
 
+from app.services.model_ai_service import model_ai_service
+
 logger = logging.getLogger(__name__)
 
 
@@ -34,7 +36,23 @@ def _mock_analysis(report_type: str, metrics: dict) -> dict:
             "suggestions": [_suggestion("（模拟）关注信息不足客户的研判补全")],
         }
 
-    if report_type in ("daily_report_summary", "weekly_report_summary"):
+    if report_type == "daily_report_summary":
+        # M5-07.1 日报拆分：metrics 只有 days（按日应交/已交/未交），无全周人次/部门
+        days = metrics["days"]
+        total_submitted = sum(d["submitted"] for d in days)
+        total_missing = sum(d["missing"] for d in days)
+        missing_days = "、".join(d["date"] for d in days if d["missing"] > 0) or "无"
+        return {
+            "summary": (
+                f"（模拟）本日报周期共统计 {len(days)} 个工作日，"
+                f"已提交 {total_submitted} 人次、未提交 {total_missing} 人次。"
+            ),
+            "trend": None,
+            "analysis": f"（模拟）存在未提交的日期：{missing_days}。",
+            "suggestions": [_suggestion("（模拟）跟进未提交日报的员工")],
+        }
+
+    if report_type == "weekly_report_summary":
         total = metrics["week_total"]
         depts = metrics["departments"]
         missing_depts = "、".join(
@@ -99,13 +117,39 @@ def _validate(analysis: dict) -> dict | None:
 
 
 class ReportAIService:
-    """报告 AI 分析入口。一期未配置报告 Agent，使用模拟输出。"""
+    """报告 AI 分析入口（M5-10.6 统一到共用模型网关）。
+
+    - 共用网关 `model_ai_service` 可用 → 采用模型输出，`source="model"`
+    - 网关不可用 / 输出结构不合法 → 回落本地模拟输出，`source="mock"`
+    - 两者皆失败 → 返回 None，`source="unavailable"`
+
+    `source` 由报告服务读取并落为报告内容的差异字段 `ai_source`，
+    与共用网关命名保持一致（不再用「可用（模拟）」这类含混文案）。
+    """
+
+    def __init__(self) -> None:
+        self.source: str = "unavailable"
 
     async def analyze(self, report_type: str, metrics: dict) -> dict | None:
         try:
-            # 未来接入真实 Agent：在此构造 prompt，将 metrics 作为输入调用 Dify，
-            # 并对返回 JSON 做同样的 _validate 校验。
-            return _validate(_mock_analysis(report_type, metrics))
-        except Exception as exc:  # noqa: BLE001 — AI 失败不阻断确定性报告
-            logger.warning("报告 AI 分析失败: report_type=%s error=%s", report_type, exc)
-            return None
+            analysis = await model_ai_service.analyze(report_type, metrics)
+            if isinstance(analysis, dict) and isinstance(analysis.get("suggestions"), list):
+                analysis["suggestions"] = [
+                    _suggestion(item) if isinstance(item, str) else item
+                    for item in analysis["suggestions"]
+                ]
+            validated = _validate(analysis)
+            if validated:
+                self.source = "model"
+                return validated
+        except Exception as exc:
+            logger.warning("Model report analysis failed: report_type=%s error=%s", report_type, exc)
+        try:
+            mock = _validate(_mock_analysis(report_type, metrics))
+            if mock:
+                self.source = "mock"
+                return mock
+        except Exception as exc:
+            logger.warning("Report mock analysis failed: report_type=%s error=%s", report_type, exc)
+        self.source = "unavailable"
+        return None

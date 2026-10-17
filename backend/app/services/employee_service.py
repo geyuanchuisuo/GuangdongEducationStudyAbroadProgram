@@ -13,6 +13,7 @@ from app.repositories.employee_repo import (
     TodoRepository,
 )
 from app.services.approval_engine import ApprovalBizType, ApprovalStatus, approval_engine
+from app.utils.logger import logger  # 合并修复：model 回落分支引用了 logger，此前未导入会 NameError→50001
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -225,6 +226,15 @@ class EmployeeService:
         if approver.user_type != "MANAGER":
             raise BusinessError(code=40002, message="审批人必须是管理层（MANAGER）")
 
+        existing = (await self.db.execute(
+            select(ApprovalInstance).where(
+                ApprovalInstance.biz_type == ApprovalBizType.CONVERT.value,
+                ApprovalInstance.biz_id == customer_id,
+                ApprovalInstance.status == ApprovalStatus.PENDING.value,
+            ).limit(1)
+        )).scalars().first()
+        if existing:
+            raise ConflictError(message="该客户已有待审批的留学生转化申请")
         final_title = title or f"代客申请：{customer.name or customer.phone} → 留学生"
         instance = await approval_engine.create(
             biz_type=ApprovalBizType.CONVERT,
@@ -1320,6 +1330,12 @@ class EmployeeService:
             )
             return {"reply": resp.content, "session_id": resp.session_id, "source": "dify"}
         except Exception:
+            try:
+                from app.services.model_ai_service import model_ai_service
+                result = await model_ai_service.chat(message, session_id or "new", context)
+                return {"reply": result["reply"], "session_id": result.get("session_id", session_id or "new"), "source": "model"}
+            except Exception as model_exc:
+                logger.warning("model fallback failed: employee=%s error=%s", user.id, model_exc)
             reply = (
                 f"AI 助手暂时不可用（Dify 未连接）。当前身份「{user.user_type}」，"
                 f"数据范围：{'全域' if user.user_type == 'MANAGER' else '仅自己名下'}。可用能力：\n"
@@ -1346,6 +1362,12 @@ class EmployeeService:
             )
             return {"answer": resp.content, "source": "dify", "session_id": resp.session_id}
         except Exception:
+            try:
+                from app.services.model_ai_service import model_ai_service
+                result = await model_ai_service.chat(question, session_id or "new", {"scene": "newcomer_guide"})
+                return {"answer": result["reply"], "source": "model", "session_id": result.get("session_id", session_id or "new")}
+            except Exception as model_exc:
+                logger.warning("guide model fallback failed: user=%s error=%s", user.id, model_exc)
             hits = search_guide(question)
             if hits:
                 parts = [f"【{h['section']}】{h['q']}\n{h['a']}" for h in hits[:3]]
