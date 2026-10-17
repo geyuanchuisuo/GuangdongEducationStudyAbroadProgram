@@ -716,7 +716,7 @@ chore: 构建
 
 ---
 
-**最后更新**：2026-10-17 17:43（v6.8.6——AI 全链路打通：绑定 Dify 大模型 mimo-v2.6-flash（OpenAI-API-compatible 模型级凭据 @ api.xiaomimimo.com），全自动 console API 创建 3 个 Agent 应用（客服/企业/学生）并回填 app key 至 .env；重置 Dify 管理员密码 Difyadmin2026（仅本地）；修复容器 venv 缺 reportlab 启动崩溃；测试：真实 AI 链路 6/6（agent/chat 出话 + parse source=ai）+ verify_all 25/25；至此环境缺口全部关闭（MinIO v6.8.4、Dify v6.8.6），详见 LOG-020）  
+**最后更新**：2026-10-17 18:58（master_ZNBG 分支同步 origin/master 548b74b→264467d——v6.8.6 AI 配置记录+前端 API 接入/登录修复/测试账号文档/start-project.bat 随合并进入 ZNBG 工作区；合并前核查 backend/app 与 M0 公共模块零变更、双侧文件交集为空，ort 零冲突；compileall OK + verify_all 25/25；按用户要求只合并不推送，本地 ahead 20 提交待推；详见更新记录 merge 条目与 LOG-021）  
 **维护人**：开发团队
 
 
