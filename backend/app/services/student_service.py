@@ -187,8 +187,14 @@ class StudentService:
         try:
             resp = await ai.ai_service.chat(ai.AgentType.STUDENT, message, sid, user_id=str(student_id))
             reply, sid = resp.content, resp.session_id
-        except Exception as exc:  # AI 网关不可用 → 本地降级（话术固定，不承诺任何结果）
-            degraded = True
+        except Exception as exc:
+            try:
+                from app.services.model_ai_service import model_ai_service
+                result = await model_ai_service.chat(message, sid, {"user_type": "STUDENT", "user_id": str(student_id), "scene": "psych_support"})
+                reply, sid = result["reply"], result.get("session_id", sid)
+            except Exception as model_exc:
+                degraded = True
+                logger.warning("psych_chat model fallback failed: student=%s error=%s", student_id, model_exc)  # AI 网关不可用 → 本地降级（话术固定，不承诺任何结果）
             logger.warning("psych_chat AI 降级: student=%s error=%s", student_id, exc)
 
         tag, score = self._analyze_emotion(message)
@@ -362,6 +368,12 @@ class StudentService:
             )
             return {"reply": resp.content, "session_id": resp.session_id, "source": "dify"}
         except Exception as exc:
+            try:
+                from app.services.model_ai_service import model_ai_service
+                result = await model_ai_service.chat(message, session_id or "new", context)
+                return {"reply": result["reply"], "session_id": result.get("session_id", session_id or "new"), "source": "model"}
+            except Exception as model_exc:
+                logger.warning("model fallback failed: student=%s error=%s", student.id, model_exc)
             logger.warning("agent_chat AI 降级: student=%s error=%s", student.id, exc)
             return {"reply": _AGENT_FALLBACK_REPLY, "session_id": session_id or "new", "source": "fallback"}
 

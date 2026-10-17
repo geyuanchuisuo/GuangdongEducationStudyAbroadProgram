@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     DIFY_STUDENT_AGENT_KEY: str = ""
     DIFY_EMPLOYEE_AGENT_KEY: str = ""
     DIFY_CUSTOMER_AGENT_KEY: str = ""
+    DIFY_MODEL_API_KEY: str = ""
+    DIFY_MODEL_BASE_URL: str = "https://apihub.agnes-ai.com/v1"
+    DIFY_MODEL_NAME: str = "agnes-2.5-flash"
 
     # 文件存储后端：local=本地磁盘（默认，一期单机 Docker 零外部依赖）/ s3=MinIO 等 S3 兼容存储（二期生产可选）
     STORAGE_BACKEND: str = "local"

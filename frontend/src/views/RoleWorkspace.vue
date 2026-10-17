@@ -29,11 +29,19 @@ const customerForm = reactive({ name: '', phone: '', gender: '', age: '', educat
 const leaveForm = reactive({ type: '事假', start: '', end: '', reason: '' })
 const ticketForm = reactive({ title: '', detail: '', formal: false })
 const reportForm = reactive({ date: new Date().toISOString().slice(0, 10), content: '' })
+const convertForm = reactive({ customerId: 1, project: '新加坡国际本硕升学计划', title: '', approverId: 4 })
+const submittedConversionIds = new Set<number>()
 const activeCustomer = ref<any>(null)
 const customerRows = ref<any[]>(customers)
 const reportRows = ref<any[]>(reports)
 const notificationRows = ref<any[]>(notifications)
 const reminders = ref<any>({})
+const approvalRows = ref<any[]>([])
+const studentProfile = ref<any>({})
+const studentTickets = ref<any[]>([])
+const studentProgress = ref<any[]>([])
+const lifeFaqRows = ref<any[]>([])
+const moreServiceRows = ref<any[]>([])
 
 function itemsOf(value: any): any[] {
   if (Array.isArray(value)) return value
@@ -92,6 +100,39 @@ function confirmWrite(message: string, done: () => void) {
   ElMessageBox.confirm(message, '二次确认', { type: 'warning', confirmButtonText: '确认执行', cancelButtonText: '取消' })
     .then(done)
     .catch(() => undefined)
+}
+
+async function submitConvertApply() {
+  const customerId = Number(convertForm.customerId)
+  if (submittedConversionIds.has(customerId)) {
+    ElMessage.warning('该客户已有待审批的留学生转化申请')
+    return
+  }
+  try {
+    const pending = await platformApi.approvals.pending({ biz_type: 'convert' })
+    const existing = itemsOf(pending).find((item: any) => Number(item.biz_id) === customerId && item.status === 'pending')
+    if (existing) {
+      ElMessage.warning('该客户已有待审批的留学生转化申请')
+      submittedConversionIds.add(customerId)
+      return
+    }
+  } catch {
+    // The local duplicate guard still applies if the pending list is unavailable.
+  }
+  confirmWrite('确认提交代客申请留学生吗？', async () => {
+    try {
+      const result: any = await platformApi.employee.createConvertApply({
+        customer_id: customerId,
+        approver_id: Number(convertForm.approverId),
+        title: convertForm.title || ('代客申请：' + convertForm.project),
+      })
+      submittedConversionIds.add(customerId)
+      approvalRows.value = [result, ...approvalRows.value]
+      notifySuccess('申请已提交，等待管理层一次审批')
+    } catch {
+      notifyInfo('代客申请接口尚未就绪，当前申请已保留')
+    }
+  })
 }
 
 async function saveCustomer() {
@@ -235,7 +276,7 @@ function revealPhone() {
 
     <template v-if="section === 'home' && role === 'STUDENT'">
       <section class="welcome surface"><div><span class="badge">STUDENT · 德国双元制护理</span><h2>李同学，欢迎回来</h2><p>负责顾问：陈顾问 · 语言班第3个月 · 当前状态：在学</p></div><div class="welcome-score"><small>综合状态</small><strong>72</strong><span>平静偏积极</span></div></section>
-      <div class="stat-grid"><StatCard label="待办事项" value="3" note="1项今日截止" tone="coral" /><StatCard label="本周课程" value="5" note="下节课程：德语写作" tone="purple" /><StatCard label="申请进度" value="签证办理" note="材料递交中" tone="lime" /><StatCard label="服务状态" value="良好" note="最近更新：今天" tone="amber" /></div>
+      <div class="stat-grid"><StatCard label="待办事项" :value="String((reminders.counts && reminders.counts.academic_ddl) || 3)" note="学业与服务提醒" tone="coral" /><StatCard label="本周课程" value="5" note="下节课程：德语写作" tone="purple" /><StatCard label="申请进度" value="签证办理" note="材料递交中" tone="lime" /><StatCard label="服务状态" value="良好" note="最近更新：今天" tone="amber" /></div>
       <div class="two-column">
         <section class="surface panel"><SectionTitle title="近期课程与 DDL" /><div v-for="(item, index) in studentTodos" :key="item.title" class="task-row"><b>0{{ index + 1 }}</b><div><strong>{{ item.title }}</strong><small>{{ item.due }}</small></div><el-tag :type="item.tone === 'coral' ? 'danger' : item.tone === 'amber' ? 'warning' : 'primary'">{{ item.due }}</el-tag></div></section>
         <section class="surface panel"><SectionTitle title="留学申请进度" /><el-steps direction="vertical" :active="4"><el-step title="材料审核" description="学历公证与语言证明已通过" /><el-step title="申请提交" description="目标院校申请已完成" /><el-step title="收到 Offer" description="护理方向 · 条件录取" /><el-step title="签证办理" description="材料递交中" /><el-step title="行前准备" /><el-step title="已入学" /></el-steps></section>
@@ -251,11 +292,11 @@ function revealPhone() {
 
     <template v-else-if="role === 'STUDENT' && section === 'psych'">
       <section class="psych-hero surface"><div><span class="badge">AI 对话式评估 · 一期</span><h2>今日心理状态</h2><p>服务性综合状态评分，不构成医疗诊断。</p></div><div class="score-ring"><strong>{{ psychScore }}</strong><span>/ 100</span><small>平静偏积极</small></div></section>
-      <div class="two-column"><section class="surface panel"><SectionTitle title="情绪趋势" desc="近7日综合状态变化" /><div class="line-chart"><div class="chart-y"><span>100</span><span>75</span><span>50</span><span>25</span></div><div class="chart-area"><svg viewBox="0 0 600 220" preserveAspectRatio="none"><polyline points="0,88 100,104 200,126 300,150 400,136 500,118 600,70" fill="none" stroke="#5a50b8" stroke-width="8" stroke-linecap="round" /></svg></div></div></section><section class="surface panel"><SectionTitle title="服务边界" /><ul class="boundary"><li>不提供医疗级心理建议或诊断</li><li>不承诺退费、转学等重大决定</li><li>遇到严重问题，引导联系专业心理咨询师</li><li>识别到高风险会即时通知负责员工</li></ul><el-button type="primary" round @click="startPsychChat">开始一次情绪对话</el-button></section></div>
+      <div class="two-column"><section class="surface panel"><SectionTitle title="情绪趋势" desc="近7日综合状态变化" /><div class="line-chart"><div class="chart-y"><span>100</span><span>75</span><span>50</span><span>25</span></div><div class="chart-area"><svg viewBox="0 0 600 220" preserveAspectRatio="none"><polyline points="0,88 100,104 200,126 300,150 400,136 500,118 600,70" fill="none" stroke="#5a50b8" stroke-width="8" stroke-linecap="round" /></svg></div></div></section><section class="surface panel"><SectionTitle title="服务边界" /><ul class="boundary"><li>不提供医疗级心理建议或诊断</li><li>不承诺退费、转学等重大决定</li><li>遇到严重问题，引导联系专业心理咨询师</li><li>识别到高风险会即时通知负责员工</li></ul><el-button type="primary" round @click="startPsychChat">开始一次情绪对话</el-button><p v-if="studentProfile.latest_emotion_tag" class="muted">最近标签：{{ studentProfile.latest_emotion_tag }}</p></section></div>
     </template>
 
     <template v-else-if="role === 'STUDENT' && section === 'feedback'">
-      <div class="two-column"><section class="surface panel"><SectionTitle title="提交反馈工单" desc="普通咨询和建议不会计入投诉周报。" /><el-form label-position="top"><el-form-item label="反馈类型"><el-select style="width:100%" model-value="服务咨询"><el-option v-for="item in ['服务咨询','课程安排','费用问题','住宿生活','投诉建议']" :key="item" :label="item" :value="item" /></el-select></el-form-item><el-form-item label="问题标题"><el-input v-model="ticketForm.title" placeholder="请简要描述问题" /></el-form-item><el-form-item label="详细描述"><el-input v-model="ticketForm.detail" type="textarea" :rows="5" /></el-form-item><el-checkbox v-model="ticketForm.formal">确认这是正式投诉（仅正式投诉进入投诉周报）</el-checkbox><el-button type="primary" style="margin-top:18px" @click="submitTicket">提交工单</el-button></el-form></section><section class="surface panel"><SectionTitle title="我的工单" /><div v-for="item in [{t:'宿舍网络连接不稳定',s:'处理中'},{t:'选课系统操作咨询',s:'已解决'},{t:'银行卡绑定问题',s:'已解决'}]" :key="item.t" class="ticket-row"><div><b>{{ item.t }}</b><small>2026-10-12 · #FB-20261012-018</small></div><el-tag :type="item.s === '已解决' ? 'success' : 'warning'">{{ item.s }}</el-tag></div></section></div>
+      <div class="two-column"><section class="surface panel"><SectionTitle title="提交反馈工单" desc="普通咨询和建议不会计入投诉周报。" /><el-form label-position="top"><el-form-item label="反馈类型"><el-select style="width:100%" model-value="服务咨询"><el-option v-for="item in ['服务咨询','课程安排','费用问题','住宿生活','投诉建议']" :key="item" :label="item" :value="item" /></el-select></el-form-item><el-form-item label="问题标题"><el-input v-model="ticketForm.title" placeholder="请简要描述问题" /></el-form-item><el-form-item label="详细描述"><el-input v-model="ticketForm.detail" type="textarea" :rows="5" /></el-form-item><el-checkbox v-model="ticketForm.formal">确认这是正式投诉（仅正式投诉进入投诉周报）</el-checkbox><el-button type="primary" style="margin-top:18px" @click="submitTicket">提交工单</el-button></el-form></section><section class="surface panel"><SectionTitle title="我的工单" /><div v-for="item in (studentTickets.length ? studentTickets : [{content:'宿舍网络连接不稳定',status:'处理中',create_time:'2026-10-12'},{content:'选课系统操作咨询',status:'已解决',create_time:'2026-09-28'}])" :key="item.id || item.content" class="ticket-row"><div><b>{{ item.content || item.t }}</b><small>{{ item.create_time || '2026-10-12' }}</small></div><el-tag :type="(item.status || item.s) === '已解决' ? 'success' : 'warning'">{{ item.status || item.s }}</el-tag></div></section></div>
     </template>
 
     <template v-else-if="role === 'STUDENT' && section === 'academic'">
@@ -268,12 +309,12 @@ function revealPhone() {
     </template>
 
     <template v-else-if="role === 'STUDENT' && section === 'life'">
-      <div class="life-grid"><article v-for="item in ['住宿指南','交通指南','医疗健康','法律与安全','紧急联系','生活常见问题']" :key="item" class="surface life-card"><h3>{{ item }}</h3><p>查看当地生活知识、注意事项和服务渠道。</p><el-button text type="primary">查看指南</el-button></article></div>
+      <div class="life-grid"><article v-for="item in (lifeFaqRows.length ? lifeFaqRows : ['住宿指南','交通指南','医疗健康','法律与安全','紧急联系','生活常见问题'])" :key="item" class="surface life-card"><h3>{{ item }}</h3><p>查看当地生活知识、注意事项和服务渠道。</p><el-button text type="primary">查看指南</el-button></article></div>
     </template>
 
     <template v-else-if="role === 'STUDENT' && section === 'more'">
       <SectionTitle title="更多服务" desc="以下服务均为可选项目，不影响你已有的常规服务权益。" />
-      <div class="service-grid"><article v-for="item in ['学业规划','课程升级','背景提升','语言进阶','职业发展','定制服务']" :key="item" class="surface service-card"><div class="service-icon">+</div><h3>{{ item }}</h3><p>基于当前阶段和学业表现，为你匹配合适的成长资源。</p><el-button round>了解详情</el-button></article></div>
+      <div class="service-grid"><article v-for="item in (moreServiceRows.length ? moreServiceRows : ['学业规划','课程升级','背景提升','语言进阶','职业发展','定制服务'])" :key="item" class="surface service-card"><div class="service-icon">+</div><h3>{{ item }}</h3><p>基于当前阶段和学业表现，为你匹配合适的成长资源。</p><el-button round>了解详情</el-button></article></div>
     </template>
 
     <template v-else-if="role === 'STUDENT' && section === 'profile'">
@@ -295,7 +336,7 @@ function revealPhone() {
     </template>
 
     <template v-else-if="role === 'EMPLOYEE' && section === 'convert'">
-      <div class="two-column"><section class="surface panel"><SectionTitle title="代客申请留学生" desc="一次审批：员工申请，管理层审批。" /><el-form label-position="top"><el-form-item label="选择意向客户"><el-select style="width:100%" model-value="王女士"><el-option label="王女士（新加坡国际本科）" value="王女士" /></el-select></el-form-item><el-form-item label="转化项目"><el-select style="width:100%" model-value="新加坡国际本硕升学计划"><el-option v-for="item in projects.slice(0,3)" :key="item.id" :label="item.title" :value="item.title" /></el-select></el-form-item><el-form-item label="转化理由 / 备注"><el-input type="textarea" :rows="4" /></el-form-item><el-button type="primary" @click="confirmWrite('确认提交代客申请留学生吗？', () => notifySuccess('申请已提交，等待管理层一次审批'))">提交审批申请</el-button></el-form></section><section class="surface panel"><SectionTitle title="学生流程审批" /><div v-for="item in [{t:'张三 · 病假申请',s:'待审批'},{t:'陈同学 · 成绩复核',s:'待审批'},{t:'李同学 · 宿舍调换',s:'已通过'}]" :key="item.t" class="ticket-row"><div><b>{{ item.t }}</b><small>学生端提交 · 2026-10-15</small></div><el-tag :type="item.s === '已通过' ? 'success' : 'warning'">{{ item.s }}</el-tag></div></section></div>
+      <div class="two-column"><section class="surface panel"><SectionTitle title="代客申请留学生" desc="一次审批：员工申请，管理层审批。" /><el-form label-position="top"><el-form-item label="选择意向客户"><el-select v-model="convertForm.customerId" style="width:100%"><el-option v-for="item in customerRows" :key="item.id" :label="item.name + '（' + item.project + '）'" :value="item.id" /></el-select></el-form-item><el-form-item label="转化项目"><el-select v-model="convertForm.project" style="width:100%"><el-option v-for="item in projects.slice(0,3)" :key="item.id" :label="item.title" :value="item.title" /></el-select></el-form-item><el-form-item label="转化理由 / 备注"><el-input v-model="convertForm.title" type="textarea" :rows="4" /></el-form-item><el-button type="primary" @click="submitConvertApply">提交审批申请</el-button></el-form></section><section class="surface panel"><SectionTitle title="学生流程审批" /><div v-for="item in (approvalRows.length ? approvalRows : [{title:'张三 · 病假申请',status:'pending'},{title:'陈同学 · 成绩复核',status:'pending'},{title:'李同学 · 宿舍调换',status:'approved'}])" :key="item.id || item.title" class="ticket-row"><div><b>{{ item.title || item.t }}</b><small>学生端提交 · {{ item.created_at || '2026-10-15' }}</small></div><el-tag :type="item.status === 'approved' ? 'success' : 'warning'">{{ item.status || item.s }}</el-tag></div></section></div>
     </template>
 
     <template v-else-if="role === 'EMPLOYEE' && section === 'reports'">
@@ -489,7 +530,7 @@ function revealPhone() {
     <template v-else-if="role === 'MANAGER' && section === 'health'">
       <SectionTitle title="学生信息健康周报" desc="展示整体心理态势、风险人数和周变化；个体信息仅对授权角色开放。" />
       <div class="stat-grid"><StatCard label="整体状态" value="平稳" note="综合口径" tone="lime" /><StatCard label="风险人数" value="2" note="需要重点跟进" tone="coral" /><StatCard label="周变化" value="-8%" note="较上周风险人数下降" tone="purple" /><StatCard label="节点提醒" value="考试周" note="已标注在趋势图中" tone="amber" /></div>
-      <div class="two-column"><section class="surface panel"><SectionTitle title="整体情绪趋势" /><div class="bar-chart"><div v-for="(height,index) in [62,68,54,73,66,78,72]" :key="index"><i :style="{ height: height + '%' }"></i><span>周{{ index + 1 }}</span></div></div></section><section class="surface panel"><SectionTitle title="风险个案" /><div v-for="item in ['学生 A · 连续 3 日低于阈值','学生 B · 考试压力集中','学生 C · 睡眠与情绪波动']" :key="item" class="task-row"><b>!</b><div><strong>{{ item }}</strong><small>按职责权限查看详细反馈</small></div><el-button text type="primary">查看</el-button></div></section></div>
+      <div class="two-column"><section class="surface panel"><SectionTitle title="整体情绪趋势" /><div class="bar-chart"><div v-for="(height,index) in [62,68,54,73,66,78,72]" :key="index"><i :style="{ height: height + '%' }"></i><span>周{{ index + 1 }}</span></div></div><p v-if="studentProgress.length" class="muted">已加载 {{ studentProgress.length }} 条申请进度记录。</p></section><section class="surface panel"><SectionTitle title="风险个案" /><div v-for="item in ['学生 A · 连续 3 日低于阈值','学生 B · 考试压力集中','学生 C · 睡眠与情绪波动']" :key="item" class="task-row"><b>!</b><div><strong>{{ item }}</strong><small>按职责权限查看详细反馈</small></div><el-button text type="primary">查看</el-button></div></section></div>
     </template>
 
     <template v-else-if="role === 'MANAGER' && section === 'complaints'">

@@ -3,7 +3,7 @@ services:
     image: mysql:8.0
     container_name: edu-mysql
     environment:
-      MYSQL_ROOT_PASSWORD: "420821"
+      MYSQL_ROOT_PASSWORD: "123456"
       MYSQL_DATABASE: GuangdongEducationStudyAbroadProgram
       MYSQL_CHARSET: utf8mb4
       MYSQL_COLLATION: utf8mb4_unicode_ci
@@ -37,7 +37,7 @@ services:
       dockerfile: Dockerfile
     container_name: edu-backend
     environment:
-      DATABASE_URL: mysql+aiomysql://root:420821@mysql:3306/GuangdongEducationStudyAbroadProgram
+      DATABASE_URL: mysql+aiomysql://root:123456@mysql:3306/GuangdongEducationStudyAbroadProgram
       REDIS_URL: redis://redis:6379
       # 文件存储：一期本地磁盘（零外部镜像依赖）；二期切 s3 时改 STORAGE_BACKEND=s3 并启用 MinIO
       STORAGE_BACKEND: local

@@ -7,6 +7,8 @@ AI 只负责摘要 / 趋势 / 分析 / 建议的文字归纳，数字一律由�
 """
 import logging
 
+from app.services.model_ai_service import model_ai_service
+
 logger = logging.getLogger(__name__)
 
 
@@ -101,11 +103,21 @@ def _validate(analysis: dict) -> dict | None:
 class ReportAIService:
     """报告 AI 分析入口。一期未配置报告 Agent，使用模拟输出。"""
 
-    async def analyze(self, report_type: str, metrics: dict) -> dict | None:
+    async def analyze(self, report_type, metrics):
         try:
-            # 未来接入真实 Agent：在此构造 prompt，将 metrics 作为输入调用 Dify，
-            # 并对返回 JSON 做同样的 _validate 校验。
+            analysis = await model_ai_service.analyze(report_type, metrics)
+            if isinstance(analysis, dict) and isinstance(analysis.get("suggestions"), list):
+                analysis["suggestions"] = [
+                    _suggestion(item) if isinstance(item, str) else item
+                    for item in analysis["suggestions"]
+                ]
+            validated = _validate(analysis)
+            if validated:
+                return validated
+        except Exception as exc:
+            logger.warning("Model report analysis failed: report_type=%s error=%s", report_type, exc)
+        try:
             return _validate(_mock_analysis(report_type, metrics))
-        except Exception as exc:  # noqa: BLE001 — AI 失败不阻断确定性报告
-            logger.warning("报告 AI 分析失败: report_type=%s error=%s", report_type, exc)
+        except Exception as exc:
+            logger.warning("Report mock analysis failed: report_type=%s error=%s", report_type, exc)
             return None
