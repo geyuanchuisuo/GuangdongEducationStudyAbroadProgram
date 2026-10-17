@@ -27,6 +27,7 @@ const reportTab = ref('CA')
 const psychScore = ref(72)
 const customerForm = reactive({ name: '', phone: '', gender: '', age: '', education: '', project: '新加坡本硕', note: '' })
 const leaveForm = reactive({ type: '事假', start: '', end: '', reason: '' })
+const ticketForm = reactive({ title: '', detail: '', formal: false })
 const reportForm = reactive({ date: new Date().toISOString().slice(0, 10), content: '' })
 const activeCustomer = ref<any>(null)
 const customerRows = ref<any[]>(customers)
@@ -179,10 +180,35 @@ async function rejectItem(item: any) {
 
 async function saveEmployeeProfile() {
   try {
-    await platformApi.employee.updateProfile({ real_name: '陈顾问', department: '新加坡事业部', contact_info: '企业微信：粤教陈顾问' })
+    await platformApi.users.updateMe({ real_name: '陈顾问', contact_info: '企业微信：粤教陈顾问' })
     notifySuccess('个人信息已保存')
   } catch {
     notifyInfo('个人信息接口尚未就绪')
+  }
+}
+
+async function submitTicket() {
+  if (!ticketForm.title || !ticketForm.detail) {
+    ElMessage.warning('请补全反馈信息')
+    return
+  }
+  confirmWrite('确认提交反馈工单吗？', async () => {
+    try {
+      await platformApi.student.submitTicket({ content: ticketForm.title, detail: ticketForm.detail })
+      notifySuccess('工单已提交')
+    } catch {
+      notifyInfo('反馈接口尚未就绪，当前内容已保留')
+    }
+  })
+}
+
+async function startPsychChat() {
+  try {
+    const result: any = await platformApi.student.psychChat({ message: '我想聊聊最近的心情', session_id: 'new' })
+    if (typeof result?.emotion_score === 'number') psychScore.value = result.emotion_score
+    notifySuccess('情绪对话已开始')
+  } catch {
+    notifyInfo('心理关怀接口尚未就绪')
   }
 }
 
@@ -225,11 +251,11 @@ function revealPhone() {
 
     <template v-else-if="role === 'STUDENT' && section === 'psych'">
       <section class="psych-hero surface"><div><span class="badge">AI 对话式评估 · 一期</span><h2>今日心理状态</h2><p>服务性综合状态评分，不构成医疗诊断。</p></div><div class="score-ring"><strong>{{ psychScore }}</strong><span>/ 100</span><small>平静偏积极</small></div></section>
-      <div class="two-column"><section class="surface panel"><SectionTitle title="情绪趋势" desc="近7日综合状态变化" /><div class="line-chart"><div class="chart-y"><span>100</span><span>75</span><span>50</span><span>25</span></div><div class="chart-area"><svg viewBox="0 0 600 220" preserveAspectRatio="none"><polyline points="0,88 100,104 200,126 300,150 400,136 500,118 600,70" fill="none" stroke="#5a50b8" stroke-width="8" stroke-linecap="round" /></svg></div></div></section><section class="surface panel"><SectionTitle title="服务边界" /><ul class="boundary"><li>不提供医疗级心理建议或诊断</li><li>不承诺退费、转学等重大决定</li><li>遇到严重问题，引导联系专业心理咨询师</li><li>识别到高风险会即时通知负责员工</li></ul><el-button type="primary" round>开始一次情绪对话</el-button></section></div>
+      <div class="two-column"><section class="surface panel"><SectionTitle title="情绪趋势" desc="近7日综合状态变化" /><div class="line-chart"><div class="chart-y"><span>100</span><span>75</span><span>50</span><span>25</span></div><div class="chart-area"><svg viewBox="0 0 600 220" preserveAspectRatio="none"><polyline points="0,88 100,104 200,126 300,150 400,136 500,118 600,70" fill="none" stroke="#5a50b8" stroke-width="8" stroke-linecap="round" /></svg></div></div></section><section class="surface panel"><SectionTitle title="服务边界" /><ul class="boundary"><li>不提供医疗级心理建议或诊断</li><li>不承诺退费、转学等重大决定</li><li>遇到严重问题，引导联系专业心理咨询师</li><li>识别到高风险会即时通知负责员工</li></ul><el-button type="primary" round @click="startPsychChat">开始一次情绪对话</el-button></section></div>
     </template>
 
     <template v-else-if="role === 'STUDENT' && section === 'feedback'">
-      <div class="two-column"><section class="surface panel"><SectionTitle title="提交反馈工单" desc="普通咨询和建议不会计入投诉周报。" /><el-form label-position="top"><el-form-item label="反馈类型"><el-select style="width:100%" model-value="服务咨询"><el-option v-for="item in ['服务咨询','课程安排','费用问题','住宿生活','投诉建议']" :key="item" :label="item" :value="item" /></el-select></el-form-item><el-form-item label="问题标题"><el-input placeholder="请简要描述问题" /></el-form-item><el-form-item label="详细描述"><el-input type="textarea" :rows="5" /></el-form-item><el-checkbox>确认这是正式投诉（仅正式投诉进入投诉周报）</el-checkbox><el-button type="primary" style="margin-top:18px" @click="confirmWrite('确认提交反馈工单吗？', () => notifySuccess('工单已提交'))">提交工单</el-button></el-form></section><section class="surface panel"><SectionTitle title="我的工单" /><div v-for="item in [{t:'宿舍网络连接不稳定',s:'处理中'},{t:'选课系统操作咨询',s:'已解决'},{t:'银行卡绑定问题',s:'已解决'}]" :key="item.t" class="ticket-row"><div><b>{{ item.t }}</b><small>2026-10-12 · #FB-20261012-018</small></div><el-tag :type="item.s === '已解决' ? 'success' : 'warning'">{{ item.s }}</el-tag></div></section></div>
+      <div class="two-column"><section class="surface panel"><SectionTitle title="提交反馈工单" desc="普通咨询和建议不会计入投诉周报。" /><el-form label-position="top"><el-form-item label="反馈类型"><el-select style="width:100%" model-value="服务咨询"><el-option v-for="item in ['服务咨询','课程安排','费用问题','住宿生活','投诉建议']" :key="item" :label="item" :value="item" /></el-select></el-form-item><el-form-item label="问题标题"><el-input v-model="ticketForm.title" placeholder="请简要描述问题" /></el-form-item><el-form-item label="详细描述"><el-input v-model="ticketForm.detail" type="textarea" :rows="5" /></el-form-item><el-checkbox v-model="ticketForm.formal">确认这是正式投诉（仅正式投诉进入投诉周报）</el-checkbox><el-button type="primary" style="margin-top:18px" @click="submitTicket">提交工单</el-button></el-form></section><section class="surface panel"><SectionTitle title="我的工单" /><div v-for="item in [{t:'宿舍网络连接不稳定',s:'处理中'},{t:'选课系统操作咨询',s:'已解决'},{t:'银行卡绑定问题',s:'已解决'}]" :key="item.t" class="ticket-row"><div><b>{{ item.t }}</b><small>2026-10-12 · #FB-20261012-018</small></div><el-tag :type="item.s === '已解决' ? 'success' : 'warning'">{{ item.s }}</el-tag></div></section></div>
     </template>
 
     <template v-else-if="role === 'STUDENT' && section === 'academic'">
