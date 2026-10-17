@@ -41,6 +41,8 @@ class StudentPsychAlert(Base):
     risk_level: Mapped[str] = mapped_column(String(10), nullable=False, index=True)
     status: Mapped[str] = mapped_column(String(20), default="未处理", index=True)
     teacher_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("sys_user.id"), nullable=True)
+    handled_action: Mapped[str | None] = mapped_column(String(20), nullable=True, comment="处理动作：communicated/referred/resolved")
+    handled_at = mapped_column(DateTime, nullable=True, comment="处理时间")
     create_time = mapped_column(DateTime, server_default=func.now())
 
 

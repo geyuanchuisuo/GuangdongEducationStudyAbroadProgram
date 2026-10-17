@@ -1,3 +1,4 @@
+import json
 import time
 import uuid
 
@@ -26,4 +27,29 @@ class RequestLogMiddleware(BaseHTTPMiddleware):
         )
 
         response.headers["X-Request-ID"] = request_id
+
+        if response.headers.get("content-type", "").startswith("application/json"):
+            body_chunks = []
+            async for chunk in response.body_iterator:
+                body_chunks.append(chunk)
+            body = b"".join(body_chunks)
+            # 重建响应时必须丢弃原 Content-Length，由 Starlette 按新 body 重算，
+            # 否则注入 traceId 后 body 变长会触发 "Response content longer than Content-Length"
+            headers = dict(response.headers)
+            headers.pop("content-length", None)
+            try:
+                data = json.loads(body)
+                if isinstance(data, dict) and "traceId" not in data:
+                    data["traceId"] = request_id
+                    new_body = json.dumps(data, ensure_ascii=False).encode("utf-8")
+                    return Response(
+                        content=new_body,
+                        status_code=response.status_code,
+                        headers=headers,
+                        media_type="application/json",
+                    )
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                pass
+            return Response(content=body, status_code=response.status_code, headers=headers, media_type=response.media_type)
+
         return response

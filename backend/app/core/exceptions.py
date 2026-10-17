@@ -25,13 +25,24 @@ class ValidationError(BusinessError):
         super().__init__(code=40002, message=message)
 
 
+class ConflictError(BusinessError):
+    def __init__(self, message: str = "数据冲突"):
+        super().__init__(code=40901, message=message)
+
+
 ERROR_CODE_MAP: dict[int, str] = {
     200: "成功",
     40001: "用户名或密码错误",
     40002: "参数验证失败",
     40003: "账号已被禁用",
+    40004: "手机号已注册",
+    40005: "验证码错误或已过期",
     40101: "未登录或Token过期",
+    40102: "Token无效",
     40301: "无权限访问",
     40401: "资源不存在",
+    40901: "数据冲突（重复提交或状态已变更）",
     50001: "服务器内部错误",
+    50002: "AI服务调用失败",
+    50003: "文件存储服务异常",
 }

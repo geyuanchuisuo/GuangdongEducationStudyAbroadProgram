@@ -135,7 +135,7 @@ A: 激活虚拟环境后运行 `uv pip list`。
 
 - **框架**: FastAPI 0.109+
 - **ORM**: SQLAlchemy 2.0+
-- **数据库**: PostgreSQL 15+
+- **数据库**: MySQL 8.0+（端口59000，库名GuangdongEducationStudyAbroadProgram）
 - **缓存**: Redis 7+
 - **认证**: JWT
 - **Python**: 3.11

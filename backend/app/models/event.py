@@ -23,11 +23,11 @@ class EventLecture(Base):
 class EventRegistration(Base):
     __tablename__ = "event_registration"
     __table_args__ = (
-        UniqueConstraint("event_id", "customer_id"),
+        UniqueConstraint("event_id", "user_id"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     event_id: Mapped[int] = mapped_column(Integer, ForeignKey("event_lecture.id"), nullable=False, index=True)
-    customer_id: Mapped[int] = mapped_column(Integer, ForeignKey("sys_user.id"), nullable=False, index=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("sys_user.id"), nullable=False, index=True)
     status: Mapped[str] = mapped_column(String(20), default="已报名")
     create_time = mapped_column(DateTime, server_default=func.now())

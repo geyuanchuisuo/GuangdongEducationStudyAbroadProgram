@@ -20,7 +20,8 @@ class UserService:
         if user.status != "正常":
             raise BusinessError(code=40003, message="账号已被禁用")
 
-        token = create_access_token({"sub": user.id, "type": user.user_type})
+        # JWT sub 必须是字符串（python-jose 新版对 int 会报 Subject must be a string）
+        token = create_access_token({"sub": str(user.id), "type": user.user_type})
 
         return LoginResponse(
             access_token=token,
