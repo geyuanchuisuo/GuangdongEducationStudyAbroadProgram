@@ -16,6 +16,8 @@ from app.repositories.employee_repo import (
 from app.schemas.employee import (
     AdminServiceAction,
     AdminServiceOut,
+    AgentChatCreate,
+    AgentChatOut,
     AnnotationCreate,
     AnnotationOut,
     CommandExecuteCreate,
@@ -35,6 +37,9 @@ from app.schemas.employee import (
     DailyReportDraftUpdate,
     DailyReportOut,
     DailyReportSummaryItem,
+    GuideAskCreate,
+    GuideAskOut,
+    GuideSectionOut,
     LateApplyCreate,
     LateReviewCreate,
     OralReportCreate,
@@ -45,6 +50,7 @@ from app.schemas.employee import (
     PsychAlertHandle,
     PsychAlertOut,
     ReassignCreate,
+    RemindersOut,
     ScoreCreate,
     ScoreOut,
     TodoCreate,
@@ -559,3 +565,44 @@ async def export_follow_ups(
 ):
     csv_text = await service.export_followups_csv(current_user)
     return _csv_response(csv_text, "follow_ups.csv")
+
+
+# ── 企业智能助手 Agent（权限感知 + 降级） ────────────────
+@router.post("/agent/chat", summary="企业助手会话（权限感知注入，Dify 不可用降级）")
+async def agent_chat(
+    data: AgentChatCreate,
+    current_user: User = Depends(require_user_type("EMPLOYEE", "MANAGER")),
+    service: EmployeeService = Depends(_get_service),
+):
+    result = await service.agent_chat(current_user, data.message, data.session_id)
+    return success_response(data=AgentChatOut(**result))
+
+
+# ── 新人指引（知识库 + 引导式流程） ──────────────────────
+@router.get("/guide/onboarding", summary="新人指引章节（引导式流程，源自《公司新人指南》）")
+async def guide_onboarding(
+    current_user: User = Depends(require_user_type("EMPLOYEE", "MANAGER")),
+):
+    from app.services.onboarding_guide import get_all_sections
+    sections = [GuideSectionOut(**s) for s in get_all_sections()]
+    return success_response(data={"items": sections, "total": len(sections)})
+
+
+@router.post("/guide/ask", summary="新人指引问答（Dify RAG 优先，本地静态降级）")
+async def guide_ask(
+    data: GuideAskCreate,
+    current_user: User = Depends(require_user_type("EMPLOYEE", "MANAGER")),
+    service: EmployeeService = Depends(_get_service),
+):
+    result = await service.guide_ask(current_user, data.question, data.session_id)
+    return success_response(data=GuideAskOut(**result))
+
+
+# ── 提醒聚合（登录拉取，Agent 主动提醒数据源） ────────────
+@router.get("/reminders", summary="登录拉取提醒聚合（待办/待跟进/待审批/心理预警）")
+async def get_reminders(
+    current_user: User = Depends(require_user_type("EMPLOYEE", "MANAGER")),
+    service: EmployeeService = Depends(_get_service),
+):
+    result = await service.get_reminders(current_user)
+    return success_response(data=RemindersOut(**result))

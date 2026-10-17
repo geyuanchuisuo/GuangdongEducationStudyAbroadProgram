@@ -131,14 +131,18 @@ expected_employee_paths = [
     '/api/v1/employee/export/customers',
     '/api/v1/employee/export/daily-reports',
     '/api/v1/employee/export/follow-ups',
+    '/api/v1/employee/agent/chat',
+    '/api/v1/employee/guide/onboarding',
+    '/api/v1/employee/guide/ask',
+    '/api/v1/employee/reminders',
 ]
-test('/api/v1/employee (30 paths, M3 v6.4.0)',
+test('/api/v1/employee (34 paths, M3 v6.5.0)',
      lambda: None if all(p in routes for p in expected_employee_paths) else
      (_ for _ in ()).throw(Exception('missing')))
 
-test(f'total paths = 50 (49 API + 1 health, got {len(routes)})',
-     lambda: None if len(routes) == 50 else
-     (_ for _ in ()).throw(Exception(f'expected 50')))
+test(f'total paths = 54 (53 API + 1 health, got {len(routes)})',
+     lambda: None if len(routes) == 54 else
+     (_ for _ in ()).throw(Exception(f'expected 54')))
 
 # ===== Suite 3: MVC Layer =====
 print()

@@ -329,3 +329,48 @@ class ProfileUpdate(BaseModel):
 class PasswordChange(BaseModel):
     old_password: str = Field(..., min_length=1, description="旧密码（验证用）")
     new_password: str = Field(..., min_length=6, max_length=64, description="新密码（至少6位）")
+
+
+# ── 企业智能助手 Agent（权限感知） ──────────────────────
+class AgentChatCreate(BaseModel):
+    message: str = Field(..., min_length=1, max_length=4000, description="用户消息")
+    session_id: Optional[str] = Field(None, description="会话ID；不传或 new 表示新会话")
+
+
+class AgentChatOut(BaseModel):
+    reply: str
+    session_id: str
+    source: str = Field(..., description="dify=AI网关 / fallback=本地降级（AI不可用）")
+
+
+# ── 新人指引 ──────────────────────────────────────────
+class GuideItemOut(BaseModel):
+    q: str
+    a: str
+
+
+class GuideSectionOut(BaseModel):
+    key: str
+    title: str
+    summary: str
+    items: list[GuideItemOut]
+
+
+class GuideAskCreate(BaseModel):
+    question: str = Field(..., min_length=1, max_length=2000, description="提问内容")
+    session_id: Optional[str] = None
+
+
+class GuideAskOut(BaseModel):
+    answer: str
+    source: str = Field(..., description="dify=AI RAG / local=本地静态指引匹配")
+    session_id: Optional[str] = None
+
+
+# ── 提醒聚合（登录拉取） ───────────────────────────────
+class RemindersOut(BaseModel):
+    todos_pending: int = Field(0, description="未完成待办数")
+    follow_ups_due: int = Field(0, description="今日应跟进客户数（next_date<=今天）")
+    admin_services_pending: int = Field(0, description="待我审批的学生行政服务单数")
+    psych_alerts_pending: int = Field(0, description="未处理心理预警数")
+    approvals_pending: Optional[int] = Field(None, description="待我审批的审批单数（仅 MANAGER 返回）")

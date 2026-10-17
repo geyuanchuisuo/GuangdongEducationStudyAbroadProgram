@@ -13,7 +13,7 @@ from app.repositories.employee_repo import (
     TodoRepository,
 )
 from app.services.approval_engine import ApprovalBizType, ApprovalStatus, approval_engine
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -1047,3 +1047,139 @@ class EmployeeService:
               str(f.next_date) if f.next_date else "",
               f.created_at.strftime("%Y-%m-%d %H:%M") if f.created_at else ""] for f in follows],
         )
+
+    # ── 企业智能助手 Agent（权限感知 + 降级） ─────────────
+    EMPLOYEE_CAPABILITIES: list[str] = [
+        "客户信息查询（仅自己名下）",
+        "客户信息录入（文字/PDF/照片/Word/Excel）",
+        "客户跟进记录",
+        "待办事项提醒",
+        "组织架构查询",
+        "新人指引",
+        "口述日报",
+        "指令式业务处理（二次确认后执行）",
+    ]
+    MANAGER_EXTRA_CAPABILITIES: list[str] = [
+        "全域客户查询（不受数据隔离限制）",
+        "经营状况查询与数据分析",
+        "流程审批",
+        "员工管理",
+        "日报汇总查看",
+        "智能报告查询",
+    ]
+
+    async def agent_chat(self, user: User, message: str, session_id: str | None) -> dict:
+        """企业助手会话：按角色注入权限感知 context 转发 Dify；AI 不可用降级返回能力清单。
+
+        权限感知：EMPLOYEE 数据范围=own（仅名下客户），MANAGER=all（全域），
+        能力清单写入 inputs.capabilities 供 Dify Agent prompt 使用。
+        """
+        from app.services.ai_service import AgentType, ai_service
+
+        caps = list(self.EMPLOYEE_CAPABILITIES)
+        if user.user_type == "MANAGER":
+            caps += self.MANAGER_EXTRA_CAPABILITIES
+        context = {
+            "user_type": user.user_type,
+            "user_id": str(user.id),
+            "real_name": user.real_name or user.username,
+            "data_scope": "all" if user.user_type == "MANAGER" else "own",
+            "capabilities": "、".join(caps),
+        }
+        try:
+            resp = await ai_service.chat(
+                agent=AgentType.EMPLOYEE,
+                message=message,
+                session_id=session_id or "new",
+                user_id=f"employee_{user.id}",
+                context=context,
+            )
+            return {"reply": resp.content, "session_id": resp.session_id, "source": "dify"}
+        except Exception:
+            reply = (
+                f"AI 助手暂时不可用（Dify 未连接）。当前身份「{user.user_type}」，"
+                f"数据范围：{'全域' if user.user_type == 'MANAGER' else '仅自己名下'}。可用能力：\n"
+                + "\n".join(f"- {c}" for c in caps)
+                + "\n\n提示：录入跟进/待办/成绩/日报等指令可走指令式业务处理接口"
+                  "（POST /employee/commands/parse → commands/execute 二次确认）。"
+            )
+            return {"reply": reply, "session_id": session_id or "new", "source": "fallback"}
+
+    # ── 新人指引问答（RAG 优先，本地静态降级） ────────────
+    async def guide_ask(self, user: User, question: str, session_id: str | None) -> dict:
+        """优先走 Dify RAG（知识库挂载新人手册，scene=newcomer_guide）；
+        AI 不可用降级为本地静态指引关键词匹配。"""
+        from app.services.ai_service import AgentType, ai_service
+        from app.services.onboarding_guide import search_guide
+
+        try:
+            resp = await ai_service.chat(
+                agent=AgentType.EMPLOYEE,
+                message=question,
+                session_id=session_id or "new",
+                user_id=f"employee_{user.id}",
+                context={"scene": "newcomer_guide"},
+            )
+            return {"answer": resp.content, "source": "dify", "session_id": resp.session_id}
+        except Exception:
+            hits = search_guide(question)
+            if hits:
+                parts = [f"【{h['section']}】{h['q']}\n{h['a']}" for h in hits[:3]]
+                answer = "以下为新人指南中的相关内容（本地匹配）：\n\n" + "\n\n".join(parts)
+            else:
+                answer = ("新人指南中暂未找到相关内容，可联系入职导师或行政办公室"
+                          "（林雅婷，分机 8001）获取帮助。")
+            return {"answer": answer, "source": "local", "session_id": session_id or "new"}
+
+    # ── 提醒聚合（登录拉取，主动提醒的数据源） ────────────
+    async def get_reminders(self, user: User) -> dict:
+        """聚合：未完成待办 / 今日应跟进客户 / 待我审批行政服务 / 未处理心理预警；
+        MANAGER 额外返回待我审批的审批单数。"""
+        from app.models.crm import CrmFollowUp
+        from app.models.student import StudentAdminService, StudentPsychAlert
+
+        todos_pending = (await self.db.execute(
+            select(func.count()).select_from(EmployeeTodo).where(
+                EmployeeTodo.employee_id == user.id,
+                EmployeeTodo.status == "pending",
+            )
+        )).scalar_one()
+
+        follow_stmt = select(func.count()).select_from(CrmFollowUp).where(
+            CrmFollowUp.next_date.is_not(None),
+            CrmFollowUp.next_date <= date.today(),
+        )
+        if user.user_type != "MANAGER":
+            follow_stmt = follow_stmt.where(CrmFollowUp.employee_id == user.id)
+        follow_ups_due = (await self.db.execute(follow_stmt)).scalar_one()
+
+        admin_pending = (await self.db.execute(
+            select(func.count()).select_from(StudentAdminService).where(
+                StudentAdminService.approver_id == user.id,
+                StudentAdminService.status == "待审批",
+            )
+        )).scalar_one()
+
+        psych_pending = (await self.db.execute(
+            select(func.count()).select_from(StudentPsychAlert).where(
+                StudentPsychAlert.status == "未处理"
+            )
+        )).scalar_one()
+
+        result: dict = {
+            "todos_pending": todos_pending,
+            "follow_ups_due": follow_ups_due,
+            "admin_services_pending": admin_pending,
+            "psych_alerts_pending": psych_pending,
+            "approvals_pending": None,
+        }
+        if user.user_type == "MANAGER":
+            from app.models.system import ApprovalTask
+            from app.services.approval_engine import TaskStatus
+            result["approvals_pending"] = (await self.db.execute(
+                select(func.count()).select_from(ApprovalTask).where(
+                    ApprovalTask.approver_id == user.id,
+                    ApprovalTask.status == TaskStatus.PENDING.value,
+                )
+            )).scalar_one()
+        return result
