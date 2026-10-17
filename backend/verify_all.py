@@ -152,9 +152,25 @@ test('/api/v1/operation-logs (v6.6.0 操作日志查询)',
      lambda: None if '/api/v1/operation-logs' in routes else
      (_ for _ in ()).throw(Exception('missing')))
 
-test(f'total paths = 63 (62 API + 1 health, got {len(routes)})',
-     lambda: None if len(routes) == 63 else
-     (_ for _ in ()).throw(Exception(f'expected 63')))
+# ── M4 学生模块路由（9 paths / 11 endpoints, v6.8.0） ─────────────────────────
+expected_student_paths = [
+    '/api/v1/student/admin-services',
+    '/api/v1/student/psych/chat',
+    '/api/v1/student/psych/profile',
+    '/api/v1/student/tickets',
+    '/api/v1/student/academic',
+    '/api/v1/student/progress',
+    '/api/v1/student/life/faq',
+    '/api/v1/student/services',
+    '/api/v1/employee/students/{student_id}/progress',
+]
+test('/api/v1/student (11 paths, M4 v6.8.0 学生端+进度员工端)',
+     lambda: None if all(p in routes for p in expected_student_paths) else
+     (_ for _ in ()).throw(Exception('missing')))
+
+test(f'total paths = 72 (71 API + 1 health, got {len(routes)})',
+     lambda: None if len(routes) == 72 else
+     (_ for _ in ()).throw(Exception(f'expected 72')))
 
 # ===== Suite 3: MVC Layer =====
 print()
