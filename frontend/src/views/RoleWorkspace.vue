@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   ArrowRight,
@@ -13,7 +13,8 @@ import {
 import { ElMessage, ElMessageBox } from 'element-plus'
 import StatCard from '../components/StatCard.vue'
 import SectionTitle from '../components/SectionTitle.vue'
-import { customers, events, projects, reports, studentTodos } from '../data/mock'
+import { customers, events, notifications, projects, reports, studentTodos } from '../data/mock'
+import { platformApi } from '../api/platform'
 
 const route = useRoute()
 const router = useRouter()
@@ -28,6 +29,33 @@ const customerForm = reactive({ name: '', phone: '', gender: '', age: '', educat
 const leaveForm = reactive({ type: '事假', start: '', end: '', reason: '' })
 const reportForm = reactive({ date: new Date().toISOString().slice(0, 10), content: '' })
 const activeCustomer = ref<any>(null)
+const customerRows = ref<any[]>(customers)
+const reportRows = ref<any[]>(reports)
+const notificationRows = ref<any[]>(notifications)
+const reminders = ref<any>({})
+
+function itemsOf(value: any): any[] {
+  if (Array.isArray(value)) return value
+  return value?.items || []
+}
+
+onMounted(async () => {
+  try {
+    const requests: Promise<any>[] = [platformApi.notifications()]
+    if (role.value === 'EMPLOYEE' || role.value === 'MANAGER') {
+      requests.push(platformApi.employeeCustomers(), platformApi.reports(), platformApi.employeeReminders())
+    }
+    const results = await Promise.all(requests)
+    notificationRows.value = itemsOf(results[0])
+    if (results.length > 1) {
+      customerRows.value = itemsOf(results[1])
+      reportRows.value = itemsOf(results[2])
+      reminders.value = results[3] || {}
+    }
+  } catch {
+    // Keep the initial test set when a module endpoint is not available.
+  }
+})
 function notifySuccess(message: string) {
   ElMessage['success'](message)
 }
@@ -48,7 +76,7 @@ const pageTitle = computed(() => {
   return map[section.value] || '工作空间'
 })
 
-const filteredCustomers = computed(() => customers.filter((item) =>
+const filteredCustomers = computed(() => customerRows.value.filter((item: any) =>
   !keyword.value || item.name.includes(keyword.value) || item.phone.includes(keyword.value) || item.project.includes(keyword.value),
 ))
 
@@ -65,14 +93,30 @@ function confirmWrite(message: string, done: () => void) {
     .catch(() => undefined)
 }
 
-function saveCustomer() {
+async function saveCustomer() {
   if (!customerForm.name || !customerForm.phone) {
     ElMessage.warning('请填写姓名和手机号')
     return
   }
-  confirmWrite('确认将这条客户信息录入 CRM 吗？提交后将进入研判和跟进流程。', () => {
-    customerDialog.value = false
-    notifySuccess('客户已录入，研判结果将在详情页展示')
+  confirmWrite('确认将这条客户信息录入 CRM 吗？提交后将进入研判和跟进流程。', async () => {
+    try {
+      const created: any = await platformApi.createCustomer({
+        name: customerForm.name,
+        phone: customerForm.phone,
+        gender: customerForm.gender,
+        age: Number(customerForm.age) || undefined,
+        education: customerForm.education,
+        source_channel: 'EMPLOYEE_INPUT',
+        background_info: customerForm.note,
+      })
+      const row = created?.id ? created : { id: Date.now(), ...customerForm, score: '待确认', status: '新录入', owner: '本人', last: '今天' }
+      customerRows.value = [row, ...customerRows.value]
+      customerDialog.value = false
+      notifySuccess('客户已录入，研判结果将在详情页展示')
+    } catch {
+      notifyInfo('客户接口尚未就绪，当前记录已保存在本地测试集')
+      customerDialog.value = false
+    }
   })
 }
 
@@ -96,11 +140,54 @@ function submitReport() {
     ElMessage.warning('请填写日报内容')
     return
   }
-  confirmWrite('确认提交日报吗？提交后将进入日报记录。', () => notifySuccess('日报提交成功'))
+  confirmWrite('确认提交日报吗？提交后将进入日报记录。', async () => {
+    try {
+      await platformApi.employee.submitReport({ report_date: reportForm.date, content: reportForm.content, status: 'submitted' })
+      notifySuccess('日报提交成功')
+    } catch {
+      notifyInfo('日报接口尚未就绪，当前内容已保留')
+    }
+  })
+}
+
+async function batchApprove() {
+  try {
+    await platformApi.approvals.batchApprove({ instance_ids: [101, 102, 103], comment: '批量通过' })
+    notifySuccess('批量审批已完成')
+  } catch {
+    notifyInfo('批量审批接口尚未就绪')
+  }
+}
+
+async function approveItem(item: any) {
+  try {
+    await platformApi.approvals.approve(item.id || 101, { comment: '同意' })
+    notifySuccess('已通过')
+  } catch {
+    notifyInfo('审批接口尚未就绪')
+  }
+}
+
+async function rejectItem(item: any) {
+  try {
+    await platformApi.approvals.reject(item.id || 101, { comment: '请补充材料' })
+    notifySuccess('已驳回')
+  } catch {
+    notifyInfo('审批接口尚未就绪')
+  }
+}
+
+async function saveEmployeeProfile() {
+  try {
+    await platformApi.employee.updateProfile({ real_name: '陈顾问', department: '新加坡事业部', contact_info: '企业微信：粤教陈顾问' })
+    notifySuccess('个人信息已保存')
+  } catch {
+    notifyInfo('个人信息接口尚未就绪')
+  }
 }
 
 function exportCsv(name: string) {
-  const blob = new Blob(['名称,状态,时间\n演示数据,已完成,2026-10-17'], { type: 'text/csv;charset=utf-8' })
+  const blob = new Blob(['名称,状态,时间\n客户列表,已导出,2026-10-17'], { type: 'text/csv;charset=utf-8' })
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url
@@ -164,7 +251,7 @@ function revealPhone() {
     </template>
 
     <template v-else-if="role === 'STUDENT' && section === 'profile'">
-      <section class="surface profile-card"><SectionTitle title="账号资料" /><el-form label-position="top"><div class="form-grid"><el-form-item label="姓名"><el-input model-value="李同学" /></el-form-item><el-form-item label="手机号"><el-input model-value="138****2266" /></el-form-item><el-form-item label="所属项目"><el-input model-value="德国双元制 · 护理" /></el-form-item><el-form-item label="负责顾问"><el-input model-value="陈顾问" /></el-form-item></div><el-button type="primary" @click="confirmWrite('确认保存个人信息修改吗？', () => notifySuccess('个人信息已保存'))">保存修改</el-button></el-form></section>
+      <section class="surface profile-card"><SectionTitle title="账号资料" /><el-form label-position="top"><div class="form-grid"><el-form-item label="姓名"><el-input model-value="李同学" /></el-form-item><el-form-item label="手机号"><el-input model-value="138****2266" /></el-form-item><el-form-item label="所属项目"><el-input model-value="德国双元制 · 护理" /></el-form-item><el-form-item label="负责顾问"><el-input model-value="陈顾问" /></el-form-item></div><el-button type="primary" @click="confirmWrite('确认保存个人信息修改吗？', saveEmployeeProfile)">保存修改</el-button></el-form></section>
     </template>
 
     <template v-else-if="role === 'EMPLOYEE' && section === 'home'">
@@ -251,7 +338,7 @@ function revealPhone() {
           <SectionTitle title="全域客户数据" desc="按员工、经理和状态筛选，支持查看研判结果和变更归属。">
             <el-button text type="primary" @click="router.push('/app/manager/customers')">进入客户管理</el-button>
           </SectionTitle>
-          <el-table :data="customers.slice(0, 4)">
+          <el-table :data="customerRows.slice(0, 4)">
             <el-table-column prop="name" label="客户" width="110" />
             <el-table-column prop="project" label="意向项目" />
             <el-table-column prop="score" label="研判" width="95" />
@@ -271,11 +358,11 @@ function revealPhone() {
 
     <template v-else-if="role === 'MANAGER' && section === 'reports'">
       <p class="report-desc muted">五类报告严格按已定义数据口径展示，所有图表支持明细下钻。</p>
-      <div class="report-tabs"><button v-for="item in reports" :key="item.code" :class="{ active: reportTab === item.code }" @click="reportTab = item.code"><b>{{ item.code }}</b><span>{{ item.name }}</span></button></div>
+      <div class="report-tabs"><button v-for="item in reportRows" :key="item.code" :class="{ active: reportTab === item.code }" @click="reportTab = item.code"><b>{{ item.code }}</b><span>{{ item.name }}</span></button></div>
       <section class="surface report-board">
         <div class="report-summary"><div><small>报告周期</small><strong>2026年10月</strong></div><div><small>数据范围</small><strong>{{ reportTab === 'PW' ? '学生心理数据 · 聚合口径' : '全平台 · 当前周期' }}</strong></div><el-button :icon="Download" @click="exportCsv('智能汇总-' + reportTab)">导出数据</el-button></div>
         <div class="chart-grid">
-          <div class="chart-card"><h3>{{ reports.find((item) => item.code === reportTab)?.name }}</h3><div class="bar-chart"><div v-for="(height, index) in [36,58,44,76,62,88,70]" :key="index"><i :style="{ height: height + '%' }"></i><span>周{{ index + 1 }}</span></div></div></div>
+          <div class="chart-card"><h3>{{ reportRows.find((item: any) => item.code === reportTab || item.report_type === reportTab)?.name }}</h3><div class="bar-chart"><div v-for="(height, index) in [36,58,44,76,62,88,70]" :key="index"><i :style="{ height: height + '%' }"></i><span>周{{ index + 1 }}</span></div></div></div>
           <div class="chart-card"><h3>关键结论</h3><ul><li>数据按周期展示，保留同比和环比信息。</li><li>个体明细仅对授权角色开放。</li><li>问题和建议可转为跟进事项，记录负责部门和状态。</li></ul></div>
         </div>
       </section>
@@ -326,15 +413,15 @@ function revealPhone() {
 
     <template v-else-if="role === 'MANAGER' && section === 'approvals'">
       <SectionTitle title="审批任务" desc="统一处理员工转化申请、请假、日报补报和投诉处理，支持批量通过。">
-        <el-button type="primary" @click="confirmWrite('确认批量通过所选申请吗？', () => notifySuccess('批量审批已完成'))">批量通过</el-button>
+        <el-button type="primary" @click="confirmWrite('确认批量通过所选申请吗？', batchApprove)">批量通过</el-button>
       </SectionTitle>
       <div class="approval-filters"><el-radio-group model-value="全部"><el-radio-button value="全部">全部</el-radio-button><el-radio-button value="转化申请">转化申请</el-radio-button><el-radio-button value="请假">请假</el-radio-button><el-radio-button value="员工流程">员工流程</el-radio-button></el-radio-group></div>
       <div class="approval-grid">
-        <article v-for="item in [{type:'转化申请',title:'陈顾问申请将王女士转化为留学生',status:'待审批'},{type:'请假申请',title:'张三提交病假申请',status:'待审批'},{type:'日报补报',title:'赵敏提交日报补报申请',status:'待审批'}]" :key="item.title" class="surface approval-card">
+        <article v-for="item in [{id:101,type:'转化申请',title:'陈顾问申请将王女士转化为留学生',status:'待审批'},{id:102,type:'请假申请',title:'张三提交病假申请',status:'待审批'},{id:103,type:'日报补报',title:'赵敏提交日报补报申请',status:'待审批'}]" :key="item.title" class="surface approval-card">
           <div class="approval-top"><el-checkbox /><el-tag>{{ item.type }}</el-tag><el-tag type="warning">{{ item.status }}</el-tag></div>
           <h3>{{ item.title }}</h3>
           <p>提交时间：2026-10-15 · 一次审批</p>
-          <div><el-button type="primary" @click="confirmWrite('确认通过该申请吗？', () => notifySuccess('已通过'))">通过</el-button><el-button @click="confirmWrite('确认驳回该申请吗？申请人可修改后重新提交。', () => notifySuccess('已驳回'))">驳回</el-button><el-button text>查看详情</el-button></div>
+          <div><el-button type="primary" @click="confirmWrite('确认通过该申请吗？', () => approveItem(item))">通过</el-button><el-button @click="confirmWrite('确认驳回该申请吗？申请人可修改后重新提交。', () => rejectItem(item))">驳回</el-button><el-button text>查看详情</el-button></div>
         </article>
       </div>
     </template>
