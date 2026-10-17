@@ -2,8 +2,9 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
-from app.api.v1 import auth, users
+from app.api.v1 import ai, auth, courses, crm, events, users
 from app.config import settings
 from app.core.exceptions import BusinessError
 from app.core.middleware import RequestLogMiddleware
@@ -52,7 +53,7 @@ async def business_error_handler(request: Request, exc: BusinessError):
         exc.code,
         exc.message,
     )
-    return error_response(code=exc.code, message=exc.message)
+    return JSONResponse(status_code=200, content=error_response(code=exc.code, message=exc.message))
 
 
 @app.exception_handler(Exception)
@@ -63,11 +64,15 @@ async def global_exception_handler(request: Request, exc: Exception):
         request.url.path,
         str(exc),
     )
-    return error_response(code=50001, message="服务器内部错误")
+    return JSONResponse(status_code=500, content=error_response(code=50001, message="服务器内部错误"))
 
 
 app.include_router(auth.router, prefix=settings.API_V1_PREFIX)
 app.include_router(users.router, prefix=settings.API_V1_PREFIX)
+app.include_router(crm.router, prefix=settings.API_V1_PREFIX)
+app.include_router(courses.router, prefix=settings.API_V1_PREFIX)
+app.include_router(events.router, prefix=settings.API_V1_PREFIX)
+app.include_router(ai.router, prefix=settings.API_V1_PREFIX)
 
 
 @app.get("/health")
