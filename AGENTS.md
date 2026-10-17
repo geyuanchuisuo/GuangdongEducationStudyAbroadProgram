@@ -1,4 +1,4 @@
-# AGENTS.md - 项目接手指南
+﻿﻿# AGENTS.md - 项目接手指南
 
 > 给下一个接手这个项目的人/AI 的完整指南
 
@@ -6,8 +6,8 @@
 
 ## 零、快速定位（打开项目先看这里）
 
-**当前进度**：Phase 0 公共地基已完成（v6.0.1），进入 Phase 1 模块并行开发  
-**数据库**：30张表，13个API端点，MVC分层结构就绪  
+**当前进度**：Phase 0 公共地基已完成（v6.0.1），Phase 1 模块并行开发中；M3 员工模块全部交付（v6.5.0 收官）；v6.6.0 需求对齐差异全部落地（org 搜索/脱敏电话/客户下钻/推荐产品/投诉导出/操作日志查询）；**v6.7.0 Phase 1.3 管理层端三项落地（经营看板/审批中心/用户管理权限配置）**；master 已合并 longtrying 全部工作（cba3303，2026-10-17）  
+**数据库**：31张表，63个路由端点（employee 42），MVC分层结构就绪  
 **主基线文档**：`promts/lon/提示词整合测试_demo/docs/基础架构方案_五人并行开发.md`（v1.2.0，28项决策）
 
 **接手阅读顺序**：
@@ -15,13 +15,22 @@
 2. `docs/项目需求文档.md` — 完整业务需求
 3. `promts/lon/提示词整合测试_demo/docs/基础架构方案_五人并行开发.md` — **主基线，权重最高**
 4. `docs/开发路线图.md` — 当前进度、下一步任务
-5. `docs/接口契约v1.md` — API接口契约（v2.0）
-6. `docs/更新记录.md` — 最近变更（v6.0.1）
+5. `docs/接口契约v1.md` — API接口契约（v2.7.2）
+6. `docs/更新记录.md` — 最近变更（v6.7.2）
 
 **重要规则**：
 - 主基线文档（基础架构方案）权重 > 其他参考文档（共用基座方案、公共框架等）
 - 每次迭代完成后必须同步更新 docs/ 下全部6个文件
 - 代码写完必须先测试验证，再报告完成
+
+**开发硬性规则（所有人/Agent 接手后必须逐条遵守）**：
+1. **文档同步**：每次执行完毕都要同步更新对应的 6 份文档——更新记录.md、AGENTS.md（根目录+docs副本）、接口契约v1.md、开发路线图.md、项目需求文档.md、运行日志.md，方便后续人员/新窗口接手（每个 Agent 和人开工前必须先读 AGENTS.md）
+2. **必须测试**：每次执行完毕都要进行测试（本地快速验证优先：compileall + verify_all + 静态功能脚本；不优先启动 docker）
+3. **先记录再推送**：测试没有问题，先把测试结果写入文档（更新记录.md「测试结果」行 + 运行日志），然后推送到 git 云仓分支
+4. **分支绑定模块**：各自的分支接手各自的模块，其他人的模块不要动（longtrying=M3，ZNBG/anhoa/architecture/研判等分支勿动）
+5. **共用模块先确认**：如果改动影响到共用模块（M0 审批引擎/事件总线/AI网关/通知中心等），暂时绕过并主动提醒，经确认之后才可以动——否则会影响其他模块开发
+6. **固定开发顺序**：开发 → 写入相应的文档（更新、agents等）→ 测试 → 测试问题修复 → 写入相应的文档（更新、agents等）→ 推送 git
+7. **牢记硬性规则**：开发过程中随时对照本清单执行，不得跳步
 
 ---
 
@@ -143,7 +152,7 @@ GuangdongEducationStudyAbroadProgram/
 - 员工数据隔离：普通员工只能看到自己名下的客户
 - 二期拆分为3个独立角色：人事（HR，不可看客户/经营）、经理（MANAGER_DIRECTOR，只看下属+自己客户）、总裁（MANAGER_PRESIDENT，看全部）
 
-### 4.2 数据库表（30张，v6.0.0更新）
+### 4.2 数据库表（31张，v6.5.0更新）
 
 > **数据库**：MySQL 8.0+，端口59000，库名 `GuangdongEducationStudyAbroadProgram`
 > **自动建表**：应用启动时自动创建所有表，无需手动执行SQL
@@ -175,22 +184,23 @@ GuangdongEducationStudyAbroadProgram/
 18. **cs_faq** - 常见问答对表
 
 **员工模块表（M3）**：
-19. **employee_daily_report** - 员工日报表
+19. **employee_daily_report** - 员工日报表（v6.3.0 加 status/is_late）
 20. **student_score** - 学生成绩表
 21. **employee_org** - 组织架构表
 22. **employee_todo** - 员工待办事项表
+23. **daily_report_annotation** - 日报批示表（v6.4.0 新增）
 
 **学生模块表（M4）**：
-23. **student_admin_service** - 学生行政服务表
-24. **student_psych_profile** - 心理健康画像表
-25. **student_psych_alert** - 心理预警表
-26. **student_feedback_ticket** - 售后反馈工单表
-27. **student_academic** - 学生学业考务表
-28. **student_application_progress** - 留学申请进度表
+24. **student_admin_service** - 学生行政服务表
+25. **student_psych_profile** - 心理健康画像表
+26. **student_psych_alert** - 心理预警表
+27. **student_feedback_ticket** - 售后反馈工单表
+28. **student_academic** - 学生学业考务表
+29. **student_application_progress** - 留学申请进度表
 
 **报告模块表（M5）**：
-29. **ai_report** - 智能报告表
-30. **ai_report_attachment** - 报告附件表
+30. **ai_report** - 智能报告表
+31. **ai_report_attachment** - 报告附件表
 
 ### 4.3 API接口分组
 
@@ -539,10 +549,22 @@ VITE_API_BASE_URL=http://localhost:8000/api/v1
 ### 7.1 Git规范
 
 **分支**：
-- `main` - 生产
-- `develop` - 开发
+- `master` - 主干（**2026-10-17 已合并 longtrying 全部工作，cba3303**；保护分支已由管理员解除，当前可直推；后续如需防误推可在 gitea 后台恢复保护）
+- `longtrying` - 开发分支（当前主线，M3 全部工作在此）
+- `develop` - 开发（预留）
 - `feature/*` - 功能
 - `fix/*` - 修复
+- 其他成员分支：ZNBG / anhoa / architecture / 研判 等（勿动他人分支）
+
+**longtrying → master 合并流程**（实测记录见运行日志 LOG-007）：
+```
+git fetch gitea
+git checkout master
+git merge --ff-only gitea/master          # 1. 先同步远端 master 最新
+git merge longtrying -X theirs --no-edit  # 2. 合并（冲突以 longtrying 为准；站在 master 上，theirs=longtrying）
+git push gitea master                     # 3. 推送
+git checkout longtrying                   # 4. 切回开发分支
+```
 
 **Commit格式**：
 ```
@@ -646,10 +668,10 @@ chore: 构建
 | **AGENTS.md** | **./AGENTS.md**（根目录） | **项目接手指南（agent自动读取，这是主文件）** |
 | AGENTS.md 副本 | docs/AGENTS.md | 与根目录保持同步的副本 |
 | 项目需求文档 | docs/项目需求文档.md | 完整需求、架构、接口、数据库 |
-| 更新记录 | docs/更新记录.md | 版本变更记录（当前v6.0.1） |
-| 开发路线图 | docs/开发路线图.md | 分期任务表（Phase 0已完成） |
+| 更新记录 | docs/更新记录.md | 版本变更记录（当前v6.7.0） |
+| 开发路线图 | docs/开发路线图.md | 分期任务表（Phase 0已完成，M3 收官，Phase 1.3 管理层端已落地） |
 | 运行日志 | docs/运行日志.md | 排查记录与教训 |
-| 接口契约v2 | docs/接口契约v1.md | API接口契约（v2.0，30张表） |
+| 接口契约v2 | docs/接口契约v1.md | API接口契约（v2.7.0，31张表，63路由） |
 | **基础架构方案** | **promts/lon/提示词整合测试_demo/docs/基础架构方案_五人并行开发.md** | **主基线文档（v1.2.0，28项决策），所有参考文档权重低于此文件** |
 
 > **文档优先级**：基础架构方案_五人并行开发.md > 其他参考文档（共用基座方案、公共框架等）
@@ -677,5 +699,5 @@ chore: 构建
 
 ---
 
-**最后更新**：2026-10-16  
+**最后更新**：2026-10-17 13:35（v6.7.2：经用户确认**项目需求无签约金额字段**，dashboard overview 移除 signed_amount 占位，最终 4 指标（本月新增意向/转化率/在办学生数/投诉率）；M3 需求核对遗留差异全部关闭；契约 v2.7.2）  
 **维护人**：开发团队

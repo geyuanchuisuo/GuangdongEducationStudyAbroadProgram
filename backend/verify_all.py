@@ -15,16 +15,16 @@ def test(name, fn):
         print(f'  FAIL: {name} -> {e}')
         failed += 1
 
-# ===== Suite 1: 30 tables =====
+# ===== Suite 1: 31 tables =====
 print('=' * 60)
-print('Suite 1: Model Import (30 tables)')
+print('Suite 1: Model Import (31 tables)')
 print('=' * 60)
 
 from app.models import Base
 all_tables = sorted(Base.metadata.tables.keys())
 print(f'  Tables ({len(all_tables)}): {all_tables}')
-test(f'table count = 30 (got {len(all_tables)})',
-     lambda: None if len(all_tables) == 30 else
+test(f'table count = 31 (got {len(all_tables)})',
+     lambda: None if len(all_tables) == 31 else
      (_ for _ in ()).throw(Exception(f'got {len(all_tables)}')))
 
 from app.models.user import User
@@ -34,16 +34,16 @@ from app.models.customer_service import CsChatSession, CsChatMessage, CsIntentLo
 from app.models.student import (StudentAdminService, StudentPsychProfile, StudentPsychAlert,
                                  StudentFeedbackTicket, StudentScore, StudentAcademic,
                                  StudentApplicationProgress)
-from app.models.employee import EmployeeDailyReport, EmployeeTodo, EmployeeOrg
+from app.models.employee import DailyReportAnnotation, EmployeeDailyReport, EmployeeTodo, EmployeeOrg
 from app.models.course import CourseProject
 from app.models.event import EventLecture, EventRegistration
 from app.models.system import SysEvent, ApprovalInstance, ApprovalTask, SysOperationLog, SysNotification
-test('all 30 model classes import OK', lambda: None)
+test('all 31 model classes import OK', lambda: None)
 
 # ===== Suite 2: API Endpoints =====
 print()
 print('=' * 60)
-print('Suite 2: API Endpoints (13 unique paths)')
+print('Suite 2: API Endpoints (20 unique paths)')
 print('=' * 60)
 
 from app.main import app
@@ -80,9 +80,81 @@ test('/api/v1/approvals (7 paths)',
      lambda: None if all(p in routes for p in expected_approval_paths) else
      (_ for _ in ()).throw(Exception('missing')))
 
-test(f'total paths = 13 (12 API + 1 health, got {len(routes)})',
-     lambda: None if len(routes) == 13 else
-     (_ for _ in ()).throw(Exception(f'expected 13')))
+expected_notification_paths = [
+    '/api/v1/notifications',
+    '/api/v1/notifications/unread-count',
+    '/api/v1/notifications/read-all',
+    '/api/v1/notifications/{notification_id}/read',
+]
+test('/api/v1/notifications (4 paths, contract §8.2)',
+     lambda: None if all(p in routes for p in expected_notification_paths) else
+     (_ for _ in ()).throw(Exception('missing')))
+
+expected_file_paths = [
+    '/api/v1/files/upload',
+    '/api/v1/files/download',
+    '/api/v1/files/presigned',
+]
+test('/api/v1/files (3 paths, contract §8.3)',
+     lambda: None if all(p in routes for p in expected_file_paths) else
+     (_ for _ in ()).throw(Exception('missing')))
+
+# ── M3 员工模块路由（30 paths） ─────────────────────────
+expected_employee_paths = [
+    '/api/v1/employee/reports',
+    '/api/v1/employee/reports/summary',
+    '/api/v1/employee/reports/oral',
+    '/api/v1/employee/reports/late-review',
+    '/api/v1/employee/reports/{report_id}',
+    '/api/v1/employee/reports/{report_id}/late-apply',
+    '/api/v1/employee/reports/{report_id}/annotations',
+    '/api/v1/employee/todos',
+    '/api/v1/employee/todos/{todo_id}',
+    '/api/v1/employee/org',
+    '/api/v1/employee/scores',
+    '/api/v1/employee/convert-applies',
+    '/api/v1/employee/admin-services',
+    '/api/v1/employee/admin-services/{service_id}/review',
+    '/api/v1/employee/crm/leads',
+    '/api/v1/employee/crm/follow-ups',
+    '/api/v1/employee/commands/parse',
+    '/api/v1/employee/commands/execute',
+    '/api/v1/employee/customers',
+    '/api/v1/employee/customers/reassign',
+    '/api/v1/employee/customers/{customer_id}/status',
+    '/api/v1/employee/tickets',
+    '/api/v1/employee/tickets/{ticket_id}/handle',
+    '/api/v1/employee/psych-alerts/{alert_id}/handle',
+    '/api/v1/employee/profile',
+    '/api/v1/employee/profile/password',
+    '/api/v1/employee/profile/stats',
+    '/api/v1/employee/export/customers',
+    '/api/v1/employee/export/daily-reports',
+    '/api/v1/employee/export/follow-ups',
+    '/api/v1/employee/agent/chat',
+    '/api/v1/employee/guide/onboarding',
+    '/api/v1/employee/guide/ask',
+    '/api/v1/employee/reminders',
+    '/api/v1/employee/org/members',
+    '/api/v1/employee/org/members/{user_id}/reveal-phone',
+    '/api/v1/employee/export/tickets',
+    '/api/v1/employee/dashboard',
+    '/api/v1/employee/approvals-center',
+    '/api/v1/employee/users',
+    '/api/v1/employee/users/{user_id}/status',
+    '/api/v1/employee/users/{user_id}/permissions',
+]
+test('/api/v1/employee (42 paths, M3 v6.7.0 管理层端)',
+     lambda: None if all(p in routes for p in expected_employee_paths) else
+     (_ for _ in ()).throw(Exception('missing')))
+
+test('/api/v1/operation-logs (v6.6.0 操作日志查询)',
+     lambda: None if '/api/v1/operation-logs' in routes else
+     (_ for _ in ()).throw(Exception('missing')))
+
+test(f'total paths = 63 (62 API + 1 health, got {len(routes)})',
+     lambda: None if len(routes) == 63 else
+     (_ for _ in ()).throw(Exception(f'expected 63')))
 
 # ===== Suite 3: MVC Layer =====
 print()
@@ -96,7 +168,8 @@ from app.schemas.customer import (CustomerCreate, CustomerOut, CustomerUpdate,
 from app.schemas.approval import (ApprovalCreate, ApprovalAction, ApprovalTaskOut,
                                    ApprovalInstanceOut, BatchApprovalRequest)
 from app.schemas.common import PageParams, PageResult, IdResponse, StatusResponse, MessageResponse
-test('schemas (4 modules, 19 classes)', lambda: None)
+from app.schemas.notification import NotificationOut
+test('schemas (5 modules, 20 classes)', lambda: None)
 
 from app.repositories.user_repo import UserRepository
 from app.repositories.customer_repo import CustomerRepository

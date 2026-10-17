@@ -23,7 +23,7 @@ class ApprovalInstance(Base):
     biz_type: Mapped[str] = mapped_column(String(32), nullable=False, index=True, comment="业务类型(leave/convert/late_report/complaint)")
     biz_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True, comment="关联业务ID")
     title: Mapped[str | None] = mapped_column(String(200), nullable=True, comment="审批标题")
-    initiator_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("sys_user.id"), nullable=False, index=True, comment="发起人")
+    initiator_id: Mapped[int] = mapped_column(Integer, ForeignKey("sys_user.id"), nullable=False, index=True, comment="发起人")
     status: Mapped[str] = mapped_column(String(16), default="pending", index=True, comment="状态(pending/approved/rejected/cancelled)")
     current_step: Mapped[int] = mapped_column(Integer, default=1, comment="当前审批步骤")
     total_steps: Mapped[int] = mapped_column(Integer, default=1, comment="总审批步骤数")
@@ -38,7 +38,7 @@ class ApprovalTask(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     instance_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("approval_instance.id"), nullable=False, index=True, comment="审批实例ID")
-    approver_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("sys_user.id"), nullable=False, index=True, comment="审批人")
+    approver_id: Mapped[int] = mapped_column(Integer, ForeignKey("sys_user.id"), nullable=False, index=True, comment="审批人")
     seq_no: Mapped[int] = mapped_column(Integer, nullable=False, comment="审批顺序")
     action: Mapped[str | None] = mapped_column(String(16), nullable=True, comment="审批动作(approved/rejected)")
     comment: Mapped[str | None] = mapped_column(Text, nullable=True, comment="审批意见")
@@ -51,7 +51,7 @@ class SysOperationLog(Base):
     __tablename__ = "sys_operation_log"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("sys_user.id"), nullable=True, index=True)
+    user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("sys_user.id"), nullable=True, index=True)
     module: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
     action: Mapped[str] = mapped_column(String(64), nullable=False)
     target_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
@@ -65,7 +65,7 @@ class SysNotification(Base):
     __tablename__ = "sys_notification"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("sys_user.id"), nullable=False, index=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("sys_user.id"), nullable=False, index=True)
     type: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
     title: Mapped[str | None] = mapped_column(String(255), nullable=True)
     content: Mapped[str | None] = mapped_column(Text, nullable=True)

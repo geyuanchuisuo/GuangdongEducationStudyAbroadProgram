@@ -4,7 +4,7 @@ import { useUserStore } from '../stores/user'
 import router from '../router'
 
 const request = axios.create({
-  baseURL: '/api/v1',
+  baseURL: import.meta.env.VITE_API_BASE_URL || '/api/v1',
   timeout: 30000,
 })
 
@@ -22,11 +22,20 @@ request.interceptors.request.use(
 request.interceptors.response.use(
   (response: AxiosResponse) => {
     const data = response.data
-    if (data.code && data.code !== 0) {
-      ElMessage.error(data.message || '请求失败')
-      return Promise.reject(new Error(data.message))
+    // 统一响应约定：HTTP 200，业务码 code:200 表示成功（见接口契约 §0.2）
+    if (data.code === 200 || data.code === undefined) {
+      return data
     }
-    return data
+    // 业务层未登录/Token 失效（后端以 HTTP 200 + 业务码返回）
+    if (data.code === 40101 || data.code === 40102) {
+      const userStore = useUserStore()
+      userStore.logout()
+      router.push('/login')
+      ElMessage.error(data.message || '登录已过期，请重新登录')
+      return Promise.reject(new Error(data.message || 'unauthorized'))
+    }
+    ElMessage.error(data.message || '请求失败')
+    return Promise.reject(new Error(data.message || 'request failed'))
   },
   (error) => {
     if (error.response) {
