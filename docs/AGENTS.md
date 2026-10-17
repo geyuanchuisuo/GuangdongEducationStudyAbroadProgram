@@ -550,7 +550,8 @@ VITE_API_BASE_URL=http://localhost:8000/api/v1
 
 **分支**：
 - `master` - 主干（**2026-10-17 两次合并 longtrying：cba3303（v6.5.0+v6.6.0）→ 62d4cff（v6.7.0~v6.7.2+硬性规则文档），均无冲突**；保护分支已解除，当前可直推）
-- `longtrying` - 开发分支（当前主线，M3 全部工作在此）
+- `longtrying` - 开发分支（M3 员工模块，已全部收官并合入 master）
+- `longtrying_stu` - 开发分支（**M4 学生模块，2026-10-17 从 longtrying e3b0160 新建**，进度追踪统一实现归此分支）
 - `develop` - 开发（预留）
 - `feature/*` - 功能
 - `fix/*` - 修复
@@ -699,5 +700,5 @@ chore: 构建
 
 ---
 
-**最后更新**：2026-10-17 13:42（第二次合并：longtrying→master 62d4cff 无冲突，并入 v6.7.1 需求核对/v6.7.2 签约金额定稿/硬性规则文档；零章节与 Git 规范合并记录同步）  
+**最后更新**：2026-10-17 13:47（新建 longtrying_stu 分支开发 M4 学生模块——从 longtrying e3b0160 创建，已推 gitea 并建立跟踪；Git 规范分支绑定同步：longtrying_stu=M4）  
 **维护人**：开发团队
