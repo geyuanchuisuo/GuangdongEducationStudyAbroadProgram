@@ -6,7 +6,7 @@
 
 ## 零、快速定位（打开项目先看这里）
 
-**当前进度**：Phase 0 公共地基已完成（v6.0.1），Phase 1 模块并行开发中；M3 员工模块全部交付（v6.5.0 收官）；v6.6.0 需求对齐差异全部落地（org 搜索/脱敏电话/客户下钻/推荐产品/投诉导出/操作日志查询）  
+**当前进度**：Phase 0 公共地基已完成（v6.0.1），Phase 1 模块并行开发中；M3 员工模块全部交付（v6.5.0 收官）；v6.6.0 需求对齐差异全部落地（org 搜索/脱敏电话/客户下钻/推荐产品/投诉导出/操作日志查询）；**master 已合并 longtrying 全部工作（cba3303，2026-10-17）**  
 **数据库**：31张表，58个路由端点（employee 37），MVC分层结构就绪  
 **主基线文档**：`promts/lon/提示词整合测试_demo/docs/基础架构方案_五人并行开发.md`（v1.2.0，28项决策）
 
@@ -540,10 +540,22 @@ VITE_API_BASE_URL=http://localhost:8000/api/v1
 ### 7.1 Git规范
 
 **分支**：
-- `main` - 生产
-- `develop` - 开发
+- `master` - 主干（**2026-10-17 已合并 longtrying 全部工作，cba3303**；保护分支已由管理员解除，当前可直推；后续如需防误推可在 gitea 后台恢复保护）
+- `longtrying` - 开发分支（当前主线，M3 全部工作在此）
+- `develop` - 开发（预留）
 - `feature/*` - 功能
 - `fix/*` - 修复
+- 其他成员分支：ZNBG / anhoa / architecture / 研判 等（勿动他人分支）
+
+**longtrying → master 合并流程**（实测记录见运行日志 LOG-007）：
+```
+git fetch gitea
+git checkout master
+git merge --ff-only gitea/master          # 1. 先同步远端 master 最新
+git merge longtrying -X theirs --no-edit  # 2. 合并（冲突以 longtrying 为准；站在 master 上，theirs=longtrying）
+git push gitea master                     # 3. 推送
+git checkout longtrying                   # 4. 切回开发分支
+```
 
 **Commit格式**：
 ```
@@ -678,5 +690,5 @@ chore: 构建
 
 ---
 
-**最后更新**：2026-10-17 12:42（v6.6.0：落地需求对齐规划端点——org keyword 搜索/org members 电话脱敏/reveal-phone 二次确认+日志留痕/customers 补跟进时间筛选+MANAGER 员工下钻+recommended/export tickets 投诉导出/operation-logs 查询；路由 54→58；verify_all 23/23+静态功能 25/25）  
+**最后更新**：2026-10-17 13:04（v6.6.0 + master 合并记录：longtrying→master 已合并 cba3303，冲突以 longtrying 为准；补记 LOG-007 合并过程与流程规范）  
 **维护人**：开发团队
