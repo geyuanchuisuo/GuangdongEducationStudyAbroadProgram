@@ -1,11 +1,16 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { Search } from '@element-plus/icons-vue'
 import SectionTitle from '../../components/SectionTitle.vue'
+import { platformApi } from '../../api/platform'
 import { faqs } from '../../data/mock'
 
 const keyword = ref('')
-const filtered = computed(() => faqs.filter((item) => !keyword.value || item.q.includes(keyword.value) || item.a.includes(keyword.value)))
+const list = ref<Array<{ q: string; a: string }>>(faqs)
+onMounted(async () => {
+  list.value = await platformApi.faqs()
+})
+const filtered = computed(() => list.value.filter((item) => !keyword.value || item.q.includes(keyword.value) || item.a.includes(keyword.value)))
 </script>
 
 <template>

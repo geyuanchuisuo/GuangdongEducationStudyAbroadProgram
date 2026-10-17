@@ -23,7 +23,14 @@ function query(params: AnyRecord = {}) {
 export const platformApi = {
   projects: () => fallback(() => request.get('/cs/courses'), projects),
   events: () => fallback(() => request.get('/cs/events'), events),
-  faqs: () => fallback(() => request.get('/cs/faq'), faqs),
+  faqs: async (): Promise<Array<{ q: string; a: string }>> => {
+    try {
+      const data: any = await toData(request.get('/cs/faq', { params: { page_size: 100 } }))
+      if (data?.items?.length) return data.items.map((i: AnyRecord) => ({ q: i.question, a: i.answer }))
+    } catch { /* 后端未就绪时降级 mock */ }
+    return faqs
+  },
+  csChat: (data: AnyRecord) => toData(request.post('/ai/customer-service/chat', data)),
   policies: () => Promise.resolve(policies),
   notifications: (params: AnyRecord = {}) => fallback(() => request.get('/notifications', { params: query(params) }), notifications),
   notificationsUnread: () => toData(request.get('/notifications/unread-count')),

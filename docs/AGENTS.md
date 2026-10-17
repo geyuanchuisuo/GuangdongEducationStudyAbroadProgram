@@ -6,8 +6,8 @@
 
 ## 零、快速定位（打开项目先看这里）
 
-**当前进度**：Phase 0 公共地基已完成（v6.0.1），Phase 1 模块并行开发中；M3 员工模块全部交付（v6.5.0 收官）；v6.6.0 需求对齐差异全部落地；v6.7.0~v6.7.2 管理层端三项+需求核对 52/52；master 已合并 longtrying（62d4cff）与 longtrying_stu（a23fc49，第三次合并）全部工作；**M4 学生模块一期全部交付（v6.8.0 第一批 7 子模块 + v6.8.1 第二批 学生助手Agent/提醒聚合，11 paths / 13 endpoints）；v6.8.2 Docker 环境搭建 + M3/M4 数据库端到端验证通过（E2E 69/69，修复 7 项缺陷）；v6.8.3 指令解析本地兜底 + 提醒聚合缺陷修复（E2E 71/71 幂等全过）；v6.8.4 文件存储改本地磁盘后端（docker compose 移除 MinIO，零额外镜像三容器直跑）+ DIFY_BASE_URL 根因修正；v6.8.5 引入 M5 智能报告 7 paths 与前端界面，M3 dashboard 与《一期指标口径表V1》统一名称+新增差异字段（verify_all 25/25 + M5 测试 32/32 + 对齐 14/14）；v6.8.6 AI 全链路打通：Dify 绑定 mimo-v2.6-flash（api.xiaomimimo.com），3 个 Agent 应用创建并回填 app key，真实 AI 链路 6/6 验证通过，环境缺口全部关闭**；**anhoa 分支 v6.8.0：M1 客户模块 + M2 客服 Agent 一期补齐（客户 8 研判字段/6 态流转/pending_lead 待补全线索/客服 Agent 4 出口），2026-10-17 两次合并 origin/master 并线（v6.8.0 被两条分支并行使用，路由 81→99）**  
-**数据库**：31张表（customer 加 8 研判画像列、cs_intent_log.user_id 放宽可空、AiReport 表加 version/data_source_status/error_message 3 列），99条路由路径（98 API + 1 health；employee 42 paths，student 11 paths/13 endpoints，reports 7 paths，crm/ai/courses/events 15 paths），MVC分层结构就绪；**Docker 环境：edu-mysql/edu-redis/edu-backend 全部健康，`docker compose up -d` 三容器零额外镜像直跑（文件存储默认本地磁盘 backend_storage 卷，不再依赖 MinIO）**  
+**当前进度**：Phase 0 公共地基已完成（v6.0.1），Phase 1 模块并行开发中；M3 员工模块全部交付（v6.5.0 收官）；v6.6.0 需求对齐差异全部落地；v6.7.0~v6.7.2 管理层端三项+需求核对 52/52；master 已合并 longtrying（62d4cff）与 longtrying_stu（a23fc49，第三次合并）全部工作；**M4 学生模块一期全部交付（v6.8.0 第一批 7 子模块 + v6.8.1 第二批 学生助手Agent/提醒聚合，11 paths / 13 endpoints）；v6.8.2 Docker 环境搭建 + M3/M4 数据库端到端验证通过（E2E 69/69，修复 7 项缺陷）；v6.8.3 指令解析本地兜底 + 提醒聚合缺陷修复（E2E 71/71 幂等全过）；v6.8.4 文件存储改本地磁盘后端（docker compose 移除 MinIO，零额外镜像三容器直跑）+ DIFY_BASE_URL 根因修正；v6.8.5 引入 M5 智能报告 7 paths 与前端界面，M3 dashboard 与《一期指标口径表V1》统一名称+新增差异字段（verify_all 25/25 + M5 测试 32/32 + 对齐 14/14）；v6.8.6 AI 全链路打通：Dify 绑定 mimo-v2.6-flash（api.xiaomimimo.com），3 个 Agent 应用创建并回填 app key，真实 AI 链路 6/6 验证通过，环境缺口全部关闭**；**anhoa 分支 v6.8.0：M1 客户模块 + M2 客服 Agent 一期补齐（客户 8 研判字段/6 态流转/pending_lead 待补全线索/客服 Agent 4 出口），2026-10-17 两次合并 origin/master 并线（v6.8.0 被两条分支并行使用，路由 81→99）；v6.9.0：M2 客服 Agent 二期补齐——cs_recommend_log 推荐落库新表 / [SLOTS] 槽位采集与画像更新 / 仅微信号→pending_lead / 公开 /cs/faq + /cs/sessions 接口 / FAQ 种子 37 条 / 前端客服窗接线（pytest 70/70 + verify_all 29/29；Dify 侧输出契约配置待 Docker，未配置时标记解析自动跳过）**  
+**数据库**：32张表（v6.9.0 新增 cs_recommend_log 推荐日志表；customer 加 8 研判画像列、cs_intent_log.user_id 放宽可空、AiReport 表加 version/data_source_status/error_message 3 列），101条路由路径（100 API + 1 health；employee 42 paths，student 11 paths/13 endpoints，reports 7 paths，crm/ai/cs/courses/events 17 paths），MVC分层结构就绪；**Docker 环境：edu-mysql/edu-redis/edu-backend 全部健康，`docker compose up -d` 三容器零额外镜像直跑（文件存储默认本地磁盘 backend_storage 卷，不再依赖 MinIO）**  
 **主基线文档**：`promts/lon/提示词整合测试_demo/docs/基础架构方案_五人并行开发.md`（v1.2.0，28项决策）
 
 **接手阅读顺序**：
@@ -15,8 +15,8 @@
 2. `docs/项目需求文档.md` — 完整业务需求
 3. `promts/lon/提示词整合测试_demo/docs/基础架构方案_五人并行开发.md` — **主基线，权重最高**
 4. `docs/开发路线图.md` — 当前进度、下一步任务
-5. `docs/接口契约v1.md` — API接口契约（v2.8.5 并集）
-6. `docs/更新记录.md` — 最近变更（v6.8.5 主线 + anhoa v6.8.0 并线）
+5. `docs/接口契约v1.md` — API接口契约（v2.9.0）
+6. `docs/更新记录.md` — 最近变更（v6.9.0 anhoa M2 二期 + 主线 v6.8.5/v6.8.6/v6.8.7）
 
 **重要规则**：
 - 主基线文档（基础架构方案）权重 > 其他参考文档（共用基座方案、公共框架等）
@@ -152,7 +152,7 @@ GuangdongEducationStudyAbroadProgram/
 - 员工数据隔离：普通员工只能看到自己名下的客户
 - 二期拆分为3个独立角色：人事（HR，不可看客户/经营）、经理（MANAGER_DIRECTOR，只看下属+自己客户）、总裁（MANAGER_PRESIDENT，看全部）
 
-### 4.2 数据库表（31张，v6.5.0更新）
+### 4.2 数据库表（32张，v6.9.0更新）
 
 > **数据库**：MySQL 8.0+，端口59000，库名 `GuangdongEducationStudyAbroadProgram`
 > **自动建表**：应用启动时自动创建所有表，无需手动执行SQL
@@ -182,6 +182,7 @@ GuangdongEducationStudyAbroadProgram/
 16. **cs_chat_message** - 客服消息表
 17. **cs_intent_log** - 意图/转化日志表
 18. **cs_faq** - 常见问答对表
+18a. **cs_recommend_log** - 推荐日志表（v6.9.0 新增：课程/活动推荐逐条落库，session_id/customer_id/course_id/event_id/recommendation_type/item_name）
 
 **员工模块表（M3）**：
 19. **employee_daily_report** - 员工日报表（v6.3.0 加 status/is_late）
@@ -216,6 +217,7 @@ GuangdongEducationStudyAbroadProgram/
 - `/api/v1/approvals/*` - 审批引擎（v6.0.0 升级双表设计）
 - `/api/v1/notifications/*` - 通知中心
 - `/api/v1/files/*` - 文件存储
+- `/api/v1/cs/*` - 公开客服（v6.9.0：/cs/faq 公开FAQ、/cs/sessions/{id}/messages 会话历史；对话入口为 /ai/customer-service/chat）
 - `/api/v1/reports/*` - 智能报告（M5，v6.8.5 合并 master 引入；与 `/employee/reports` 员工日报区分）
 
 ### 4.3.1 模块划分与职责边界（v5.0.0新增）
@@ -684,11 +686,11 @@ chore: 构建
 | **AGENTS.md** | **./AGENTS.md**（根目录） | **项目接手指南（agent自动读取，这是主文件）** |
 | AGENTS.md 副本 | docs/AGENTS.md | 与根目录保持同步的副本 |
 | 项目需求文档 | docs/项目需求文档.md | 完整需求、架构、接口、数据库 |
-| 更新记录 | docs/更新记录.md | 版本变更记录（当前 v6.8.6 主线 + anhoa v6.8.0 并线条目） |
+| 更新记录 | docs/更新记录.md | 版本变更记录（当前 v6.9.0 anhoa M2 二期 + 主线 v6.8.6/v6.8.7 条目） |
 | 开发路线图 | docs/开发路线图.md | 分期任务表（Phase 0已完成，M3 收官，M1/M2 v6.8.0 补齐，M4/M5 后端已交付，AI 已接通） |
 | 运行日志 | docs/运行日志.md | 排查记录与教训（当前 LOG-025） |
 | 测试报告 | docs/测试报告_v6.8.2_M3M4端到端.md | v6.8.2 Docker E2E 69/69 检查明细+7项缺陷+7轮迭代留档 |
-| 接口契约v2 | docs/接口契约v1.md | API接口契约（v2.8.5 并集，31张表，99路由路径=98 API+1 health） |
+| 接口契约v2 | docs/接口契约v1.md | API接口契约（v2.9.0，32张表，101路由路径=100 API+1 health） |
 | **基础架构方案** | **promts/lon/提示词整合测试_demo/docs/基础架构方案_五人并行开发.md** | **主基线文档（v1.2.0，28项决策），所有参考文档权重低于此文件** |
 
 > **文档优先级**：基础架构方案_五人并行开发.md > 其他参考文档（共用基座方案、公共框架等）
@@ -716,7 +718,7 @@ chore: 构建
 
 ---
 
-**最后更新**：2026-10-17（anhoa 第三次合并 origin/master：并入 master v6.8.7 前端交付（登录与 Agent chat 修复、学生接口对接、启动/账号脚本密码统一 420821 并移除 MinIO、新增 docs/测试账号.md），后端与公共模块零变更，仅运行日志 1 处冲突并集解决（master 条目 LOG-v6.8.7 按序号规范重编 LOG-028）；本日累计三次并线（v6.8.0 M1/M2 补齐 → v6.8.6 AI 全链路 → v6.8.7 前端修复），路由 99 paths 不变，pytest 64/64 + verify_all 27/27；另 LOG-027：本机直连 MySQL 8.0.27@3306（本机实例密码 123456，与 compose 的 420821 并存，以 backend/.env 为准）；详见更新记录双方条目与 LOG-020/LOG-025~028）  
+**最后更新**：2026-10-17（anhoa v6.9.0：M2 客服 Agent 二期补齐——依据《客服Agent开发任务书》《客服Agent提示词_纯提示词版》核对现状后落地：①新增 cs_recommend_log 推荐落库表（[RECOMMEND] 标记逐条落库，31→32 张表）②[SLOTS] 槽位采集闭环（slots_json 留档+转线索建档携带画像+老客户画像更新，信息采集/信息更新策略落地）③仅微信号无手机号→pending_lead 待补全线索（同号去重，converted=true；CrmLeadCreate 贯通 wechat 字段）④公开接口 GET /cs/faq + GET /cs/sessions/{id}/messages（路由 99→101）⑤FAQ 种子脚本 scripts/seed_cs_faq.py（36 组问答对+退费红线 QA，幂等）⑥前端：AgentDock public 分支接 /ai/customer-service/chat + 推荐卡片渲染、Faq 页接真实接口；pytest 70/70 + verify_all 29/29 + npm build 通过；**遗留：阶段B Dify 侧配置（pre_prompt 换纯提示词版+输出契约三标记+知识库4目录+课程/活动工具+问题分类器）待 Docker 启动，未配置时标记解析自动跳过；统一 AI 网关（任务书阶段5）属 M0 待审批暂缓**；历史：anhoa 第三次合并 origin/master 并入 v6.8.7 前端交付、LOG-027 本机 MySQL 3306 直连；详见更新记录 v6.9.0 条目与 LOG-029）  
 **维护人**：开发团队
 
 
