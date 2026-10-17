@@ -30,8 +30,11 @@ from app.schemas.employee import (
     CustomerStatusOut,
     CustomerStatusUpdate,
     DailyReportCreate,
+    DailyReportDraftUpdate,
     DailyReportOut,
     DailyReportSummaryItem,
+    LateApplyCreate,
+    LateReviewCreate,
     OralReportCreate,
     OralReportOut,
     OrgNode,
@@ -59,14 +62,48 @@ def _get_service(db: AsyncSession = Depends(get_db)) -> EmployeeService:
 
 
 # ── 日报 ──────────────────────────────────────────────
-@router.post("/reports", summary="提交日报")
+@router.post("/reports", summary="提交日报（支持草稿）")
 async def submit_report(
     data: DailyReportCreate,
     current_user: User = Depends(require_user_type("EMPLOYEE", "MANAGER")),
     service: EmployeeService = Depends(_get_service),
 ):
-    report = await service.submit_report(current_user.id, data.report_date, data.content)
-    return success_response(data=DailyReportOut.model_validate(report), message="日报已提交")
+    report = await service.submit_report(current_user.id, data.report_date, data.content, data.status)
+    msg = "草稿已保存" if data.status == "draft" else "日报已提交"
+    return success_response(data=DailyReportOut.model_validate(report), message=msg)
+
+
+@router.put("/reports/{report_id}", summary="编辑日报草稿")
+async def update_draft(
+    report_id: int,
+    data: DailyReportDraftUpdate,
+    current_user: User = Depends(require_user_type("EMPLOYEE", "MANAGER")),
+    service: EmployeeService = Depends(_get_service),
+):
+    report = await service.update_draft(report_id, current_user.id, data.content)
+    return success_response(data=DailyReportOut.model_validate(report), message="草稿已更新")
+
+
+@router.post("/reports/{report_id}/late-apply", summary="日报补报申请（草稿+超宽限期→经理审批）")
+async def late_apply(
+    report_id: int,
+    data: LateApplyCreate,
+    current_user: User = Depends(require_user_type("EMPLOYEE", "MANAGER")),
+    service: EmployeeService = Depends(_get_service),
+):
+    result = await service.late_apply(report_id, current_user.id, data.approver_id)
+    return success_response(data=result, message="补报申请已提交，待经理审批")
+
+
+@router.post("/reports/late-review", summary="补报审批（MANAGER）")
+async def late_review(
+    data: LateReviewCreate,
+    current_user: User = Depends(require_user_type("MANAGER")),
+    service: EmployeeService = Depends(_get_service),
+):
+    result = await service.late_review(data.approval_id, current_user.id, data.action, data.comment)
+    msg = "补报已通过" if data.action == "approved" else "补报已驳回"
+    return success_response(data=result, message=msg)
 
 
 @router.get("/reports", summary="日报列表（员工看自己/管理层看全部；M5 对外）")

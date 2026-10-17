@@ -1,4 +1,4 @@
-from sqlalchemy import Date, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
@@ -14,6 +14,8 @@ class EmployeeDailyReport(Base):
     employee_id: Mapped[int] = mapped_column(Integer, ForeignKey("sys_user.id"), nullable=False, index=True)
     report_date = mapped_column(Date, nullable=False, index=True)
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="submitted", index=True, comment="draft/submitted/late_pending")
+    is_late: Mapped[bool] = mapped_column(Boolean, default=False, comment="是否迟报（次日0点后提交或补报通过）")
     create_time = mapped_column(DateTime, server_default=func.now())
 
 

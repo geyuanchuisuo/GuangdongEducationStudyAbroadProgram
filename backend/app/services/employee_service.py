@@ -1,9 +1,10 @@
-from datetime import date
+from datetime import date, timedelta
 
 from app.core.exceptions import BusinessError, ConflictError, ForbiddenError, NotFoundError
 from app.models.customer import Customer
 from app.models.employee import EmployeeDailyReport, EmployeeOrg, EmployeeTodo
 from app.models.student import StudentScore
+from app.models.system import ApprovalInstance
 from app.models.user import User
 from app.repositories.employee_repo import (
     DailyReportRepository,
@@ -11,7 +12,7 @@ from app.repositories.employee_repo import (
     ScoreRepository,
     TodoRepository,
 )
-from app.services.approval_engine import ApprovalBizType, approval_engine
+from app.services.approval_engine import ApprovalBizType, ApprovalStatus, approval_engine
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -40,12 +41,123 @@ class EmployeeService:
         self.score_repo = score_repo
 
     # ── 日报 ──────────────────────────────────────────
-    async def submit_report(self, employee_id: int, report_date: date, content: str) -> EmployeeDailyReport:
+    @staticmethod
+    def _calc_is_late(report_date: date) -> bool:
+        """迟报判定：report_date 为昨天（次日 0 点宽限内）也算迟报但免审批；今天不算。"""
+        return report_date < date.today()
+
+    async def submit_report(
+        self, employee_id: int, report_date: date, content: str, status: str = "submitted"
+    ) -> EmployeeDailyReport:
+        if status not in ("draft", "submitted"):
+            raise BusinessError(code=40002, message="status 仅支持 draft/submitted")
+        if report_date > date.today():
+            raise BusinessError(code=40002, message="日报日期不能晚于今天")
+        # 超过宽限期（前天及更早）禁止直接正式提交，必须走补报审批
+        if status == "submitted" and report_date < date.today() - timedelta(days=1):
+            raise BusinessError(code=40002, message="已超过补提时限，请先存草稿再走补报申请")
+
         existing = await self.report_repo.get_by_emp_date(employee_id, report_date)
         if existing:
-            raise ConflictError(message=f"{report_date} 日报已提交，请勿重复")
-        report = EmployeeDailyReport(employee_id=employee_id, report_date=report_date, content=content)
+            if existing.status != "draft":
+                raise ConflictError(message=f"{report_date} 日报已提交，请勿重复")
+            # 草稿转正/更新草稿
+            existing.content = content
+            existing.status = status
+            existing.is_late = self._calc_is_late(report_date) if status == "submitted" else False
+            return await self.report_repo.update(existing)
+
+        report = EmployeeDailyReport(
+            employee_id=employee_id,
+            report_date=report_date,
+            content=content,
+            status=status,
+            is_late=self._calc_is_late(report_date) if status == "submitted" else False,
+        )
         return await self.report_repo.create(report)
+
+    async def update_draft(self, report_id: int, employee_id: int, content: str) -> EmployeeDailyReport:
+        report = await self.report_repo.get_by_id(report_id)
+        if not report:
+            raise NotFoundError(message="日报不存在")
+        if report.employee_id != employee_id:
+            raise ForbiddenError(message="只能修改自己的日报")
+        if report.status != "draft":
+            raise BusinessError(code=40901, message="仅草稿状态可编辑")
+        report.content = content
+        return await self.report_repo.update(report)
+
+    async def late_apply(self, report_id: int, employee_id: int, approver_id: int) -> dict:
+        """日报补报申请：草稿 + 超过宽限期 → 走 approval late_report，经理审批。"""
+        report = await self.report_repo.get_by_id(report_id)
+        if not report:
+            raise NotFoundError(message="日报不存在")
+        if report.employee_id != employee_id:
+            raise ForbiddenError(message="只能为自己的日报申请补报")
+        if report.status != "draft":
+            raise BusinessError(code=40901, message="仅草稿状态可申请补报")
+        if report.report_date >= date.today() - timedelta(days=1):
+            raise BusinessError(code=40002, message="该日期仍在补提宽限期内，可直接提交，无需审批")
+
+        # 审批人必须是 MANAGER
+        result = await self.db.execute(select(User).where(User.id == approver_id))
+        approver = result.scalar_one_or_none()
+        if not approver:
+            raise NotFoundError(message="审批人不存在")
+        if approver.user_type != "MANAGER":
+            raise BusinessError(code=40002, message="审批人必须是管理层（MANAGER）")
+
+        # 防止重复申请
+        dup = await self.db.execute(
+            select(ApprovalInstance).where(
+                ApprovalInstance.biz_type == ApprovalBizType.LATE_REPORT.value,
+                ApprovalInstance.biz_id == report_id,
+                ApprovalInstance.status == ApprovalStatus.PENDING.value,
+            )
+        )
+        if dup.scalar_one_or_none():
+            raise ConflictError(message="该日报已有待审批的补报申请")
+
+        instance = await approval_engine.create(
+            biz_type=ApprovalBizType.LATE_REPORT,
+            initiator_id=employee_id,
+            approver_id=approver_id,
+            biz_id=report_id,
+            title=f"日报补报申请：{report.report_date}",
+        )
+        report.status = "late_pending"
+        await self.report_repo.update(report)
+        return {
+            "approval_id": instance.id,
+            "biz_type": instance.biz_type,
+            "biz_id": instance.biz_id,
+            "status": instance.status,
+        }
+
+    async def late_review(self, approval_id: int, approver_id: int, action: str, comment: str | None) -> dict:
+        """补报审批（MANAGER）：通过 → 日报转正（is_late=True）；驳回 → 退回草稿。"""
+        if action not in ("approved", "rejected"):
+            raise BusinessError(code=40002, message="action 仅支持 approved/rejected")
+        instance = await approval_engine.get_by_id(approval_id)
+        if not instance:
+            raise NotFoundError(message="审批单不存在")
+        if instance.biz_type != ApprovalBizType.LATE_REPORT.value:
+            raise BusinessError(code=40002, message="该审批单不是日报补报类型")
+
+        if action == "approved":
+            instance = await approval_engine.approve(approval_id, approver_id, comment)
+        else:
+            instance = await approval_engine.reject(approval_id, approver_id, comment)
+
+        report = await self.report_repo.get_by_id(instance.biz_id)
+        if report:
+            if action == "approved":
+                report.status = "submitted"
+                report.is_late = True
+            else:
+                report.status = "draft"
+            await self.report_repo.update(report)
+        return {"approval_id": instance.id, "status": instance.status}
 
     async def list_my_reports(self, employee_id: int, page: int, page_size: int) -> tuple[list[EmployeeDailyReport], int]:
         return await self.report_repo.list_by_employee(employee_id, page, page_size)
@@ -260,16 +372,8 @@ class EmployeeService:
 
         saved_id = None
         if save:
-            # 沿用日报唯一约束，重复抛 40901
-            existing = await self.report_repo.get_by_emp_date(employee_id, target_date)
-            if existing:
-                raise ConflictError(message=f"{target_date} 日报已存在，请直接修改而非新建")
-            report = EmployeeDailyReport(
-                employee_id=employee_id,
-                report_date=target_date,
-                content=structured,
-            )
-            report = await self.report_repo.create(report)
+            # 统一走 submit_report：唯一约束 + 迟报/草稿规则一致
+            report = await self.submit_report(employee_id, target_date, structured)
             saved_id = report.id
 
         return {

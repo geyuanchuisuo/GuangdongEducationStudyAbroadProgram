@@ -99,11 +99,14 @@ test('/api/v1/files (3 paths, contract §8.3)',
      lambda: None if all(p in routes for p in expected_file_paths) else
      (_ for _ in ()).throw(Exception('missing')))
 
-# ── M3 员工模块路由（20 paths） ─────────────────────────
+# ── M3 员工模块路由（22 paths） ─────────────────────────
 expected_employee_paths = [
     '/api/v1/employee/reports',
     '/api/v1/employee/reports/summary',
     '/api/v1/employee/reports/oral',
+    '/api/v1/employee/reports/late-review',
+    '/api/v1/employee/reports/{report_id}',
+    '/api/v1/employee/reports/{report_id}/late-apply',
     '/api/v1/employee/todos',
     '/api/v1/employee/todos/{todo_id}',
     '/api/v1/employee/org',
@@ -121,13 +124,13 @@ expected_employee_paths = [
     '/api/v1/employee/tickets/{ticket_id}/handle',
     '/api/v1/employee/psych-alerts/{alert_id}/handle',
 ]
-test('/api/v1/employee (19 paths, M3 v6.2.0)',
+test('/api/v1/employee (22 paths, M3 v6.3.0)',
      lambda: None if all(p in routes for p in expected_employee_paths) else
      (_ for _ in ()).throw(Exception('missing')))
 
-test(f'total paths = 39 (38 API + 1 health, got {len(routes)})',
-     lambda: None if len(routes) == 39 else
-     (_ for _ in ()).throw(Exception(f'expected 20')))
+test(f'total paths = 42 (41 API + 1 health, got {len(routes)})',
+     lambda: None if len(routes) == 42 else
+     (_ for _ in ()).throw(Exception(f'expected 42')))
 
 # ===== Suite 3: MVC Layer =====
 print()

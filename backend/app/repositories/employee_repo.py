@@ -26,6 +26,17 @@ class DailyReportRepository:
         )
         return result.scalar_one_or_none()
 
+    async def get_by_id(self, report_id: int) -> EmployeeDailyReport | None:
+        result = await self.db.execute(
+            select(EmployeeDailyReport).where(EmployeeDailyReport.id == report_id)
+        )
+        return result.scalar_one_or_none()
+
+    async def update(self, report: EmployeeDailyReport) -> EmployeeDailyReport:
+        await self.db.commit()
+        await self.db.refresh(report)
+        return report
+
     async def list_by_employee(self, employee_id: int, page: int = 1, page_size: int = 20) -> tuple[list[EmployeeDailyReport], int]:
         stmt = select(EmployeeDailyReport).where(EmployeeDailyReport.employee_id == employee_id)
         total_result = await self.db.execute(

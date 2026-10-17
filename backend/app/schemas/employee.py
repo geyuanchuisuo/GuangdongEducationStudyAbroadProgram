@@ -8,6 +8,21 @@ from pydantic import BaseModel, Field
 class DailyReportCreate(BaseModel):
     report_date: date = Field(..., description="日报日期")
     content: str = Field(..., min_length=1, description="日报内容（结构化文本）")
+    status: str = Field("submitted", description="draft=草稿 / submitted=正式提交")
+
+
+class DailyReportDraftUpdate(BaseModel):
+    content: str = Field(..., min_length=1, description="日报内容")
+
+
+class LateApplyCreate(BaseModel):
+    approver_id: int = Field(..., description="审批人（MANAGER）")
+
+
+class LateReviewCreate(BaseModel):
+    approval_id: int = Field(..., description="审批实例ID")
+    action: str = Field(..., description="approved / rejected")
+    comment: Optional[str] = None
 
 
 class DailyReportOut(BaseModel):
@@ -15,6 +30,8 @@ class DailyReportOut(BaseModel):
     employee_id: int
     report_date: date
     content: str
+    status: str = "submitted"
+    is_late: bool = False
     create_time: Optional[datetime] = None
 
     model_config = {"from_attributes": True}
