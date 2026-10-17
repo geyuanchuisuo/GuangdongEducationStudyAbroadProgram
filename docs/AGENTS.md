@@ -6,7 +6,7 @@
 
 ## 零、快速定位（打开项目先看这里）
 
-**当前进度**：Phase 0 公共地基已完成（v6.0.1），Phase 1 模块并行开发中；M3 员工模块全部交付（v6.5.0 收官）；v6.6.0 需求对齐差异全部落地；v6.7.0~v6.7.2 管理层端三项+需求核对 52/52；**M4 学生模块一期全部交付（v6.8.0 第一批 7 子模块 + v6.8.1 第二批 学生助手Agent/提醒聚合，11 paths / 13 endpoints）；v6.8.2 Docker 环境搭建 + M3/M4 数据库端到端验证通过（E2E 69/69，修复 7 项缺陷）；v6.8.3 指令解析本地兜底 + 提醒聚合 TicketUpdateItem 缺陷修复（E2E 71/71 幂等全过）；v6.8.4 文件存储改本地磁盘后端（docker compose 移除 MinIO，零额外镜像三容器直跑）+ DIFY_BASE_URL 根因修正（3 个 Dify Agent Key 待用户补充）；v6.8.5 合并 master（frontend-design #7+ZNBG）引入 M5 智能报告 7 paths 与前端界面，M3 dashboard 与《一期指标口径表V1》统一名称+新增差异字段（verify_all 25/25 + M5 测试 32/32 + 对齐 14/14）**；master 已合并 longtrying 全部工作（62d4cff，2026-10-17，无冲突）  
+**当前进度**：Phase 0 公共地基已完成（v6.0.1），Phase 1 模块并行开发中；M3 员工模块全部交付（v6.5.0 收官）；v6.6.0 需求对齐差异全部落地；v6.7.0~v6.7.2 管理层端三项+需求核对 52/52；M4 学生模块一期全部交付（v6.8.0+v6.8.1）；v6.8.2/v6.8.3 Docker E2E 71/71；v6.8.4 文件存储改本地磁盘后端（零额外镜像）；v6.8.5 合并 master 引入 M5 智能报告+前端界面+指标口径统一；**v6.8.6 AI 全链路打通：Dify 绑定 mimo-v2.6-flash（api.xiaomimimo.com），3 个 Agent 应用创建并回填 app key，真实 AI 链路 6/6 验证通过**；master 已三次合并至 a23fc49（与 longtrying_stu 同树）  
 **数据库**：31张表（AiReport 表 v6.8.5 加 version/data_source_status/error_message 3 列），81条路由路径（80 API + 1 health；employee 42 paths，student 11 paths/13 endpoints，reports 7 paths），MVC分层结构就绪；**Docker 环境：edu-mysql/edu-redis/edu-backend 全部健康，`docker compose up -d` 三容器零额外镜像直跑（文件存储默认本地磁盘 backend_storage 卷，不再依赖 MinIO）**  
 **主基线文档**：`promts/lon/提示词整合测试_demo/docs/基础架构方案_五人并行开发.md`（v1.2.0，28项决策）
 
@@ -476,22 +476,23 @@ npm run dev
 # http://localhost:5173
 ```
 
-### 5.3 Dify
+### 5.3 Dify（**v6.8.6 已全部配置完成**）
 
 ```bash
-# 1. 部署Dify（参考官方文档）
-# https://docs.dify.ai/getting-started/install-self-hosted
+# ✅ 已完成（2026-10-17，全自动 console API 配置）：
+# 1. 大模型绑定：mimo-v2.6-flash @ https://api.xiaomimimo.com/v1
+#    （OpenAI-API-compatible 模型级凭据，API Key 见 backend/.env，勿入库）
+# 2. 3 个 Agent 应用已创建并绑定 mimo 模型（pre_prompt 含人设/限制预期）：
+#    - 粤教客服Agent（DIFY_CUSTOMER_AGENT_KEY）
+#    - 企业员工助手（DIFY_EMPLOYEE_AGENT_KEY，记忆窗口5轮）
+#    - 留学生智能管家（DIFY_STUDENT_AGENT_KEY，不承诺退费/不给医疗级建议）
+# 3. app key 已回填 backend/.env 并实测真实链路 6/6 通过
 
-# 2. 控制台 http://localhost 注册管理员，创建3个「聊天助手」应用
-# - 客服Agent（DIFY_CUSTOMER_AGENT_KEY）：7大场景应答，年轻化人设
-# - 企业员工助手（DIFY_EMPLOYEE_AGENT_KEY）：读 inputs.capabilities，记忆窗口5轮
-# - 留学生智能管家（DIFY_STUDENT_AGENT_KEY）：读 inputs.restrictions，不承诺退费/不给医疗级建议
+# 控制台管理入口：http://localhost
+# 管理员：zzh970724@outlook.com / Difyadmin2026（仅限本地开发环境，生产必须重置！）
 
-# 3. 导入知识库文档（可选）
-# 将 dify/knowledge_base/ 下的文档（如《公司新人指南》）导入知识库并关联企业助手
-
-# 4. 获取API Key
-# 各应用左侧「API 访问」→「API 密钥」生成 app-xxx Key，填入后端 .env
+# Dify console API 自动化配置三要素（详见运行日志 LOG-020）：
+# ① password 字段传 base64 ② 全部请求带 X-CSRF-Token 头 ③ openai_api_compatible 用模型级凭据（models/credentials）
 ```
 
 ### 5.4 Docker一键启动
@@ -683,9 +684,9 @@ chore: 构建
 | **AGENTS.md** | **./AGENTS.md**（根目录） | **项目接手指南（agent自动读取，这是主文件）** |
 | AGENTS.md 副本 | docs/AGENTS.md | 与根目录保持同步的副本 |
 | 项目需求文档 | docs/项目需求文档.md | 完整需求、架构、接口、数据库 |
-| 更新记录 | docs/更新记录.md | 版本变更记录（当前v6.8.5） |
-| 开发路线图 | docs/开发路线图.md | 分期任务表（Phase 0已完成，M3 收官，Phase 1.4 M4 一期已交付，M5 后端已合入） |
-| 运行日志 | docs/运行日志.md | 排查记录与教训（当前 LOG-019） |
+| 更新记录 | docs/更新记录.md | 版本变更记录（当前v6.8.6） |
+| 开发路线图 | docs/开发路线图.md | 分期任务表（Phase 0已完成，M3 收官，M4/M5 后端已交付，AI 已接通） |
+| 运行日志 | docs/运行日志.md | 排查记录与教训（当前 LOG-020） |
 | 测试报告 | docs/测试报告_v6.8.2_M3M4端到端.md | v6.8.2 Docker E2E 69/69 检查明细+7项缺陷+7轮迭代留档 |
 | 接口契约v2 | docs/接口契约v1.md | API接口契约（v2.8.5，31张表，81路由路径） |
 | **基础架构方案** | **promts/lon/提示词整合测试_demo/docs/基础架构方案_五人并行开发.md** | **主基线文档（v1.2.0，28项决策），所有参考文档权重低于此文件** |
@@ -715,5 +716,40 @@ chore: 构建
 
 ---
 
-**最后更新**：2026-10-17 17:11（v6.8.5 收官——第三次合并 longtrying_stu→master：快进合并无冲突（90cf30c→a23fc49），M4 学生模块全量+Docker E2E+存储本地化+M5 智能报告+前端界面+指标口径统一全部进入主干，master 与 longtrying_stu 同树；合并后 verify_all 25/25；详见更新记录「第三次合并」条目与 LOG-019）  
+**最后更新**：2026-10-17 17:43（v6.8.6——AI 全链路打通：绑定 Dify 大模型 mimo-v2.6-flash（OpenAI-API-compatible 模型级凭据 @ api.xiaomimimo.com），全自动 console API 创建 3 个 Agent 应用（客服/企业/学生）并回填 app key 至 .env；重置 Dify 管理员密码 Difyadmin2026（仅本地）；修复容器 venv 缺 reportlab 启动崩溃；测试：真实 AI 链路 6/6（agent/chat 出话 + parse source=ai）+ verify_all 25/25；至此环境缺口全部关闭（MinIO v6.8.4、Dify v6.8.6），详见 LOG-020）  
 **维护人**：开发团队
+
+
+---
+
+## v6.8.7 前端交付修复与账号登录（2026-10-17）
+
+### 本次变更
+
+- 修复一键启动脚本与 Docker Compose 的 MySQL 密码不一致问题：统一为 420821。
+- 修复一键启动脚本错误启动已移除的 MinIO 服务，改为启动 MySQL、Redis。
+- 测试账号初始化脚本同步使用数据库密码 420821。
+- 删除智能对话预置测试消息，对话框初始为空。
+- 对话框新增自动滚动到最新一轮对话，并标识最新消息。
+- 学生助手和企业助手已接入真实 Agent 接口。
+- 学生行政服务、心理对话、反馈工单等前端动作已接入学生接口。
+- 新增独立账号文档：docs/测试账号.md。
+- 非前端阻塞项继续预留：公开客服 /cs/*、公开注册角色字段、短信服务和公网部署。
+
+### 测试结果
+
+- backend/verify_all.py：25/25 通过。
+- frontend npm run build：通过。
+- 学生登录、心理画像、工单、学业、进度、FAQ、更多服务、提醒接口：200/200。
+- 学生心理对话、反馈提交、行政服务提交、学生 Agent 对话：200/200。
+- 真实账号登录与学生/员工/管理端页面路由：通过。
+- 智能对话初始消息为空，发送消息后正常显示最新一轮并自动滚动。
+- 浏览器控制台无报错。
+
+### 待后端或部署侧解决
+
+1. /cs/courses、/cs/events、/cs/faq、/cs/sessions 等公开客服接口尚未挂载。
+2. /auth/register 当前仅接受 STUDENT、EMPLOYEE，PROSPECT/MANAGER 由初始化脚本写入。
+3. 注册接口尚未完整接收性别、年龄、学历、职业需求、德语能力等字段。
+4. 短信发送与验证码校验接口不存在。
+5. 非同一局域网访问需要公网部署或正式域名。
