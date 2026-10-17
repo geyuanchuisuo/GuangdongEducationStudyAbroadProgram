@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { ChatDotRound, Close, Promotion } from '@element-plus/icons-vue'
 import { platformApi } from '../api/platform'
 
@@ -10,10 +10,12 @@ watch(() => props.autoOpen, (value) => {
 }, { immediate: true })
 const input = ref('')
 const sessionId = ref('new')
-const messages = ref<Array<{ role: 'user' | 'agent'; text: string }>>([
-  { role: 'agent', text: '你好，我是粤教智能助手。可以帮你查询项目、处理待办或了解服务进度。' },
-])
-
+const messages = ref<Array<{ role: 'user' | 'agent'; text: string }>>([])
+const messageList = ref<HTMLElement | null>(null)
+watch(messages, async () => {
+  await nextTick()
+  if (messageList.value) messageList.value.scrollTop = messageList.value.scrollHeight
+}, { deep: true })
 const name = computed(() => {
   if (props.type === 'student') return '粤伴 · 学生智能助手'
   if (props.type === 'employee' || props.type === 'manager') return '粤助 · 企业智能助手'
@@ -32,7 +34,7 @@ async function send(text = input.value) {
   messages.value.push({ role: 'user', text: value })
   input.value = ''
   try {
-    let reply = '收到。我会基于当前权限和业务数据为你整理信息；涉及写操作时会先请你确认。'
+    let reply = ''
     if (props.type === 'student') {
       const result: any = await platformApi.student.agentChat({ message: value, session_id: sessionId.value })
       sessionId.value = result?.session_id || sessionId.value
@@ -42,6 +44,7 @@ async function send(text = input.value) {
       sessionId.value = result?.session_id || sessionId.value
       reply = result?.reply || reply
     }
+    if (!reply) reply = '当前助手服务未返回内容，请稍后重试。'
     messages.value.push({ role: 'agent', text: reply })
   } catch {
     messages.value.push({ role: 'agent', text: '当前助手服务暂不可用，请稍后重试。' })
@@ -60,8 +63,8 @@ async function send(text = input.value) {
           </div>
           <el-button text :icon="Close" @click="open = false" />
         </header>
-        <div class="messages">
-          <div v-for="(item, index) in messages" :key="index" class="message" :class="item.role">
+        <div ref="messageList" class="messages">
+          <div v-for="(item, index) in messages" :key="index" class="message" :class="[item.role, { latest: index === messages.length - 1 }]">
             {{ item.text }}
           </div>
         </div>
@@ -101,6 +104,8 @@ header small { display: block; margin-top: 4px; color: #cfcdf1; }
 .message { max-width: 82%; margin: 10px 0; padding: 11px 14px; border-radius: 14px; line-height: 1.65; font-size: 14px; }
 .message.agent { background: #fff; border: 1px solid #e8e6f1; }
 .message.user { margin-left: auto; background: #5a50b8; color: #fff; }
+.message.latest { box-shadow: 0 8px 20px rgba(45,43,115,.12); }
+.message.latest::after { content: "最新"; display: block; margin-top: 5px; font-size: 10px; opacity: .65; }
 .quick { display: flex; gap: 8px; padding: 10px 14px; overflow-x: auto; }
 .composer { display: flex; gap: 8px; padding: 12px 14px 16px; border-top: 1px solid #eeeef4; }
 .fade-enter-active, .fade-leave-active { transition: opacity .2s, transform .2s; }

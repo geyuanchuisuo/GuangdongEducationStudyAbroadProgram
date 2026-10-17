@@ -30,7 +30,7 @@ def create_accounts():
         host='localhost',
         port=59000,
         user='root',
-        password='password',
+        password='420821',
         database='GuangdongEducationStudyAbroadProgram',
         charset='utf8mb4',
     )
