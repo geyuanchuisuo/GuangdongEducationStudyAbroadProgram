@@ -641,7 +641,7 @@ function revealPhone() {
           </section>
 
           <section class="surface panel" style="margin-top:20px">
-            <SectionTitle title="明细下钻" desc="下钻与所选报告的周期、数据来源一致；个体信息按角色权限过滤。" />
+            <SectionTitle title="明细下钻" desc="下钻与所选报告同源：正式数据读真实业务表，演示数据读模拟数据；个体信息按角色权限过滤。" />
             <div style="display:flex; gap:10px; margin-bottom:14px">
               <el-button v-if="selectedReport.report_type === 'customer_analysis'" :loading="drillLoading === 'customers'" @click="loadDrill('customers')">客户明细</el-button>
               <el-button v-if="selectedReport.report_type === 'psych_weekly'" :loading="drillLoading === 'psychCases'" @click="loadDrill('psychCases')">心理个案</el-button>

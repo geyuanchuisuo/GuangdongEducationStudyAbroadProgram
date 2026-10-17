@@ -71,3 +71,14 @@ def validate_period(
         )
     if check_future and end > now:
         raise PeriodValidationError("不允许生成未来周期的报告")
+
+
+def default_completed_week(now: datetime | None = None) -> tuple[datetime, datetime]:
+    """上一完整自然周：[上周一 00:00, 本周一 00:00)。
+
+    生产报告的手动生成缺省周期必须用它（M5-10.8）：`week_range(now)` 的终点是
+    下周一 00:00（恒晚于当前时刻），直接送校验会被 `check_future` 拒成 40002。
+    """
+    now = now or datetime.now()
+    this_monday = week_range(now)[0]
+    return this_monday - timedelta(days=7), this_monday

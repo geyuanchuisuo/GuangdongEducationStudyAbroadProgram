@@ -28,6 +28,8 @@ from app.schemas.report import (
     EmployeeInput,
     PsychReportInput,
 )
+# 客户 6 态词表以 M1 为单一来源（中文值由 M1/M3 写入，M5 只做归一）
+from app.services.customer_service import CUSTOMER_STATUSES, STATUS_CN_TO_EN
 
 logger = logging.getLogger(__name__)
 
@@ -59,15 +61,40 @@ def _map_profile(conclusion: str | None) -> str | None:
     return _PROFILE_4_TO_3.get(conclusion, "信息不足")
 
 
-def _status_source(c: Customer) -> str | None:
+def _status_source(c: Customer, status_code: str | None) -> str | None:
     """流失来源（仅 LOST 有意义）：系统自动流失标记=auto，否则人工=manual。"""
-    if c.status != "LOST":
+    if status_code != "LOST":
         return None
     return "auto" if c.auto_churned else "manual"
 
 
+def normalize_customer_status(raw: str | None) -> str | None:
+    """客户 6 态归一为英文编码（M5-10.7）。
+
+    M1 契约 `CustomerStatusChange` 明确允许「英文或中文 6 态」，M3 也会写入中文值，
+    因此 M5 取数时必须先归一，否则 Literal 校验会直接抛错把整份报告打断。
+    词表复用 M1 的 `STATUS_CN_TO_EN`（单一来源，避免两套词表漂移）；
+    未识别的值返回 None，由调用方按行跳过并计入口径说明。
+    """
+    if raw is None:
+        return None
+    value = str(raw).strip()
+    if not value:
+        return None
+    if value in CUSTOMER_STATUSES:
+        return value
+    upper = value.upper()
+    if upper in CUSTOMER_STATUSES:
+        return upper
+    return STATUS_CN_TO_EN.get(value)
+
+
 async def fetch_customers(db: AsyncSession, start: datetime, end: datetime) -> DomainResult:
-    """客户经营输入：customer 主表 + 最新有效研判（两表分别查询，内存拼接，不 JOIN）。"""
+    """客户经营输入：customer 主表 + 最新有效研判（两表分别查询，内存拼接，不 JOIN）。
+
+    逐行容错（M5-10.7）：单行状态值/字段异常只跳过该行并计入口径说明，
+    不允许一行脏数据把 5 类报告全部打成 500。
+    """
     try:
         custs = (await db.execute(select(Customer).where(Customer.phone.isnot(None)))).scalars().all()
         assess_rows = (
@@ -86,26 +113,38 @@ async def fetch_customers(db: AsyncSession, start: datetime, end: datetime) -> D
         latest_assess.setdefault(a.customer_id, a)
 
     inputs: list[CustomerReportInput] = []
+    skipped: list[str] = []
     for c in custs:
         a = latest_assess.get(c.id)
-        inputs.append(CustomerReportInput(
-            customer_id=c.id,
-            phone=c.phone,
-            name=c.name or "",
-            source_channel=c.source_channel or "",
-            first_register_login_at=c.first_register_at,
-            first_employee_submit_at=c.first_submit_at,
-            status_at_period_end=c.status,
-            status_source=_status_source(c),
-            reflowed=c.reflowed_at is not None,
-            latest_assessment_at=a.created_at if a else None,
-            sg_conclusion=_map_profile(a.sg_conclusion) if a else None,
-            de_conclusion=_map_profile(a.de_conclusion) if a else None,
-            owner_employee_id=c.owner_employee_id,
-            follow_up_summary=None,  # 跟进摘要未纳入（见字段映射表：待确认是否需要）
-        ))
+        status_code = normalize_customer_status(c.status)
+        if status_code is None:
+            skipped.append(f"id={c.id} status={c.status!r}")
+            continue
+        try:
+            inputs.append(CustomerReportInput(
+                customer_id=c.id,
+                phone=c.phone,
+                name=c.name or "",
+                source_channel=c.source_channel or "",
+                first_register_login_at=c.first_register_at,
+                first_employee_submit_at=c.first_submit_at,
+                status_at_period_end=status_code,
+                status_source=_status_source(c, status_code),
+                reflowed=c.reflowed_at is not None,
+                latest_assessment_at=a.created_at if a else None,
+                sg_conclusion=_map_profile(a.sg_conclusion) if a else None,
+                de_conclusion=_map_profile(a.de_conclusion) if a else None,
+                owner_employee_id=c.owner_employee_id,
+                follow_up_summary=None,  # 跟进摘要未纳入（见字段映射表：待确认是否需要）
+            ))
+        except Exception as exc:  # noqa: BLE001 — 单行不合规不阻断整份报告
+            skipped.append(f"id={c.id} {type(exc).__name__}")
+            logger.warning("M5 客户行跳过: customer_id=%s error=%s", c.id, exc)
     status = "ok" if inputs else "empty"
     note = f"客户域：读取 {len(inputs)} 条有效客户（手机号非空）；最新有效研判 {len(latest_assess)} 条"
+    if skipped:
+        note += (f"；跳过 {len(skipped)} 行状态/字段不合规"
+                 f"（示例：{', '.join(skipped[:3])}）")
     return DomainResult(status=status, note=note, inputs=inputs)
 
 

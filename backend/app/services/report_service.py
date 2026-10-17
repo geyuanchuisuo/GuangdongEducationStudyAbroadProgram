@@ -30,7 +30,12 @@ from app.services.report_drilldown import (
 )
 from app.services.report_mock_data import build_mock_dataset
 from app.services.report_pdf import generate_report_pdf
-from app.utils.report_period import PeriodValidationError, validate_period, week_range
+from app.utils.report_period import (
+    PeriodValidationError,
+    default_completed_week,
+    validate_period,
+    week_range,
+)
 
 _MAX_ATTEMPTS = 2  # M5-12.2：生成失败自动重试一次，仍失败落 failed 记录
 
@@ -135,11 +140,18 @@ class ReportService:
     ) -> tuple[MockReportDataset, dict, list[str]]:
         """生产取数（M5-02.1/02.4/02.5）：逐域适配、失败显式标记、必取域不可用则拒绝生成。
 
-        周期缺省 = 当前自然周（生产模式不依赖 mock 参考周期）。
+        周期缺省 = **上一完整自然周**（M5-10.8）。不能用「当前自然周」——`week_range`
+        返回左闭右开区间，终点恒为下周一 00:00，必然晚于 now，会被
+        `validate_period(check_future=True)` 直接拒绝，导致生产模式下不带周期的
+        生成请求 100% 返回 40002。
         """
         db = self.repo.db
-        start = period_start or week_range(datetime.now())[0]
-        end = period_end or week_range(datetime.now())[1]
+        if period_start is None or period_end is None:
+            default_start, default_end = default_completed_week(datetime.now())
+            start = period_start or default_start
+            end = period_end or default_end
+        else:
+            start, end = period_start, period_end
         data_quality: dict[str, str] = {}
         notes: list[str] = []
 
@@ -201,18 +213,31 @@ class ReportService:
     async def list_reports(self, report_type: str | None, page: int, page_size: int) -> tuple[list[AiReport], int]:
         return await self.repo.list_latest(report_type, page, page_size)
 
+    async def _drilldown_dataset(self, report: AiReport) -> MockReportDataset:
+        """下钻取数与报告**同源**（M5-10.9）。
+
+        此前三处下钻恒用 `build_mock_dataset`，导致 production 报告的下钻展示模拟数据，
+        与报告本体（真实业务表）不一致，也与前端「下钻与报告数据来源一致」的说明矛盾。
+        """
+        start = report.time_range_start
+        end = report.time_range_end
+        if (report.data_source_status or "mock") == "production":
+            ds, _quality, _notes = await self._build_production_dataset(report.report_type, start, end)
+            return ds
+        return build_mock_dataset(start, end)
+
     async def customer_drilldown(self, report_id: int) -> list[dict]:
         report = await self.get_report(report_id)
         if report.report_type != "customer_analysis":
             raise ValidationError(message="客户下钻仅适用于客户经营分析报告")
-        ds = build_mock_dataset(report.time_range_start, report.time_range_end)
+        ds = await self._drilldown_dataset(report)
         return customer_drilldown(ds)
 
     async def psych_cases(self, report_id: int, user: User) -> list[dict]:
         report = await self.get_report(report_id)
         if report.report_type != "psych_weekly":
             raise ValidationError(message="心理个案仅适用于心理周报")
-        ds = build_mock_dataset(report.time_range_start, report.time_range_end)
+        ds = await self._drilldown_dataset(report)
         start = report.time_range_start or ds.period_start
         end = report.time_range_end or ds.period_end
         return psych_cases_for_user(ds, start, end, user)
@@ -221,7 +246,7 @@ class ReportService:
         report = await self.get_report(report_id)
         if report.report_type != "complaint_weekly":
             raise ValidationError(message="特别案例仅适用于投诉周报")
-        ds = build_mock_dataset(report.time_range_start, report.time_range_end)
+        ds = await self._drilldown_dataset(report)
         return special_cases_drilldown(ds)
 
     async def download_pdf(self, report_id: int) -> bytes:
