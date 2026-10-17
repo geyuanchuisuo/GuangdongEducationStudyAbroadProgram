@@ -31,7 +31,7 @@ class EventService:
         if existing:
             raise ValidationError(message="您已报名该活动")
 
-        registration = EventRegistration(event_id=event_id, customer_id=current_user.id)
+        registration = EventRegistration(event_id=event_id, user_id=current_user.id)
         created = await self.repo.create_registration(registration)
         event.current_participants += 1
         await self.repo.update_event(event)

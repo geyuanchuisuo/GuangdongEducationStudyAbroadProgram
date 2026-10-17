@@ -4,8 +4,20 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api.v1 import approvals, auth, customers, employees, files, notifications, operation_logs, users
-from app.api.v1 import ai, auth, courses, crm, events, users
+from app.api.v1 import (
+    ai,
+    approvals,
+    auth,
+    courses,
+    crm,
+    customers,
+    employees,
+    events,
+    files,
+    notifications,
+    operation_logs,
+    users,
+)
 from app.api.v1 import assessment as assessment_save_api
 from app.assessment.router import router as assessment_engine_router
 from app.config import settings
@@ -96,6 +108,12 @@ app.include_router(notifications.router, prefix=settings.API_V1_PREFIX)
 app.include_router(files.router, prefix=settings.API_V1_PREFIX)
 app.include_router(employees.router, prefix=settings.API_V1_PREFIX)
 app.include_router(operation_logs.router, prefix=settings.API_V1_PREFIX)
+app.include_router(courses.router, prefix=settings.API_V1_PREFIX)
+app.include_router(events.router, prefix=settings.API_V1_PREFIX)
+app.include_router(crm.router, prefix=settings.API_V1_PREFIX)
+app.include_router(ai.router, prefix=settings.API_V1_PREFIX)
+app.include_router(assessment_save_api.router, prefix=settings.API_V1_PREFIX)
+app.include_router(assessment_engine_router, prefix=settings.API_V1_PREFIX)
 
 
 @app.get("/health")

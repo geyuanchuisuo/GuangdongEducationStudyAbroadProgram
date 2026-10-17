@@ -1,7 +1,7 @@
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.crm import CrmLead, CustomerAssessment
+from app.models.crm import CrmFollowUp, CrmLead, CustomerAssessment
 
 
 class CrmRepository:
@@ -10,10 +10,6 @@ class CrmRepository:
 
     async def get_lead(self, lead_id: int) -> CrmLead | None:
         result = await self.db.execute(select(CrmLead).where(CrmLead.id == lead_id))
-        return result.scalar_one_or_none()
-
-    async def get_lead_by_phone(self, phone: str) -> CrmLead | None:
-        result = await self.db.execute(select(CrmLead).where(CrmLead.phone == phone))
         return result.scalar_one_or_none()
 
     async def list_leads(
@@ -67,3 +63,9 @@ class CrmRepository:
         await self.db.commit()
         await self.db.refresh(assessment)
         return assessment
+
+    async def create_follow_up(self, follow_up: CrmFollowUp) -> CrmFollowUp:
+        self.db.add(follow_up)
+        await self.db.commit()
+        await self.db.refresh(follow_up)
+        return follow_up

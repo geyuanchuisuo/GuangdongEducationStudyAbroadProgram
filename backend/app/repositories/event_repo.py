@@ -28,11 +28,11 @@ class EventRepository:
         result = await self.db.execute(select(EventLecture).where(EventLecture.id == event_id))
         return result.scalar_one_or_none()
 
-    async def get_registration(self, event_id: int, customer_id: int) -> EventRegistration | None:
+    async def get_registration(self, event_id: int, user_id: int) -> EventRegistration | None:
         result = await self.db.execute(
             select(EventRegistration).where(
                 EventRegistration.event_id == event_id,
-                EventRegistration.customer_id == customer_id,
+                EventRegistration.user_id == user_id,
             )
         )
         return result.scalar_one_or_none()

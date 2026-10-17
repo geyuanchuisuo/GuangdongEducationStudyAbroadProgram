@@ -4,10 +4,14 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.models.base import Base
 
 
+# SQLite 仅 INTEGER PRIMARY KEY 自增；用 with_variant 让测试(SQLite)退化为 INTEGER，生产(MySQL)仍为 BIGINT
+BigInt = BigInteger().with_variant(Integer, "sqlite")
+
+
 class Customer(Base):
     __tablename__ = "customer"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(BigInt, primary_key=True, autoincrement=True)
     phone: Mapped[str | None] = mapped_column(String(20), nullable=True, unique=True, index=True, comment="手机号(业务唯一键)")
     wechat: Mapped[str | None] = mapped_column(String(100), nullable=True, comment="微信号")
     name: Mapped[str | None] = mapped_column(String(100), nullable=True, comment="姓名")
@@ -32,12 +36,12 @@ class Customer(Base):
 class PendingLead(Base):
     __tablename__ = "pending_lead"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(BigInt, primary_key=True, autoincrement=True)
     wechat: Mapped[str | None] = mapped_column(String(100), nullable=True, comment="微信号")
     name: Mapped[str | None] = mapped_column(String(100), nullable=True, comment="姓名")
     raw_info = mapped_column(Text, nullable=True, comment="原始信息")
-    source_session_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True, comment="来源会话ID")
-    merged_customer_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("customer.id"), nullable=True, comment="合并后的客户ID")
+    source_session_id: Mapped[int | None] = mapped_column(BigInt, nullable=True, comment="来源会话ID")
+    merged_customer_id: Mapped[int | None] = mapped_column(BigInt, ForeignKey("customer.id"), nullable=True, comment="合并后的客户ID")
     status: Mapped[str] = mapped_column(String(20), default="pending", comment="状态")
     created_at = mapped_column(DateTime, server_default=func.now())
     updated_at = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())

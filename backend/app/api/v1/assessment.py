@@ -6,6 +6,7 @@ from app.core.response import success_response
 from app.database import get_db
 from app.models.user import User
 from app.repositories.crm_repo import CrmRepository
+from app.repositories.customer_repo import CustomerRepository
 from app.schemas.assessment import AssessmentSaveRequest
 from app.services.assessment_service import AssessmentService
 
@@ -15,7 +16,7 @@ current_employee = require_user_type("EMPLOYEE", "MANAGER")
 
 
 def _get_service(db: AsyncSession = Depends(get_db)) -> AssessmentService:
-    return AssessmentService(CrmRepository(db))
+    return AssessmentService(CrmRepository(db), CustomerRepository(db))
 
 
 @router.post("/save")

@@ -1,7 +1,7 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.customer_service import CsChatSession, CsMessage
+from app.models.customer_service import CsChatMessage, CsChatSession
 
 
 class CustomerServiceRepository:
@@ -31,8 +31,8 @@ class CustomerServiceRepository:
         content: str,
         intent: str | None = None,
         slots: dict | None = None,
-    ) -> CsMessage:
-        message = CsMessage(session_id=session_id, role=role, content=content, intent=intent, slots=slots)
+    ) -> CsChatMessage:
+        message = CsChatMessage(session_id=session_id, role=role, content=content, intent=intent, slots_json=slots)
         self.db.add(message)
         await self.db.commit()
         await self.db.refresh(message)

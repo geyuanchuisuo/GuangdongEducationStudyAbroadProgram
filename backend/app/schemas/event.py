@@ -22,7 +22,7 @@ class EventOut(BaseModel):
 class RegistrationOut(BaseModel):
     id: int
     event_id: int
-    customer_id: int
+    user_id: int
     status: str
     create_time: datetime | None = None
 

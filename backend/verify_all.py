@@ -43,7 +43,7 @@ test('all 31 model classes import OK', lambda: None)
 # ===== Suite 2: API Endpoints =====
 print()
 print('=' * 60)
-print('Suite 2: API Endpoints (20 unique paths)')
+print('Suite 2: API Endpoints (78 unique paths)')
 print('=' * 60)
 
 from app.main import app
@@ -152,9 +152,31 @@ test('/api/v1/operation-logs (v6.6.0 操作日志查询)',
      lambda: None if '/api/v1/operation-logs' in routes else
      (_ for _ in ()).throw(Exception('missing')))
 
-test(f'total paths = 63 (62 API + 1 health, got {len(routes)})',
-     lambda: None if len(routes) == 63 else
-     (_ for _ in ()).throw(Exception(f'expected 63')))
+# ── M1 客户模块 + M2 客服模块路由（15 paths，v6.7.3 补注册） ─────────
+expected_m1m2_paths = [
+    '/api/v1/crm/leads',
+    '/api/v1/crm/leads/{lead_id}',
+    '/api/v1/crm/leads/{lead_id}/follow-ups',
+    '/api/v1/crm/leads/{lead_id}/status',
+    '/api/v1/crm/assessments',
+    '/api/v1/crm/assessments/batch',
+    '/api/v1/crm/assessments/save',
+    '/api/v1/crm/assessments/text',
+    '/api/v1/crm/assessments/{assessment_id}',
+    '/api/v1/ai/customer-service/chat',
+    '/api/v1/courses',
+    '/api/v1/courses/{course_id}',
+    '/api/v1/events',
+    '/api/v1/events/{event_id}',
+    '/api/v1/events/{event_id}/register',
+]
+test('/api/v1/crm + /ai + /courses + /events (15 paths, M1/M2 v6.7.3)',
+     lambda: None if all(p in routes for p in expected_m1m2_paths) else
+     (_ for _ in ()).throw(Exception('missing')))
+
+test(f'total paths = 78 (77 API + 1 health, got {len(routes)})',
+     lambda: None if len(routes) == 78 else
+     (_ for _ in ()).throw(Exception(f'expected 78')))
 
 # ===== Suite 3: MVC Layer =====
 print()
@@ -177,7 +199,7 @@ test('repositories (2 modules)', lambda: None)
 
 from app.services.user_service import UserService
 from app.services.customer_service import CustomerService
-from app.services.ai_service import AIService, AgentType, AIResponse
+from app.services.ai_service import AiService
 from app.services.approval_engine import ApprovalEngine, ApprovalBizType, ApprovalStatus, TaskStatus
 from app.services.event_bus import EventBus
 from app.services.event_contracts import EventType
