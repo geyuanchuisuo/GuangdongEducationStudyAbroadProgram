@@ -716,7 +716,7 @@ chore: 构建
 
 ---
 
-**最后更新**：2026-10-17 19:58（master_ZNBG 第四次同步 origin/master 264467d→e6c06d0——并入 anhoa M1/M2 v6.8.0 全量（客户 8 研判字段/6 态流转状态机/pending_lead/客服 Agent 4 出口/assessment 引擎，路由 81→99）+ master v6.8.7 前端交付与 LOG-021~028 文档序列；4 份文档冲突并集解决，我方 LOG-021/022 与 anhoa 撞号重编 LOG-029/030；测试：compileall OK + verify_all **27/27** + pytest 全仓 **64/64**；⚠️ 已知缺陷 P1：M0 AI 网关 ai_service.py 被 anhoa 重写为 M2 客服专用（AgentType/AIResponse/ai_service 实例删除），M3 employee_service 5 处、M4 student_service 2 处懒导入运行时断链（缺陷已在 origin/master，经用户确认照常合并，待 M3/M4 负责人修复，M5 不受影响）；aiosqlite 已补声明进 pyproject dev 组（用户授权 LOG-032，pytest 64/64 复验）；批次 A 已执行 6/7（契约枚举 v2.8.7 对齐代码/需求文档第十八章/路线图两态拆分/verify_all 动态断言，pytest 44/44+verify_all 27/27），M5-13.3 的 003 迁移就绪但空库验收被上游 002 FK 缺陷阻塞（002 四处 BigInteger→sys_user.id INT errno 150，用户拍板暂停等上游修，详见 LOG-033）；详见更新记录 chore/merge 条目与 LOG-031/032/033）  
+**最后更新**：2026-10-17 21:36（v6.9.0——M5 批次 A~E 连续交付：批次 A 契约/文档/003 迁移对齐（6/7，空库验收待上游 002 修复）+ 批次 B 口径健壮性 11 项 + 批次 C 真实数据适配器骨架（REPORT_DATA_SOURCE 开关/三态质量标注/投诉域不可得拒绝生成/字段映射表 docs/M5_字段映射表.md）+ 批次 D 前端报告闭环（列表/详情/生成/三下钻/真实 PDF/演示标签四态/双入口合并）+ 批次 E 测试资产（全仓 **113/113**+E2E Section 5.5）；M0-M4 代码零改动；测试：compileall OK+verify_all 27/27+pytest 113/113+npm build 通过；⏸️ 环境级验收（Docker E2E/production 冒烟）待用户拉合并后补做；⚠️ P1 缺陷 M3/M4 Agent 断链待 M3/M4 修复；详见更新记录 v6.9.0 与 LOG-033/034）  
 **维护人**：开发团队
 
 
