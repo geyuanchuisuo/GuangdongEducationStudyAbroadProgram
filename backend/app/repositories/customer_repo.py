@@ -1,7 +1,7 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.customer import Customer
+from app.models.customer import Customer, PendingLead
 
 
 class CustomerRepository:
@@ -54,3 +54,33 @@ class CustomerRepository:
         stmt = stmt.offset((page - 1) * page_size).limit(page_size).order_by(Customer.created_at.desc())
         result = await self.db.execute(stmt)
         return list(result.scalars().all()), total
+
+    # ── 待补全线索（pending_lead） ──────────────────────────
+    async def create_pending_lead(self, pending: PendingLead) -> PendingLead:
+        self.db.add(pending)
+        await self.db.commit()
+        await self.db.refresh(pending)
+        return pending
+
+    async def get_pending_lead(self, lead_id: int) -> PendingLead | None:
+        result = await self.db.execute(select(PendingLead).where(PendingLead.id == lead_id))
+        return result.scalar_one_or_none()
+
+    async def list_pending_leads(self, page: int = 1, page_size: int = 20) -> tuple[list[PendingLead], int]:
+        stmt = select(PendingLead).where(PendingLead.status == "pending")
+        count_stmt = select(PendingLead.id).where(PendingLead.status == "pending")
+
+        total_result = await self.db.execute(count_stmt)
+        total = len(total_result.all())
+
+        stmt = stmt.offset((page - 1) * page_size).limit(page_size).order_by(PendingLead.created_at.desc())
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all()), total
+
+    async def update_pending_lead(self, pending: PendingLead, data: dict) -> PendingLead:
+        for key, value in data.items():
+            if hasattr(pending, key):
+                setattr(pending, key, value)
+        await self.db.commit()
+        await self.db.refresh(pending)
+        return pending

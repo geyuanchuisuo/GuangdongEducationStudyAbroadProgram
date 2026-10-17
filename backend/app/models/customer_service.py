@@ -4,12 +4,18 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.models.base import Base
 
 
+# SQLite 仅 INTEGER PRIMARY KEY 自增；用 with_variant 让测试(SQLite)退化为 INTEGER，生产(MySQL)仍为 BIGINT
+BigInt = BigInteger().with_variant(Integer, "sqlite")
+
+
 class CsChatSession(Base):
+    """客服会话表：公开客服允许匿名访客（user_id 可空），关联正式客户 customer。"""
+
     __tablename__ = "cs_chat_session"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("sys_user.id"), nullable=False, index=True)
-    customer_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("customer.id"), nullable=True, index=True, comment="关联客户")
+    id: Mapped[int] = mapped_column(BigInt, primary_key=True, autoincrement=True)
+    user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("sys_user.id"), nullable=True, index=True)
+    customer_id: Mapped[int | None] = mapped_column(BigInt, ForeignKey("customer.id"), nullable=True, index=True, comment="关联客户")
     agent_type: Mapped[str] = mapped_column(String(32), nullable=False, default="CUSTOMER")
     status: Mapped[str] = mapped_column(String(20), default="active", index=True)
     title: Mapped[str | None] = mapped_column(String(200), nullable=True)
@@ -24,9 +30,9 @@ class CsChatSession(Base):
 class CsChatMessage(Base):
     __tablename__ = "cs_chat_message"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    session_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("cs_chat_session.id"), nullable=False, index=True)
-    role: Mapped[str] = mapped_column(String(20), nullable=False)
+    id: Mapped[int] = mapped_column(BigInt, primary_key=True, autoincrement=True)
+    session_id: Mapped[int] = mapped_column(BigInt, ForeignKey("cs_chat_session.id"), nullable=False, index=True)
+    role: Mapped[str] = mapped_column(String(20), nullable=False)  # user / assistant
     content: Mapped[str] = mapped_column(Text, nullable=False)
     intent: Mapped[str | None] = mapped_column(String(64), nullable=True, comment="命中意图")
     slots_json = mapped_column(JSON, nullable=True, comment="槽位")
@@ -39,10 +45,10 @@ class CsChatMessage(Base):
 class CsIntentLog(Base):
     __tablename__ = "cs_intent_log"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    session_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("cs_chat_session.id"), nullable=False, index=True)
-    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("sys_user.id"), nullable=False, index=True)
-    customer_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("customer.id"), nullable=True, index=True, comment="关联客户")
+    id: Mapped[int] = mapped_column(BigInt, primary_key=True, autoincrement=True)
+    session_id: Mapped[int] = mapped_column(BigInt, ForeignKey("cs_chat_session.id"), nullable=False, index=True)
+    user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("sys_user.id"), nullable=True, index=True)
+    customer_id: Mapped[int | None] = mapped_column(BigInt, ForeignKey("customer.id"), nullable=True, index=True, comment="关联客户")
     intent_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     confidence: Mapped[float | None] = mapped_column(nullable=True)
     converted: Mapped[bool] = mapped_column(default=False)
@@ -52,7 +58,7 @@ class CsIntentLog(Base):
 class CsFaq(Base):
     __tablename__ = "cs_faq"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(BigInt, primary_key=True, autoincrement=True)
     category: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
     question: Mapped[str] = mapped_column(String(500), nullable=False)
     answer: Mapped[str] = mapped_column(Text, nullable=False)

@@ -6,8 +6,8 @@
 
 ## 零、快速定位（打开项目先看这里）
 
-**当前进度**：Phase 0 公共地基已完成（v6.0.1），Phase 1 模块并行开发中；M3 员工模块全部交付（v6.5.0 收官）；v6.6.0 需求对齐差异全部落地；v6.7.0~v6.7.2 管理层端三项+需求核对 52/52；M4 学生模块一期全部交付（v6.8.0+v6.8.1）；v6.8.2/v6.8.3 Docker E2E 71/71；v6.8.4 文件存储改本地磁盘后端（零额外镜像）；v6.8.5 合并 master 引入 M5 智能报告+前端界面+指标口径统一；**v6.8.6 AI 全链路打通：Dify 绑定 mimo-v2.6-flash（api.xiaomimimo.com），3 个 Agent 应用创建并回填 app key，真实 AI 链路 6/6 验证通过**；master 已三次合并至 a23fc49（与 longtrying_stu 同树）  
-**数据库**：31张表（AiReport 表 v6.8.5 加 version/data_source_status/error_message 3 列），81条路由路径（80 API + 1 health；employee 42 paths，student 11 paths/13 endpoints，reports 7 paths），MVC分层结构就绪；**Docker 环境：edu-mysql/edu-redis/edu-backend 全部健康，`docker compose up -d` 三容器零额外镜像直跑（文件存储默认本地磁盘 backend_storage 卷，不再依赖 MinIO）**  
+**当前进度**：Phase 0 公共地基已完成（v6.0.1），Phase 1 模块并行开发中；M3 员工模块全部交付（v6.5.0 收官）；v6.6.0 需求对齐差异全部落地；v6.7.0~v6.7.2 管理层端三项+需求核对 52/52；master 已合并 longtrying（62d4cff）与 longtrying_stu（a23fc49，第三次合并）全部工作；**M4 学生模块一期全部交付（v6.8.0 第一批 7 子模块 + v6.8.1 第二批 学生助手Agent/提醒聚合，11 paths / 13 endpoints）；v6.8.2 Docker 环境搭建 + M3/M4 数据库端到端验证通过（E2E 69/69，修复 7 项缺陷）；v6.8.3 指令解析本地兜底 + 提醒聚合缺陷修复（E2E 71/71 幂等全过）；v6.8.4 文件存储改本地磁盘后端（docker compose 移除 MinIO，零额外镜像三容器直跑）+ DIFY_BASE_URL 根因修正；v6.8.5 引入 M5 智能报告 7 paths 与前端界面，M3 dashboard 与《一期指标口径表V1》统一名称+新增差异字段（verify_all 25/25 + M5 测试 32/32 + 对齐 14/14）；v6.8.6 AI 全链路打通：Dify 绑定 mimo-v2.6-flash（api.xiaomimimo.com），3 个 Agent 应用创建并回填 app key，真实 AI 链路 6/6 验证通过，环境缺口全部关闭**；**anhoa 分支 v6.8.0：M1 客户模块 + M2 客服 Agent 一期补齐（客户 8 研判字段/6 态流转/pending_lead 待补全线索/客服 Agent 4 出口），2026-10-17 两次合并 origin/master 并线（v6.8.0 被两条分支并行使用，路由 81→99）**  
+**数据库**：31张表（customer 加 8 研判画像列、cs_intent_log.user_id 放宽可空、AiReport 表加 version/data_source_status/error_message 3 列），99条路由路径（98 API + 1 health；employee 42 paths，student 11 paths/13 endpoints，reports 7 paths，crm/ai/courses/events 15 paths），MVC分层结构就绪；**Docker 环境：edu-mysql/edu-redis/edu-backend 全部健康，`docker compose up -d` 三容器零额外镜像直跑（文件存储默认本地磁盘 backend_storage 卷，不再依赖 MinIO）**  
 **主基线文档**：`promts/lon/提示词整合测试_demo/docs/基础架构方案_五人并行开发.md`（v1.2.0，28项决策）
 
 **接手阅读顺序**：
@@ -15,8 +15,8 @@
 2. `docs/项目需求文档.md` — 完整业务需求
 3. `promts/lon/提示词整合测试_demo/docs/基础架构方案_五人并行开发.md` — **主基线，权重最高**
 4. `docs/开发路线图.md` — 当前进度、下一步任务
-5. `docs/接口契约v1.md` — API接口契约（v2.8.5）
-6. `docs/更新记录.md` — 最近变更（v6.8.5）
+5. `docs/接口契约v1.md` — API接口契约（v2.8.5 并集）
+6. `docs/更新记录.md` — 最近变更（v6.8.5 主线 + anhoa v6.8.0 并线）
 
 **重要规则**：
 - 主基线文档（基础架构方案）权重 > 其他参考文档（共用基座方案、公共框架等）
@@ -684,11 +684,11 @@ chore: 构建
 | **AGENTS.md** | **./AGENTS.md**（根目录） | **项目接手指南（agent自动读取，这是主文件）** |
 | AGENTS.md 副本 | docs/AGENTS.md | 与根目录保持同步的副本 |
 | 项目需求文档 | docs/项目需求文档.md | 完整需求、架构、接口、数据库 |
-| 更新记录 | docs/更新记录.md | 版本变更记录（当前v6.8.6） |
-| 开发路线图 | docs/开发路线图.md | 分期任务表（Phase 0已完成，M3 收官，M4/M5 后端已交付，AI 已接通） |
-| 运行日志 | docs/运行日志.md | 排查记录与教训（当前 LOG-020） |
+| 更新记录 | docs/更新记录.md | 版本变更记录（当前 v6.8.6 主线 + anhoa v6.8.0 并线条目） |
+| 开发路线图 | docs/开发路线图.md | 分期任务表（Phase 0已完成，M3 收官，M1/M2 v6.8.0 补齐，M4/M5 后端已交付，AI 已接通） |
+| 运行日志 | docs/运行日志.md | 排查记录与教训（当前 LOG-025） |
 | 测试报告 | docs/测试报告_v6.8.2_M3M4端到端.md | v6.8.2 Docker E2E 69/69 检查明细+7项缺陷+7轮迭代留档 |
-| 接口契约v2 | docs/接口契约v1.md | API接口契约（v2.8.5，31张表，81路由路径） |
+| 接口契约v2 | docs/接口契约v1.md | API接口契约（v2.8.5 并集，31张表，99路由路径=98 API+1 health） |
 | **基础架构方案** | **promts/lon/提示词整合测试_demo/docs/基础架构方案_五人并行开发.md** | **主基线文档（v1.2.0，28项决策），所有参考文档权重低于此文件** |
 
 > **文档优先级**：基础架构方案_五人并行开发.md > 其他参考文档（共用基座方案、公共框架等）
@@ -716,7 +716,7 @@ chore: 构建
 
 ---
 
-**最后更新**：2026-10-17 18:58（master_ZNBG 分支同步 origin/master 548b74b→264467d——v6.8.6 AI 配置记录+前端 API 接入/登录修复/测试账号文档/start-project.bat 随合并进入 ZNBG 工作区；合并前核查 backend/app 与 M0 公共模块零变更、双侧文件交集为空，ort 零冲突；compileall OK + verify_all 25/25；按用户要求只合并不推送，本地 ahead 20 提交待推；详见更新记录 merge 条目与 LOG-021）  
+**最后更新**：2026-10-17（master_ZNBG 第四次同步 origin/master 264467d→e6c06d0——并入 anhoa M1/M2 v6.8.0 全量（客户 8 研判字段/6 态流转状态机/pending_lead/客服 Agent 4 出口/assessment 引擎，路由 81→99）+ master v6.8.7 前端交付与 LOG-021~028 文档序列；4 份文档冲突并集解决，我方 LOG-021/022 与 anhoa 撞号重编 LOG-029/030；⚠️ 已知缺陷 P1：M0 AI 网关 ai_service.py 被 anhoa 重写为 M2 客服专用（AgentType/AIResponse/ai_service 实例删除），M3 employee_service 5 处、M4 student_service 2 处懒导入运行时断链（缺陷已在 origin/master，经用户确认照常合并，待 M3/M4 负责人修复，M5 不受影响）；另 LOG-027：anhoa 本机直连 MySQL 8.0.27@3306（密码 123456，与 compose 的 420821 并存，以各自 backend/.env 为准）；详见更新记录双方条目与 LOG-020~030）  
 **维护人**：开发团队
 
 

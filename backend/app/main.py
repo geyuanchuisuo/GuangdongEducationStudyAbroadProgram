@@ -5,10 +5,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.api.v1 import (
+    ai,
     approvals,
     auth,
+    courses,
+    crm,
     customers,
     employees,
+    events,
     files,
     notifications,
     operation_logs,
@@ -16,6 +20,8 @@ from app.api.v1 import (
     students,
     users,
 )
+from app.api.v1 import assessment as assessment_save_api
+from app.assessment.router import router as assessment_engine_router
 from app.config import settings
 from app.core.exceptions import BusinessError
 from app.core.middleware import RequestLogMiddleware
@@ -104,6 +110,12 @@ app.include_router(notifications.router, prefix=settings.API_V1_PREFIX)
 app.include_router(files.router, prefix=settings.API_V1_PREFIX)
 app.include_router(employees.router, prefix=settings.API_V1_PREFIX)
 app.include_router(operation_logs.router, prefix=settings.API_V1_PREFIX)
+app.include_router(courses.router, prefix=settings.API_V1_PREFIX)
+app.include_router(events.router, prefix=settings.API_V1_PREFIX)
+app.include_router(crm.router, prefix=settings.API_V1_PREFIX)
+app.include_router(ai.router, prefix=settings.API_V1_PREFIX)
+app.include_router(assessment_save_api.router, prefix=settings.API_V1_PREFIX)
+app.include_router(assessment_engine_router, prefix=settings.API_V1_PREFIX)
 app.include_router(students.router, prefix=settings.API_V1_PREFIX)          # M4 学生模块（学生端）
 app.include_router(students.employee_router, prefix=settings.API_V1_PREFIX)  # M4 进度追踪员工端更新
 app.include_router(reports.router, prefix=settings.API_V1_PREFIX)           # M5 报告模块
