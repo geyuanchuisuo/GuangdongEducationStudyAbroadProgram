@@ -716,7 +716,7 @@ chore: 构建
 
 ---
 
-**最后更新**：2026-10-17（master_ZNBG 第四次同步 origin/master 264467d→e6c06d0——并入 anhoa M1/M2 v6.8.0 全量（客户 8 研判字段/6 态流转状态机/pending_lead/客服 Agent 4 出口/assessment 引擎，路由 81→99）+ master v6.8.7 前端交付与 LOG-021~028 文档序列；4 份文档冲突并集解决，我方 LOG-021/022 与 anhoa 撞号重编 LOG-029/030；⚠️ 已知缺陷 P1：M0 AI 网关 ai_service.py 被 anhoa 重写为 M2 客服专用（AgentType/AIResponse/ai_service 实例删除），M3 employee_service 5 处、M4 student_service 2 处懒导入运行时断链（缺陷已在 origin/master，经用户确认照常合并，待 M3/M4 负责人修复，M5 不受影响）；另 LOG-027：anhoa 本机直连 MySQL 8.0.27@3306（密码 123456，与 compose 的 420821 并存，以各自 backend/.env 为准）；详见更新记录双方条目与 LOG-020~030）  
+**最后更新**：2026-10-17 19:58（master_ZNBG 第四次同步 origin/master 264467d→e6c06d0——并入 anhoa M1/M2 v6.8.0 全量（客户 8 研判字段/6 态流转状态机/pending_lead/客服 Agent 4 出口/assessment 引擎，路由 81→99）+ master v6.8.7 前端交付与 LOG-021~028 文档序列；4 份文档冲突并集解决，我方 LOG-021/022 与 anhoa 撞号重编 LOG-029/030；测试：compileall OK + verify_all **27/27** + pytest 全仓 **64/64**；⚠️ 已知缺陷 P1：M0 AI 网关 ai_service.py 被 anhoa 重写为 M2 客服专用（AgentType/AIResponse/ai_service 实例删除），M3 employee_service 5 处、M4 student_service 2 处懒导入运行时断链（缺陷已在 origin/master，经用户确认照常合并，待 M3/M4 负责人修复，M5 不受影响）；aiosqlite 未声明进 pyproject 待上游补；详见更新记录 merge 条目与 LOG-031）  
 **维护人**：开发团队
 
 
