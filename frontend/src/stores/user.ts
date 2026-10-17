@@ -26,13 +26,6 @@ export const useUserStore = defineStore('user', () => {
     await fetchUserInfo()
   }
 
-  function loginDemo(role: string, name: string) {
-    token.value = 'demo-token'
-    userInfo.value = { id: 1, username: 'demo', real_name: name, user_type: role }
-    localStorage.setItem('token', token.value)
-    localStorage.setItem('demo-user', JSON.stringify(userInfo.value))
-  }
-
   async function fetchUserInfo() {
     if (token.value === 'demo-token') {
       const saved = localStorage.getItem('demo-user')
@@ -50,6 +43,6 @@ export const useUserStore = defineStore('user', () => {
     localStorage.removeItem('demo-user')
   }
 
-  return { token, userInfo, isLoggedIn, userType, login, loginDemo, fetchUserInfo, logout }
+  return { token, userInfo, isLoggedIn, userType, login, fetchUserInfo, logout }
 })
 
