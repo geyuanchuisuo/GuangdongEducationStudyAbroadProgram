@@ -4,6 +4,27 @@
 
 ---
 
+## 零、快速定位（打开项目先看这里）
+
+**当前进度**：Phase 0 公共地基已完成（v6.0.1），进入 Phase 1 模块并行开发  
+**数据库**：30张表，13个API端点，MVC分层结构就绪  
+**主基线文档**：`promts/lon/提示词整合测试_demo/docs/基础架构方案_五人并行开发.md`（v1.2.0，28项决策）
+
+**接手阅读顺序**：
+1. 本文件（AGENTS.md）— 项目全貌、技术栈、环境搭建
+2. `docs/项目需求文档.md` — 完整业务需求
+3. `promts/lon/提示词整合测试_demo/docs/基础架构方案_五人并行开发.md` — **主基线，权重最高**
+4. `docs/开发路线图.md` — 当前进度、下一步任务
+5. `docs/接口契约v1.md` — API接口契约（v2.0）
+6. `docs/更新记录.md` — 最近变更（v6.0.1）
+
+**重要规则**：
+- 主基线文档（基础架构方案）权重 > 其他参考文档（共用基座方案、公共框架等）
+- 每次迭代完成后必须同步更新 docs/ 下全部6个文件
+- 代码写完必须先测试验证，再报告完成
+
+---
+
 ## 一、项目概述
 
 **项目名称**：粤教留学项目管理平台  
@@ -56,6 +77,7 @@
 
 ```
 GuangdongEducationStudyAbroadProgram/
+├── AGENTS.md                   # 项目接手指南（根目录，agent自动读取）
 ├── backend/                    # Python后端
 │   ├── app/
 │   │   ├── api/v1/            # API路由
@@ -87,9 +109,10 @@ GuangdongEducationStudyAbroadProgram/
 │   └── knowledge_base/        # 知识库文档
 │
 ├── docs/                       # 项目文档
+│   ├── AGENTS.md              # 本文件副本（与根目录AGENTS.md保持同步）
 │   ├── 项目需求文档.md
 │   ├── 更新记录.md
-│   ├── AGENTS.md              # 本文件
+│   ├── 接口契约v1.md          # API接口契约（v2.0）
 │   ├── 开发路线图.md
 │   └── 运行日志.md
 │
@@ -120,39 +143,87 @@ GuangdongEducationStudyAbroadProgram/
 - 员工数据隔离：普通员工只能看到自己名下的客户
 - 二期拆分为3个独立角色：人事（HR，不可看客户/经营）、经理（MANAGER_DIRECTOR，只看下属+自己客户）、总裁（MANAGER_PRESIDENT，看全部）
 
-### 4.2 数据库表（17张核心表）
+### 4.2 数据库表（30张，v6.0.0更新）
 
 > **数据库**：MySQL 8.0+，端口59000，库名 `GuangdongEducationStudyAbroadProgram`
 > **自动建表**：应用启动时自动创建所有表，无需手动执行SQL
 
+**公共基础表（M0管理）**：
 1. **sys_user** - 统一用户表（含permissions JSON字段）
-2. **student_admin_service** - 学生行政服务表
-3. **student_psych_profile** - 心理健康画像表
-4. **student_psych_alert** - 心理预警表
-5. **student_feedback_ticket** - 售后反馈工单表
-6. **crm_lead** - 意向客户表
-7. **employee_daily_report** - 员工日报表
-8. **student_score** - 学生成绩表
-9. **course_project** - 课程与项目表
-10. **event_lecture** - 活动与讲座表
-11. **event_registration** - 活动报名表
-12. **customer_assessment** - 客户研判记录表（含is_valid有效性标记）
-13. **ai_report** - 智能报告表
-14. **employee_todo** - 员工待办事项表
-15. **student_academic** - 学生学业考务表
-16. **student_application_progress** - 留学申请进度表
-17. **sys_notification** - 站内消息表
+2. **sys_notification** - 站内消息表
+3. **sys_event** - 事件总线表
+4. **approval_instance** - 审批实例表（v6.0.0 双表设计）
+5. **approval_task** - 审批任务表（v6.0.0 双表设计）
+6. **sys_operation_log** - 操作日志表
+
+**客户主数据表（v6.0.0 新增）**：
+7. **customer** - 客户主表（全系统客户主数据，手机号为业务唯一键）
+8. **pending_lead** - 待补全线索表（微信号等无手机号）
+
+**客户模块表（M1）**：
+9. **crm_lead** - 线索表（v6.0.0 改为引用 customer）
+10. **customer_assessment** - 客户研判记录表
+11. **crm_follow_up** - 客户跟进记录表（v6.0.0 改为引用 customer）
+
+**客服模块表（M2）**：
+12. **course_project** - 课程与项目表（公共共用，M2维护）
+13. **event_lecture** - 活动与讲座表（公共共用，M2维护）
+14. **event_registration** - 活动报名表
+15. **cs_chat_session** - 客服会话表
+16. **cs_chat_message** - 客服消息表
+17. **cs_intent_log** - 意图/转化日志表
+18. **cs_faq** - 常见问答对表
+
+**员工模块表（M3）**：
+19. **employee_daily_report** - 员工日报表
+20. **student_score** - 学生成绩表
+21. **employee_org** - 组织架构表
+22. **employee_todo** - 员工待办事项表
+
+**学生模块表（M4）**：
+23. **student_admin_service** - 学生行政服务表
+24. **student_psych_profile** - 心理健康画像表
+25. **student_psych_alert** - 心理预警表
+26. **student_feedback_ticket** - 售后反馈工单表
+27. **student_academic** - 学生学业考务表
+28. **student_application_progress** - 留学申请进度表
+
+**报告模块表（M5）**：
+29. **ai_report** - 智能报告表
+30. **ai_report_attachment** - 报告附件表
 
 ### 4.3 API接口分组
 
 - `/api/v1/auth/*` - 认证相关
 - `/api/v1/users/*` - 用户管理
+- `/api/v1/customers/*` - 客户主数据管理（v6.0.0新增）
 - `/api/v1/students/*` - 学生服务
 - `/api/v1/employees/*` - 员工服务
 - `/api/v1/crm/*` - CRM客户管理
 - `/api/v1/courses/*` - 课程项目
 - `/api/v1/events/*` - 活动管理
-- `/api/v1/ai/*` - AI服务（Dify）
+- `/api/v1/ai/*` - AI服务（统一网关，禁止直连Dify）
+- `/api/v1/approvals/*` - 审批引擎（v6.0.0 升级双表设计）
+- `/api/v1/notifications/*` - 通知中心
+- `/api/v1/files/*` - 文件存储
+
+### 4.3.1 模块划分与职责边界（v5.0.0新增）
+
+> 详见 `promts/lon/提示词整合测试_demo/docs/基础架构方案_五人并行开发.md`
+
+| 模块 | 核心职责 | 对外查询接口（供M5报告取数） |
+|------|---------|---------------------------|
+| **M0 公共基础设施** | 认证鉴权、统一响应/异常、AI网关、事件总线、审批引擎、通知中心、文件存储、数据权限 | - |
+| **M1 客户模块** | 客户主数据管理、画像研判、线索跟进、6态状态流转 | `GET /api/v1/customers/{id}`, `GET /api/v1/customers` |
+| **M2 客服模块** | 7大场景对话、知识库RAG、活动报名闭环、转线索 | `GET /api/v1/cs/courses`, `GET /api/v1/cs/events` |
+| **M3 员工模块** | CRM管理、日报、成绩、审批、口述日报 | `GET /api/v1/employee/reports`, `GET /api/v1/employee/reports/summary` |
+| **M4 学生模块** | 请假、心理关怀、售后反馈、学业考务 | `GET /api/v1/student/psych/stats`, `GET /api/v1/student/tickets/stats` |
+| **M5 报告模块** | 5类报告生成、经营看板 | 只调各模块接口取数，不直接查别人的表 |
+
+**模块间解耦原则**：
+- 模块间业务流转走事件总线（`sys_event`），不直接import对方service
+- 报告模块只调各模块暴露的查询接口，不直接查别人的表
+- 所有模块共用M0的AI网关，禁止直连Dify
 
 ### 4.4 AI Agent（3个，均置顶显示）
 
@@ -219,6 +290,13 @@ GuangdongEducationStudyAbroadProgram/
 | 3 | 一期用AI对话式情绪评估，二期引入专业量表 |
 | 4 | 学生界面用"更多服务"替代"增值转化" |
 | 5 | 一期人事并入MANAGER，二期拆分 |
+| 6 | 新增customer客户主表，crm_lead改为引用customer_id（v6.0.0） |
+| 7 | 审批引擎升级为双表设计：approval_instance + approval_task（v6.0.0） |
+| 8 | 保持code:200响应码风格（v6.0.0） |
+| 9 | 图片OCR二期实现，一期不做（v6.0.0） |
+| 10 | 保持EMPLOYEE/MANAGER/ADMIN三角色体系，按主文件来（v6.0.0） |
+| 11 | 单Vue应用，通过路由守卫区分三端（v6.0.0） |
+| 12 | 保持5位HTTP风格错误码（v6.0.0） |
 
 ---
 
@@ -565,11 +643,17 @@ chore: 构建
 
 | 文档 | 路径 | 说明 |
 |------|------|------|
+| **AGENTS.md** | **./AGENTS.md**（根目录） | **项目接手指南（agent自动读取，这是主文件）** |
+| AGENTS.md 副本 | docs/AGENTS.md | 与根目录保持同步的副本 |
 | 项目需求文档 | docs/项目需求文档.md | 完整需求、架构、接口、数据库 |
-| 更新记录 | docs/更新记录.md | 版本变更记录 |
-| AGENTS.md | docs/AGENTS.md | 本文件，项目接手指南 |
-| 开发路线图 | docs/开发路线图.md | 分期任务表 |
+| 更新记录 | docs/更新记录.md | 版本变更记录（当前v6.0.1） |
+| 开发路线图 | docs/开发路线图.md | 分期任务表（Phase 0已完成） |
 | 运行日志 | docs/运行日志.md | 排查记录与教训 |
+| 接口契约v2 | docs/接口契约v1.md | API接口契约（v2.0，30张表） |
+| **基础架构方案** | **promts/lon/提示词整合测试_demo/docs/基础架构方案_五人并行开发.md** | **主基线文档（v1.2.0，28项决策），所有参考文档权重低于此文件** |
+
+> **文档优先级**：基础架构方案_五人并行开发.md > 其他参考文档（共用基座方案、公共框架等）
+> **接手顺序**：本文件 → 项目需求文档 → 基础架构方案 → 开发路线图 → 接口契约
 
 ---
 
@@ -593,5 +677,5 @@ chore: 构建
 
 ---
 
-**最后更新**：2026-10-15  
+**最后更新**：2026-10-16  
 **维护人**：开发团队

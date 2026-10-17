@@ -32,3 +32,17 @@ class EmployeeTodo(Base):
     due_time = mapped_column(DateTime, nullable=True, index=True)
     create_time = mapped_column(DateTime, server_default=func.now())
     update_time = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class EmployeeOrg(Base):
+    __tablename__ = "employee_org"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    parent_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("employee_org.id"), nullable=True, index=True)
+    org_type: Mapped[str] = mapped_column(String(20), default="department", index=True)
+    leader_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("sys_user.id"), nullable=True)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    status: Mapped[str] = mapped_column(String(20), default="active", index=True)
+    create_time = mapped_column(DateTime, server_default=func.now())
+    update_time = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
