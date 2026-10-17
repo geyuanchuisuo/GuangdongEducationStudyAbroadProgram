@@ -3,57 +3,29 @@ import { useUserStore } from '../stores/user'
 
 const routes: RouteRecordRaw[] = [
   {
-    path: '/login',
-    name: 'Login',
-    component: () => import('../views/Login.vue'),
-    meta: { guest: true },
-  },
-  {
-    path: '/register',
-    name: 'Register',
-    component: () => import('../views/Register.vue'),
-    meta: { guest: true },
-  },
-  {
     path: '/',
-    component: () => import('../layouts/MainLayout.vue'),
-    meta: { requiresAuth: true },
+    component: () => import('../layouts/PublicLayout.vue'),
     children: [
-      {
-        path: '',
-        redirect: '/dashboard',
-      },
-      {
-        path: 'dashboard',
-        name: 'Dashboard',
-        component: () => import('../views/Dashboard.vue'),
-      },
-      {
-        path: 'customer',
-        name: 'Customer',
-        component: () => import('../views/customer/Index.vue'),
-        meta: { userTypes: ['PROSPECT', 'ADMIN'] },
-      },
-      {
-        path: 'employee',
-        name: 'Employee',
-        component: () => import('../views/employee/Index.vue'),
-        meta: { userTypes: ['EMPLOYEE', 'MANAGER', 'ADMIN'] },
-      },
-      {
-        path: 'student',
-        name: 'Student',
-        component: () => import('../views/student/Index.vue'),
-        meta: { userTypes: ['STUDENT', 'ADMIN'] },
-      },
-      {
-        path: 'manager',
-        name: 'Manager',
-        component: () => import('../views/manager/Index.vue'),
-        meta: { userTypes: ['MANAGER', 'ADMIN'] },
-      },
+      { path: '', name: 'Home', component: () => import('../views/public/Home.vue') },
+      { path: 'company', name: 'Company', component: () => import('../views/public/Company.vue') },
+      { path: 'projects', name: 'Projects', component: () => import('../views/public/Projects.vue') },
+      { path: 'projects/:id', name: 'ProjectDetail', component: () => import('../views/public/ProjectDetail.vue') },
+      { path: 'events', name: 'Events', component: () => import('../views/public/Events.vue') },
+      { path: 'policies', name: 'Policies', component: () => import('../views/public/Policies.vue') },
+      { path: 'faq', name: 'Faq', component: () => import('../views/public/Faq.vue') },
     ],
   },
+  { path: '/login', name: 'Login', component: () => import('../views/Login.vue'), meta: { guest: true } },
+  { path: '/register', name: 'Register', component: () => import('../views/Register.vue'), meta: { guest: true } },
+  {
+    path: '/app/:role/:section?',
+    component: () => import('../layouts/RoleLayout.vue'),
+    meta: { requiresAuth: true },
+    children: [
+      { path: '', name: 'RoleWorkspace', component: () => import('../views/RoleWorkspace.vue') },
+    ],
+  },
+  { path: '/:pathMatch(.*)*', name: 'NotFound', component: () => import('../views/NotFound.vue') },
 ]
 
 const router = createRouter({
@@ -61,39 +33,40 @@ const router = createRouter({
   routes,
 })
 
-router.beforeEach((to, _from, next) => {
+router.beforeEach(async (to) => {
   const userStore = useUserStore()
+  const requestedRole = String(to.params.role || '').toUpperCase()
 
   if (to.meta.requiresAuth && !userStore.isLoggedIn) {
-    next({ name: 'Login', query: { redirect: to.fullPath } })
-    return
+    return { name: 'Login', query: { redirect: to.fullPath } }
   }
 
   if (to.meta.guest && userStore.isLoggedIn) {
-    next({ name: 'Dashboard' })
-    return
+    if (userStore.userType === 'ADMIN') {
+      userStore.logout()
+      return '/login'
+    }
+    return '/app/' + (userStore.userType || 'PROSPECT').toLowerCase() + '/home'
   }
 
-  if (to.meta.userTypes && Array.isArray(to.meta.userTypes)) {
-    if (!userStore.userInfo) {
-      userStore.fetchUserInfo().then(() => {
-        if (userStore.userType && (to.meta.userTypes as string[]).includes(userStore.userType)) {
-          next()
-        } else {
-          next({ name: 'Dashboard' })
-        }
-      }).catch(() => {
-        next({ name: 'Login' })
-      })
-      return
-    }
-    if (!(to.meta.userTypes as string[]).includes(userStore.userType)) {
-      next({ name: 'Dashboard' })
-      return
+  if (to.meta.requiresAuth && userStore.isLoggedIn && !userStore.userInfo) {
+    try {
+      await userStore.fetchUserInfo()
+    } catch {
+      return { name: 'Login' }
     }
   }
 
-  next()
+  if (to.meta.requiresAuth && userStore.userType === 'ADMIN') {
+    userStore.logout()
+    return '/login'
+  }
+
+  if (requestedRole && userStore.userType && requestedRole !== userStore.userType) {
+    return '/app/' + userStore.userType.toLowerCase() + '/home'
+  }
+
+  return true
 })
 
 export default router
