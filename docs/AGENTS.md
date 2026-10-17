@@ -6,8 +6,8 @@
 
 ## 零、快速定位（打开项目先看这里）
 
-**当前进度**：Phase 0 公共地基已完成（v6.0.1），Phase 1 模块并行开发中；M3 员工模块全部交付（v6.5.0 收官）；v6.6.0 需求对齐差异全部落地（org 搜索/脱敏电话/客户下钻/推荐产品/投诉导出/操作日志查询）；**master 已合并 longtrying 全部工作（cba3303，2026-10-17）**  
-**数据库**：31张表，58个路由端点（employee 37），MVC分层结构就绪  
+**当前进度**：Phase 0 公共地基已完成（v6.0.1），Phase 1 模块并行开发中；M3 员工模块全部交付（v6.5.0 收官）；v6.6.0 需求对齐差异全部落地（org 搜索/脱敏电话/客户下钻/推荐产品/投诉导出/操作日志查询）；**v6.7.0 Phase 1.3 管理层端三项落地（经营看板/审批中心/用户管理权限配置）**；master 已合并 longtrying 全部工作（cba3303，2026-10-17）  
+**数据库**：31张表，63个路由端点（employee 42），MVC分层结构就绪  
 **主基线文档**：`promts/lon/提示词整合测试_demo/docs/基础架构方案_五人并行开发.md`（v1.2.0，28项决策）
 
 **接手阅读顺序**：
@@ -15,8 +15,8 @@
 2. `docs/项目需求文档.md` — 完整业务需求
 3. `promts/lon/提示词整合测试_demo/docs/基础架构方案_五人并行开发.md` — **主基线，权重最高**
 4. `docs/开发路线图.md` — 当前进度、下一步任务
-5. `docs/接口契约v1.md` — API接口契约（v2.6.0）
-6. `docs/更新记录.md` — 最近变更（v6.6.0）
+5. `docs/接口契约v1.md` — API接口契约（v2.7.0）
+6. `docs/更新记录.md` — 最近变更（v6.7.0）
 
 **重要规则**：
 - 主基线文档（基础架构方案）权重 > 其他参考文档（共用基座方案、公共框架等）
@@ -540,10 +540,22 @@ VITE_API_BASE_URL=http://localhost:8000/api/v1
 ### 7.1 Git规范
 
 **分支**：
-- `main` - 生产
-- `develop` - 开发
+- `master` - 主干（**2026-10-17 已合并 longtrying 全部工作，cba3303**；保护分支已由管理员解除，当前可直推；后续如需防误推可在 gitea 后台恢复保护）
+- `longtrying` - 开发分支（当前主线，M3 全部工作在此）
+- `develop` - 开发（预留）
 - `feature/*` - 功能
 - `fix/*` - 修复
+- 其他成员分支：ZNBG / anhoa / architecture / 研判 等（勿动他人分支）
+
+**longtrying → master 合并流程**（实测记录见运行日志 LOG-007）：
+```
+git fetch gitea
+git checkout master
+git merge --ff-only gitea/master          # 1. 先同步远端 master 最新
+git merge longtrying -X theirs --no-edit  # 2. 合并（冲突以 longtrying 为准；站在 master 上，theirs=longtrying）
+git push gitea master                     # 3. 推送
+git checkout longtrying                   # 4. 切回开发分支
+```
 
 **Commit格式**：
 ```
@@ -678,5 +690,5 @@ chore: 构建
 
 ---
 
-**最后更新**：2026-10-17 13:04（v6.6.0 + master 合并记录：longtrying→master 已合并 cba3303，冲突以 longtrying 为准；补记 LOG-007 合并过程与流程规范）  
+**最后更新**：2026-10-17 13:13（v6.7.0：Phase 1.3 管理层端三项落地——经营看板 GET /employee/dashboard、审批中心 GET /employee/approvals-center、用户管理+权限配置 /employee/users 组；路由 58→63，employee 42；契约 v2.7.0）  
 **维护人**：开发团队

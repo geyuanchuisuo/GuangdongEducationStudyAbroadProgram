@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from app.core.exceptions import BusinessError, ConflictError, ForbiddenError, NotFoundError
 from app.models.customer import Customer
@@ -1300,3 +1300,260 @@ class EmployeeService:
                 )
             )).scalar_one()
         return result
+
+    # ── 经营看板（MANAGER，Phase 1.3） ───────────────────
+    DASHBOARD_STAGE_ALIASES: dict[str, list[str]] = {
+        "新录入": ["新录入", "NEW"],
+        "跟进中": ["跟进中", "FOLLOWING"],
+        "意向强烈": ["意向强烈", "STRONG"],
+        "已签约": ["已签约", "SIGNED", "CONVERTED"],
+        "已入学": ["已入学", "ENROLLED"],
+    }
+    LOST_ALIASES = ["已流失", "LOST"]
+
+    async def dashboard(self) -> dict:
+        """经营看板：全域客户数据 + 转化漏斗 + 审批/日报/投诉/心理预警聚合。"""
+        from app.models.student import StudentFeedbackTicket, StudentPsychAlert
+        from app.models.system import ApprovalInstance
+        from app.services.approval_engine import ApprovalStatus
+
+        now = datetime.now()
+        today = now.date()
+        month_start = today.replace(day=1)
+
+        # ── 客户全域数据 ──
+        total = (await self.db.execute(
+            select(func.count()).select_from(Customer)
+        )).scalar_one()
+        new_this_month = (await self.db.execute(
+            select(func.count()).select_from(Customer).where(Customer.created_at >= month_start)
+        )).scalar_one()
+        status_counts = dict((await self.db.execute(
+            select(Customer.status, func.count()).group_by(Customer.status)
+        )).all())
+        funnel = [
+            {"stage": stage, "count": sum(status_counts.get(a, 0) for a in aliases)}
+            for stage, aliases in self.DASHBOARD_STAGE_ALIASES.items()
+        ]
+        lost = sum(status_counts.get(a, 0) for a in self.LOST_ALIASES)
+        by_source = [
+            {"source": row[0] or "unknown", "count": row[1]}
+            for row in (await self.db.execute(
+                select(Customer.source_channel, func.count())
+                .group_by(Customer.source_channel)
+                .order_by(func.count().desc())
+            )).all()
+        ]
+
+        # ── 审批聚合 ──
+        pending_by_biz_type = dict((await self.db.execute(
+            select(ApprovalInstance.biz_type, func.count()).where(
+                ApprovalInstance.status == ApprovalStatus.PENDING.value
+            ).group_by(ApprovalInstance.biz_type)
+        )).all())
+
+        # ── 日报 ──
+        today_submitted = (await self.db.execute(
+            select(func.count()).select_from(EmployeeDailyReport).where(
+                EmployeeDailyReport.report_date == today,
+                EmployeeDailyReport.status == "submitted",
+            )
+        )).scalar_one()
+        month_submitted = (await self.db.execute(
+            select(func.count()).select_from(EmployeeDailyReport).where(
+                EmployeeDailyReport.report_date >= month_start,
+                EmployeeDailyReport.status == "submitted",
+            )
+        )).scalar_one()
+        late_this_month = (await self.db.execute(
+            select(func.count()).select_from(EmployeeDailyReport).where(
+                EmployeeDailyReport.is_late.is_(True),
+                EmployeeDailyReport.report_date >= month_start,
+            )
+        )).scalar_one()
+
+        # ── 投诉 + 心理预警 ──
+        tickets_pending = (await self.db.execute(
+            select(func.count()).select_from(StudentFeedbackTicket).where(
+                StudentFeedbackTicket.status == "待处理"
+            )
+        )).scalar_one()
+        tickets_handled_month = (await self.db.execute(
+            select(func.count()).select_from(StudentFeedbackTicket).where(
+                StudentFeedbackTicket.status == "已处理",
+                StudentFeedbackTicket.update_time >= month_start,
+            )
+        )).scalar_one()
+        psych_unhandled = (await self.db.execute(
+            select(func.count()).select_from(StudentPsychAlert).where(
+                StudentPsychAlert.status == "未处理"
+            )
+        )).scalar_one()
+
+        return {
+            "customers": {
+                "total": total,
+                "new_this_month": new_this_month,
+                "by_status": status_counts,
+                "by_source": by_source,
+                "funnel": funnel,
+                "lost": lost,
+            },
+            "approvals": {
+                "pending_total": sum(pending_by_biz_type.values()),
+                "pending_by_biz_type": pending_by_biz_type,
+            },
+            "reports": {
+                "today_submitted": today_submitted,
+                "month_submitted": month_submitted,
+                "late_this_month": late_this_month,
+            },
+            "tickets": {
+                "pending": tickets_pending,
+                "handled_this_month": tickets_handled_month,
+            },
+            "psych_alerts": {
+                "unhandled": psych_unhandled,
+            },
+        }
+
+    # ── 审批中心（MANAGER，Phase 1.3） ───────────────────
+    async def approvals_center(
+        self, biz_type: str | None, status: str | None, page: int, page_size: int
+    ) -> dict:
+        """审批中心聚合视图：全量审批单（不限于本人审批）+ 各类型待审统计。"""
+        from app.models.system import ApprovalInstance
+        from app.schemas.approval import ApprovalInstanceOut, ApprovalTaskOut
+        from app.services.approval_engine import ApprovalStatus
+
+        stmt = select(ApprovalInstance)
+        count_stmt = select(func.count()).select_from(ApprovalInstance)
+        if biz_type:
+            stmt = stmt.where(ApprovalInstance.biz_type == biz_type)
+            count_stmt = count_stmt.where(ApprovalInstance.biz_type == biz_type)
+        if status:
+            stmt = stmt.where(ApprovalInstance.status == status)
+            count_stmt = count_stmt.where(ApprovalInstance.status == status)
+        total = (await self.db.execute(count_stmt)).scalar_one()
+        stmt = stmt.order_by(ApprovalInstance.created_at.desc()).offset((page - 1) * page_size).limit(page_size)
+        instances = list((await self.db.execute(stmt)).scalars().all())
+
+        pending_by_biz_type = dict((await self.db.execute(
+            select(ApprovalInstance.biz_type, func.count()).where(
+                ApprovalInstance.status == ApprovalStatus.PENDING.value
+            ).group_by(ApprovalInstance.biz_type)
+        )).all())
+
+        items = []
+        for inst in instances:
+            tasks = await approval_engine.get_tasks(inst.id)
+            item = ApprovalInstanceOut.model_validate(inst)
+            item.tasks = [ApprovalTaskOut.model_validate(t) for t in tasks]
+            items.append(item)
+        return {
+            "stats": {
+                "pending_total": sum(pending_by_biz_type.values()),
+                "pending_by_biz_type": pending_by_biz_type,
+            },
+            "items": items,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+        }
+
+    # ── 用户管理（MANAGER，Phase 1.3） ───────────────────
+    async def list_users(
+        self, user_type: str | None, status: str | None, keyword: str | None, page: int, page_size: int
+    ) -> tuple[list[User], int]:
+        """用户列表（管理视角，含 permissions JSON），username/real_name 模糊。"""
+        stmt = select(User).where(User.user_type.in_(["EMPLOYEE", "MANAGER"]))
+        count_stmt = select(func.count()).select_from(User).where(User.user_type.in_(["EMPLOYEE", "MANAGER"]))
+        if user_type:
+            stmt = stmt.where(User.user_type == user_type)
+            count_stmt = count_stmt.where(User.user_type == user_type)
+        if status:
+            stmt = stmt.where(User.status == status)
+            count_stmt = count_stmt.where(User.status == status)
+        if keyword:
+            like = f"%{keyword}%"
+            stmt = stmt.where(User.username.like(like) | User.real_name.like(like))
+            count_stmt = count_stmt.where(User.username.like(like) | User.real_name.like(like))
+        total = (await self.db.execute(count_stmt)).scalar_one()
+        stmt = stmt.order_by(User.id).offset((page - 1) * page_size).limit(page_size)
+        users = list((await self.db.execute(stmt)).scalars().all())
+        return users, total
+
+    async def create_user(self, data: dict) -> User:
+        """创建员工/管理层账号（管理层账号来源规则：MANAGER 创建）。"""
+        from app.core.security import hash_password
+
+        existing = (await self.db.execute(select(User).where(User.username == data["username"]))).scalar_one_or_none()
+        if existing:
+            raise ConflictError(message=f"用户名 {data['username']} 已存在")
+        if data.get("phone"):
+            phone_exists = (await self.db.execute(select(User).where(User.phone == data["phone"]))).scalar_one_or_none()
+            if phone_exists:
+                raise BusinessError(code=40004, message="手机号已注册")
+
+        user = User(
+            username=data["username"],
+            password_hash=hash_password(data["password"]),
+            real_name=data["real_name"],
+            user_type=data["user_type"],
+            phone=data.get("phone"),
+            employee_role=data.get("employee_role"),
+            department=data.get("department"),
+            permissions=data.get("permissions"),
+            status="正常",
+        )
+        self.db.add(user)
+        await self.db.commit()
+        await self.db.refresh(user)
+        return user
+
+    async def _get_managed_user(self, user_id: int) -> User:
+        result = await self.db.execute(select(User).where(User.id == user_id))
+        user = result.scalar_one_or_none()
+        if not user or user.user_type not in ("EMPLOYEE", "MANAGER"):
+            raise NotFoundError(message="用户不存在")
+        return user
+
+    async def update_user_status(self, operator_id: int, user_id: int, status: str) -> User:
+        """启用/禁用账号（禁用后登录返回 40003），写操作日志。"""
+        target = await self._get_managed_user(user_id)
+        if target.id == operator_id and status == "禁用":
+            raise BusinessError(code=40002, message="不能禁用自己的账号")
+        if target.status == status:
+            raise ConflictError(message=f"账号已是「{status}」状态")
+        old_status = target.status
+        target.status = status
+        from app.models.system import SysOperationLog
+        self.db.add(SysOperationLog(
+            user_id=operator_id,
+            module="M3",
+            action="user_status_change",
+            target_type="user",
+            target_id=user_id,
+            detail={"target_username": target.username, "old_status": old_status, "new_status": status},
+        ))
+        await self.db.commit()
+        await self.db.refresh(target)
+        return target
+
+    async def update_user_permissions(self, operator_id: int, user_id: int, permissions: list[str]) -> User:
+        """配置用户额外权限（覆盖式写入 sys_user.permissions JSON），写操作日志。"""
+        target = await self._get_managed_user(user_id)
+        old = target.permissions
+        target.permissions = permissions
+        from app.models.system import SysOperationLog
+        self.db.add(SysOperationLog(
+            user_id=operator_id,
+            module="M3",
+            action="user_permissions_change",
+            target_type="user",
+            target_id=user_id,
+            detail={"target_username": target.username, "old": old, "new": permissions},
+        ))
+        await self.db.commit()
+        await self.db.refresh(target)
+        return target

@@ -138,8 +138,13 @@ expected_employee_paths = [
     '/api/v1/employee/org/members',
     '/api/v1/employee/org/members/{user_id}/reveal-phone',
     '/api/v1/employee/export/tickets',
+    '/api/v1/employee/dashboard',
+    '/api/v1/employee/approvals-center',
+    '/api/v1/employee/users',
+    '/api/v1/employee/users/{user_id}/status',
+    '/api/v1/employee/users/{user_id}/permissions',
 ]
-test('/api/v1/employee (37 paths, M3 v6.6.0)',
+test('/api/v1/employee (42 paths, M3 v6.7.0 管理层端)',
      lambda: None if all(p in routes for p in expected_employee_paths) else
      (_ for _ in ()).throw(Exception('missing')))
 
@@ -147,9 +152,9 @@ test('/api/v1/operation-logs (v6.6.0 操作日志查询)',
      lambda: None if '/api/v1/operation-logs' in routes else
      (_ for _ in ()).throw(Exception('missing')))
 
-test(f'total paths = 58 (57 API + 1 health, got {len(routes)})',
-     lambda: None if len(routes) == 58 else
-     (_ for _ in ()).throw(Exception(f'expected 58')))
+test(f'total paths = 63 (62 API + 1 health, got {len(routes)})',
+     lambda: None if len(routes) == 63 else
+     (_ for _ in ()).throw(Exception(f'expected 63')))
 
 # ===== Suite 3: MVC Layer =====
 print()
