@@ -40,8 +40,6 @@ export const navigation: Record<Role, NavItem[]> = {
     { key: 'home', label: '经营看板', icon: 'DataAnalysis', section: 'home' },
     { key: 'reports', label: '智能汇总', icon: 'DataAnalysis', section: 'reports' },
     { key: 'org', label: '组织架构', icon: 'OfficeBuilding', section: 'org' },
-    { key: 'health', label: '学生信息健康', icon: 'Star', section: 'health' },
-    { key: 'complaints', label: '投诉处理周报', icon: 'Service', section: 'complaints' },
     { key: 'approvals', label: '流程审批', icon: 'Finished', section: 'approvals' },
     { key: 'customers', label: '全部客户', icon: 'UserFilled', section: 'customers' },
     { key: 'employees', label: '员工管理', icon: 'User', section: 'employees' },

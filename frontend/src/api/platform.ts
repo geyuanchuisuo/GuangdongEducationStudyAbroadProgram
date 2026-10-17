@@ -1,5 +1,5 @@
 import request from '../utils/request'
-import { customers, events, faqs, notifications, policies, projects, reports } from '../data/mock'
+import { customers, events, faqs, notifications, policies, projects } from '../data/mock'
 
 type AnyRecord = Record<string, any>
 
@@ -11,7 +11,9 @@ async function toData<T>(promise: Promise<any>): Promise<T> {
 async function fallback<T>(task: () => Promise<any>, data: T): Promise<T> {
   try {
     return await toData<T>(task())
-  } catch {
+  } catch (error) {
+    // M5-05.7：静默回落必须显式提示——控制台可追溯，避免 mock 数据被误当真实接口数据
+    console.warn('[platformApi] 接口不可用，回落到本地演示数据：', error)
     return data
   }
 }
@@ -93,8 +95,9 @@ export const platformApi = {
     my: () => toData(request.get('/approvals/my')),
     get: (id: number) => toData(request.get('/approvals/' + id)),
   },
-  reports: (params: AnyRecord = {}) => fallback(() => request.get('/reports', { params: query(params) }), reports),
-  report: {
+  // M5 智能报告（M5-05.6/05.7）：报告组不做静默 mock 回落——失败直接抛出由页面四态呈现
+  reports: {
+    list: (params: AnyRecord = {}) => toData(request.get('/reports', { params: query(params) })),
     generate: (data: AnyRecord) => toData(request.post('/reports/generate', data)),
     get: (id: number) => toData(request.get('/reports/' + id)),
     customers: (id: number) => toData(request.get('/reports/' + id + '/customers')),
