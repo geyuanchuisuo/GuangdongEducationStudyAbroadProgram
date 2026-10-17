@@ -15,13 +15,20 @@ from app.schemas.student import (
     AdminServiceOut,
     AcademicItemOut,
     AcademicOut,
+    AgentChatCreate,
+    AgentChatOut,
+    DdlReminderItem,
+    LeaveResultItem,
     LifeFaqOut,
     MoreServicesOut,
     ProgressStageOut,
     ProgressUpdate,
+    ProgressUpdateItem,
     PsychChatCreate,
     PsychChatOut,
     PsychProfileOut,
+    ReminderCounts,
+    RemindersOut,
     ScoreItemOut,
     ServiceItem,
     TicketCreate,
@@ -143,3 +150,30 @@ async def more_services(current: User = Depends(require_user_type("STUDENT"))):
     return success_response(
         data=MoreServicesOut(items=[ServiceItem(**i) for i in StudentService.more_services()]).model_dump()
     )
+
+
+# ── 学生助手 Agent（v6.8.1：权限感知注入+限制预期，Dify 不可用降级） ──
+@router.post("/agent/chat", summary="学生助手会话（限制预期：不承诺退费/不给出医疗级建议）")
+async def agent_chat(
+    data: AgentChatCreate,
+    current: User = Depends(require_user_type("STUDENT")),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await StudentService(db).agent_chat(current, data.message, data.session_id)
+    return success_response(data=AgentChatOut(**result).model_dump())
+
+
+# ── 提醒聚合（v6.8.1：登录拉取即推送，DDL/请假结果/工单结果/进度更新） ──
+@router.get("/reminders", summary="登录拉取提醒聚合（学业 DDL/请假结果/工单结果/进度更新）")
+async def get_reminders(
+    current: User = Depends(require_user_type("STUDENT")),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await StudentService(db).get_reminders(current.id)
+    return success_response(data=RemindersOut(
+        academic_ddl=[DdlReminderItem(**i) for i in result["academic_ddl"]],
+        leave_results=[LeaveResultItem(**i) for i in result["leave_results"]],
+        ticket_updates=[TicketUpdateItem(**i) for i in result["ticket_updates"]],
+        progress_updates=[ProgressUpdateItem(**i) for i in result["progress_updates"]],
+        counts=ReminderCounts(**result["counts"]),
+    ).model_dump(mode="json"))

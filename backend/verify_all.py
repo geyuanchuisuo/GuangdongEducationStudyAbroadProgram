@@ -152,7 +152,7 @@ test('/api/v1/operation-logs (v6.6.0 操作日志查询)',
      lambda: None if '/api/v1/operation-logs' in routes else
      (_ for _ in ()).throw(Exception('missing')))
 
-# ── M4 学生模块路由（9 paths / 11 endpoints, v6.8.0） ─────────────────────────
+# ── M4 学生模块路由（11 paths / 13 endpoints, v6.8.1） ─────────────────────────
 expected_student_paths = [
     '/api/v1/student/admin-services',
     '/api/v1/student/psych/chat',
@@ -162,15 +162,17 @@ expected_student_paths = [
     '/api/v1/student/progress',
     '/api/v1/student/life/faq',
     '/api/v1/student/services',
+    '/api/v1/student/agent/chat',
+    '/api/v1/student/reminders',
     '/api/v1/employee/students/{student_id}/progress',
 ]
-test('/api/v1/student (11 paths, M4 v6.8.0 学生端+进度员工端)',
+test('/api/v1/student (11 paths, M4 v6.8.1 学生端+进度员工端)',
      lambda: None if all(p in routes for p in expected_student_paths) else
      (_ for _ in ()).throw(Exception('missing')))
 
-test(f'total paths = 72 (71 API + 1 health, got {len(routes)})',
-     lambda: None if len(routes) == 72 else
-     (_ for _ in ()).throw(Exception(f'expected 72')))
+test(f'total paths = 74 (73 API + 1 health, got {len(routes)})',
+     lambda: None if len(routes) == 74 else
+     (_ for _ in ()).throw(Exception(f'expected 74')))
 
 # ===== Suite 3: MVC Layer =====
 print()
@@ -185,7 +187,11 @@ from app.schemas.approval import (ApprovalCreate, ApprovalAction, ApprovalTaskOu
                                    ApprovalInstanceOut, BatchApprovalRequest)
 from app.schemas.common import PageParams, PageResult, IdResponse, StatusResponse, MessageResponse
 from app.schemas.notification import NotificationOut
-test('schemas (5 modules, 20 classes)', lambda: None)
+from app.schemas.student import (AdminServiceCreate, AdminServiceOut, PsychChatCreate, PsychChatOut,
+                                 PsychProfileOut, TicketCreate, TicketOut, AcademicItemOut,
+                                 AcademicOut, ProgressStageOut, ProgressUpdate, RemindersOut,
+                                 AgentChatCreate, AgentChatOut)
+test('schemas (6 modules, M4 v6.8.1 included)', lambda: None)
 
 from app.repositories.user_repo import UserRepository
 from app.repositories.customer_repo import CustomerRepository
@@ -199,7 +205,8 @@ from app.services.event_bus import EventBus
 from app.services.event_contracts import EventType
 from app.services.file_storage import FileStorageService, FileModule, FileStorageError
 from app.services.notification_service import NotificationService, NotificationType
-test('services (8 modules, all classes)', lambda: None)
+from app.services.student_service import StudentService, STUDENT_CAPABILITIES, PROGRESS_STAGES
+test('services (9 modules, M4 included)', lambda: None)
 
 # ===== Suite 4: Migration =====
 print()

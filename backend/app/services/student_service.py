@@ -7,7 +7,7 @@
 - 进度追踪按 v2.5.0 契约由 M4 统一实现员工端更新+学生端查看。
 """
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -56,10 +56,27 @@ MORE_SERVICES = [
 
 # ── 心理情绪本地分析词库（AI 不可用时兜底，规则简单可测） ──
 _NEGATIVE_KEYWORDS = ["压力", "焦虑", "失眠", "难过", "崩溃", "孤独", "想放弃", "emo", "撑不住", "绝望", "烦躁", "哭"]
-_POSITIVE_KEYWORDS = ["开心", "顺利", "期待", "开心", "棒", "适应", "充实", "放松", "高兴", "满意"]
+_POSITIVE_KEYWORDS = ["开心", "顺利", "期待", "棒", "适应", "充实", "放松", "高兴", "满意"]
 _DEGRADED_REPLY = (
     "我在呢，感谢你愿意和我分享。你的感受很重要，我会认真记录下来。"
     "如果此刻情绪比较强烈，可以先做几次深呼吸；我们会一起面对，必要时也可以联系你的负责老师聊聊。"
+)
+
+
+# ── 学生助手能力清单（权限感知注入 Dify prompt，v6.8.1） ──
+STUDENT_CAPABILITIES = [
+    "行政服务代办（请假申请与进度查看）",
+    "心理陪伴与情绪疏导（不提供医疗级建议，紧急情况引导联系专业帮助）",
+    "学业考务提醒与成绩查询",
+    "售后反馈工单提交与结果查询",
+    "留学申请进度追踪",
+    "海外生活常见问题解答",
+]
+_AGENT_FALLBACK_REPLY = (
+    "AI 助手暂时不可用（Dify 未连接）。我是你的学生助手，可以帮你：\n"
+    + "\n".join(f"- {c}" for c in STUDENT_CAPABILITIES)
+    + "\n\n提示：请假可在「行政服务」提交；问题反馈可在「售后反馈」提交；"
+      "情绪支持可走「心理关怀」对话。"
 )
 
 
@@ -309,3 +326,106 @@ class StudentService:
     @staticmethod
     def more_services() -> list[dict]:
         return MORE_SERVICES
+
+    # ── 学生助手 Agent（v6.8.1，权限感知注入+限制预期，Dify 不可用降级） ──
+    async def agent_chat(self, student: User, message: str, session_id: str | None) -> dict:
+        """学生助手会话：注入身份+能力+限制预期 context 转发 Dify；AI 不可用降级返回能力清单。
+
+        限制预期（需求硬性要求）：不承诺退费、不给出医疗级建议，情绪问题引导专业帮助。
+        """
+        from app.services.ai_service import AgentType, ai_service
+
+        context = {
+            "user_type": "STUDENT",
+            "user_id": str(student.id),
+            "real_name": student.real_name or student.username,
+            "capabilities": "、".join(STUDENT_CAPABILITIES),
+            "restrictions": "不承诺退费；不给出医疗级建议；情绪问题引导联系负责老师或专业帮助",
+        }
+        try:
+            resp = await ai_service.chat(
+                agent=AgentType.STUDENT,
+                message=message,
+                session_id=session_id or "new",
+                user_id=f"student_{student.id}",
+                context=context,
+            )
+            return {"reply": resp.content, "session_id": resp.session_id, "source": "dify"}
+        except Exception as exc:
+            logger.warning("agent_chat AI 降级: student=%s error=%s", student.id, exc)
+            return {"reply": _AGENT_FALLBACK_REPLY, "session_id": session_id or "new", "source": "fallback"}
+
+    # ── 提醒聚合（v6.8.1，登录拉取即推送，Agent 主动提醒数据源） ──
+    async def get_reminders(self, student_id: int) -> dict:
+        """聚合：3 日内到期学业 DDL（拉取即推送并写回 reminder_sent）/ 最近出结果的请假 /
+        已处理工单（未通知的拉取后置为已通知）/ 近 7 天进度更新。"""
+        now = datetime.now(timezone.utc)
+
+        ddl_rows = (await self.db.execute(
+            select(StudentAcademic).where(
+                StudentAcademic.student_id == student_id,
+                StudentAcademic.due_time >= now,
+                StudentAcademic.due_time <= now + timedelta(days=3),
+            ).order_by(StudentAcademic.due_time.asc())
+        )).scalars().all()
+        academic_ddl = [
+            {"id": a.id, "title": a.title, "course_name": a.course_name,
+             "due_time": a.due_time, "days_left": max(0, (a.due_time - now).days)}
+            for a in ddl_rows
+        ]
+        for a in ddl_rows:
+            if not a.reminder_sent:
+                a.reminder_sent = True
+                a.reminder_time = now
+
+        leave_rows = (await self.db.execute(
+            select(StudentAdminService).where(
+                StudentAdminService.student_id == student_id,
+                StudentAdminService.status.in_(["已通过", "已拒绝"]),
+            ).order_by(StudentAdminService.update_time.desc()).limit(5)
+        )).scalars().all()
+        leave_results = [
+            {"id": r.id, "service_type": r.service_type, "status": r.status, "update_time": r.update_time}
+            for r in leave_rows
+        ]
+
+        ticket_rows = (await self.db.execute(
+            select(StudentFeedbackTicket).where(
+                StudentFeedbackTicket.student_id == student_id,
+                StudentFeedbackTicket.status == "已处理",
+            ).order_by(StudentFeedbackTicket.update_time.desc()).limit(5)
+        )).scalars().all()
+        ticket_updates = [
+            {"id": t.id, "content": t.content, "status": t.status,
+             "solution": t.solution, "is_notified": t.is_notified}
+            for t in ticket_rows
+        ]
+        for t in ticket_rows:
+            if not t.is_notified:
+                t.is_notified = True
+
+        week_ago = now - timedelta(days=7)
+        progress_rows = (await self.db.execute(
+            select(StudentApplicationProgress).where(
+                StudentApplicationProgress.student_id == student_id,
+                StudentApplicationProgress.update_time >= week_ago,
+            ).order_by(StudentApplicationProgress.update_time.desc()).limit(10)
+        )).scalars().all()
+        progress_updates = [
+            {"stage": p.stage, "status": p.status, "update_time": p.update_time, "notes": p.notes}
+            for p in progress_rows
+        ]
+
+        await self.db.commit()
+        return {
+            "academic_ddl": academic_ddl,
+            "leave_results": leave_results,
+            "ticket_updates": ticket_updates,
+            "progress_updates": progress_updates,
+            "counts": {
+                "academic_ddl": len(academic_ddl),
+                "leave_results": len(leave_results),
+                "ticket_updates": len(ticket_updates),
+                "progress_updates": len(progress_updates),
+            },
+        }

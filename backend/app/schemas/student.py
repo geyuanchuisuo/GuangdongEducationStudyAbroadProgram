@@ -136,3 +136,61 @@ class ServiceItem(BaseModel):
 
 class MoreServicesOut(BaseModel):
     items: list[ServiceItem]
+
+
+# ── 学生助手 Agent（v6.8.1 第二批） ──
+class AgentChatCreate(BaseModel):
+    message: str = Field(..., min_length=1, max_length=2000)
+    session_id: str | None = Field(None, max_length=64, description="会话ID，传 new 开新会话")
+
+
+class AgentChatOut(BaseModel):
+    reply: str
+    session_id: str
+    source: str = Field(..., description="dify / fallback")
+
+
+# ── 提醒聚合（v6.8.1 第二批，Agent 主动提醒数据源） ──
+class DdlReminderItem(BaseModel):
+    id: int
+    title: str
+    course_name: str | None = None
+    due_time: datetime
+    days_left: int
+
+
+class LeaveResultItem(BaseModel):
+    id: int
+    service_type: str
+    status: str
+    update_time: datetime
+
+
+class TicketUpdateItem(BaseModel):
+    id: int
+    content: str
+    status: str
+    solution: str | None = None
+    is_notified: bool
+
+
+class ProgressUpdateItem(BaseModel):
+    stage: str
+    status: str
+    update_time: datetime
+    notes: str | None = None
+
+
+class ReminderCounts(BaseModel):
+    academic_ddl: int
+    leave_results: int
+    ticket_updates: int
+    progress_updates: int
+
+
+class RemindersOut(BaseModel):
+    academic_ddl: list[DdlReminderItem]
+    leave_results: list[LeaveResultItem]
+    ticket_updates: list[TicketUpdateItem]
+    progress_updates: list[ProgressUpdateItem]
+    counts: ReminderCounts

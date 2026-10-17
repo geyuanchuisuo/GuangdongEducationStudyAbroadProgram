@@ -6,8 +6,8 @@
 
 ## 零、快速定位（打开项目先看这里）
 
-**当前进度**：Phase 0 公共地基已完成（v6.0.1），Phase 1 模块并行开发中；M3 员工模块全部交付（v6.5.0 收官）；v6.6.0 需求对齐差异全部落地；v6.7.0~v6.7.2 管理层端三项+需求核对 52/52；**M4 学生模块第一批已落地（v6.8.0，longtrying_stu 分支：请假/心理关怀/售后/考务/进度/生活FAQ/更多服务，9 paths / 11 endpoints）**；master 已合并 longtrying 全部工作（62d4cff，2026-10-17，无冲突）  
-**数据库**：31张表，72条路由路径（71 API + 1 health；employee 42 paths，student 9 paths/11 endpoints），MVC分层结构就绪  
+**当前进度**：Phase 0 公共地基已完成（v6.0.1），Phase 1 模块并行开发中；M3 员工模块全部交付（v6.5.0 收官）；v6.6.0 需求对齐差异全部落地；v6.7.0~v6.7.2 管理层端三项+需求核对 52/52；**M4 学生模块一期全部交付（v6.8.0 第一批 7 子模块 + v6.8.1 第二批 学生助手Agent/提醒聚合，11 paths / 13 endpoints）**；master 已合并 longtrying 全部工作（62d4cff，2026-10-17，无冲突）  
+**数据库**：31张表，74条路由路径（73 API + 1 health；employee 42 paths，student 11 paths/13 endpoints），MVC分层结构就绪  
 **主基线文档**：`promts/lon/提示词整合测试_demo/docs/基础架构方案_五人并行开发.md`（v1.2.0，28项决策）
 
 **接手阅读顺序**：
@@ -15,8 +15,8 @@
 2. `docs/项目需求文档.md` — 完整业务需求
 3. `promts/lon/提示词整合测试_demo/docs/基础架构方案_五人并行开发.md` — **主基线，权重最高**
 4. `docs/开发路线图.md` — 当前进度、下一步任务
-5. `docs/接口契约v1.md` — API接口契约（v2.8.0）
-6. `docs/更新记录.md` — 最近变更（v6.8.0）
+5. `docs/接口契约v1.md` — API接口契约（v2.8.1）
+6. `docs/更新记录.md` — 最近变更（v6.8.1）
 
 **重要规则**：
 - 主基线文档（基础架构方案）权重 > 其他参考文档（共用基座方案、公共框架等）
@@ -669,10 +669,10 @@ chore: 构建
 | **AGENTS.md** | **./AGENTS.md**（根目录） | **项目接手指南（agent自动读取，这是主文件）** |
 | AGENTS.md 副本 | docs/AGENTS.md | 与根目录保持同步的副本 |
 | 项目需求文档 | docs/项目需求文档.md | 完整需求、架构、接口、数据库 |
-| 更新记录 | docs/更新记录.md | 版本变更记录（当前v6.8.0） |
-| 开发路线图 | docs/开发路线图.md | 分期任务表（Phase 0已完成，M3 收官，Phase 1.4 M4 第一批已落地） |
+| 更新记录 | docs/更新记录.md | 版本变更记录（当前v6.8.1） |
+| 开发路线图 | docs/开发路线图.md | 分期任务表（Phase 0已完成，M3 收官，Phase 1.4 M4 一期已交付） |
 | 运行日志 | docs/运行日志.md | 排查记录与教训 |
-| 接口契约v2 | docs/接口契约v1.md | API接口契约（v2.8.0，31张表，72路由路径） |
+| 接口契约v2 | docs/接口契约v1.md | API接口契约（v2.8.1，31张表，74路由路径） |
 | **基础架构方案** | **promts/lon/提示词整合测试_demo/docs/基础架构方案_五人并行开发.md** | **主基线文档（v1.2.0，28项决策），所有参考文档权重低于此文件** |
 
 > **文档优先级**：基础架构方案_五人并行开发.md > 其他参考文档（共用基座方案、公共框架等）
@@ -700,5 +700,5 @@ chore: 构建
 
 ---
 
-**最后更新**：2026-10-17 14:05（M4 学生模块第一批 v6.8.0 落地 longtrying_stu 分支——新增 backend/app/schemas/student.py、services/student_service.py、api/v1/students.py，main.py 注册双 router；路由 63→72（student 9 paths/11 endpoints）；verify_all 23/23 + M4 静态 18/18 通过；第二批待开发：学生助手 Agent、学业 DDL 主动推送）  
+**最后更新**：2026-10-17 14:15（M4 一期收官 v6.8.1——第二批落地 POST /student/agent/chat 学生助手（限制预期注入：不承诺退费/不给出医疗级建议，AI 不可用降级）+ GET /student/reminders 提醒聚合（3 日内 DDL 拉取即推送写回 reminder_sent）；修复 _POSITIVE_KEYWORDS「开心」重复计分；路由 72→74（student 11 paths/13 endpoints）；verify_all 24/24 + 静态 19/19；M4 剩 DB 端到端待 MySQL 启动）  
 **维护人**：开发团队
