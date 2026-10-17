@@ -42,6 +42,10 @@ from app.schemas.employee import (
     GuideSectionOut,
     LateApplyCreate,
     LateReviewCreate,
+    ManagerUserCreate,
+    ManagerUserOut,
+    ManagerUserPermissionsUpdate,
+    ManagerUserStatusUpdate,
     OralReportCreate,
     OralReportOut,
     OrgMemberItem,
@@ -681,3 +685,80 @@ async def get_reminders(
 ):
     result = await service.get_reminders(current_user)
     return success_response(data=RemindersOut(**result))
+
+
+# ── 管理层端：经营看板（v6.7.0，Phase 1.3） ──────────────
+@router.get("/dashboard", summary="经营看板（全域客户+转化漏斗+审批/日报/投诉/心理预警聚合，MANAGER）")
+async def get_dashboard(
+    current_user: User = Depends(require_user_type("MANAGER")),
+    service: EmployeeService = Depends(_get_service),
+):
+    return success_response(data=await service.dashboard())
+
+
+# ── 管理层端：审批中心（v6.7.0，Phase 1.3） ──────────────
+@router.get("/approvals-center", summary="审批中心聚合视图（全量审批单+待审统计，MANAGER）")
+async def approvals_center(
+    biz_type: str | None = Query(None, description="业务类型筛选（leave/convert/late_report/complaint）"),
+    status: str | None = Query(None, description="状态筛选（pending/approved/rejected）"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    current_user: User = Depends(require_user_type("MANAGER")),
+    service: EmployeeService = Depends(_get_service),
+):
+    return success_response(data=await service.approvals_center(biz_type, status, page, page_size))
+
+
+# ── 管理层端：用户管理+权限配置（v6.7.0，Phase 1.3） ─────
+@router.get("/users", summary="用户列表（EMPLOYEE/MANAGER，含 permissions，MANAGER）")
+async def list_users(
+    user_type: str | None = Query(None, description="用户类型筛选（EMPLOYEE/MANAGER）"),
+    status: str | None = Query(None, description="状态筛选（正常/禁用）"),
+    keyword: str | None = Query(None, description="用户名/姓名模糊搜索"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    current_user: User = Depends(require_user_type("MANAGER")),
+    service: EmployeeService = Depends(_get_service),
+):
+    users, total = await service.list_users(user_type, status, keyword, page, page_size)
+    return success_response(data={
+        "items": [ManagerUserOut.model_validate(u) for u in users],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+    })
+
+
+@router.post("/users", summary="创建员工/管理层账号（MANAGER）")
+async def create_user(
+    data: ManagerUserCreate,
+    current_user: User = Depends(require_user_type("MANAGER")),
+    service: EmployeeService = Depends(_get_service),
+):
+    user = await service.create_user(data.model_dump(exclude_unset=True))
+    return success_response(data=ManagerUserOut.model_validate(user), message="账号已创建")
+
+
+@router.patch("/users/{user_id}/status", summary="启用/禁用账号（MANAGER，写操作日志）")
+async def update_user_status(
+    user_id: int,
+    data: ManagerUserStatusUpdate,
+    current_user: User = Depends(require_user_type("MANAGER")),
+    service: EmployeeService = Depends(_get_service),
+):
+    user = await service.update_user_status(current_user.id, user_id, data.status)
+    return success_response(
+        data=ManagerUserOut.model_validate(user),
+        message="账号已启用" if data.status == "正常" else "账号已禁用",
+    )
+
+
+@router.put("/users/{user_id}/permissions", summary="权限配置（覆盖式写入 permissions JSON，MANAGER）")
+async def update_user_permissions(
+    user_id: int,
+    data: ManagerUserPermissionsUpdate,
+    current_user: User = Depends(require_user_type("MANAGER")),
+    service: EmployeeService = Depends(_get_service),
+):
+    user = await service.update_user_permissions(current_user.id, user_id, data.permissions)
+    return success_response(data=ManagerUserOut.model_validate(user), message="权限已更新")

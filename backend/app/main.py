@@ -4,19 +4,29 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api.v1 import approvals, auth, customers, employees, files, notifications, operation_logs, users
+from app.api.v1 import (
+    approvals,
+    auth,
+    customers,
+    employees,
+    files,
+    notifications,
+    operation_logs,
+    reports,
+    users,
+)
 from app.config import settings
 from app.core.exceptions import BusinessError
 from app.core.middleware import RequestLogMiddleware
 from app.core.response import error_response
 from app.database import engine
 from app.models import Base
-from app.services.event_bus import event_bus
-from app.services.event_contracts import EventType
 from app.services.employee_event_handlers import (
     handle_customer_registered,
     handle_psych_alert_created,
 )
+from app.services.event_bus import event_bus
+from app.services.event_contracts import EventType
 from app.utils.logger import logger
 
 
@@ -93,6 +103,7 @@ app.include_router(notifications.router, prefix=settings.API_V1_PREFIX)
 app.include_router(files.router, prefix=settings.API_V1_PREFIX)
 app.include_router(employees.router, prefix=settings.API_V1_PREFIX)
 app.include_router(operation_logs.router, prefix=settings.API_V1_PREFIX)
+app.include_router(reports.router, prefix=settings.API_V1_PREFIX)
 
 
 @app.get("/health")
