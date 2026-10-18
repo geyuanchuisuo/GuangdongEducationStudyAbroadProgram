@@ -1,7 +1,7 @@
 # 留学生智能管家 Agent 应用配置（v6.11.4 导出骨架）
 # 导入说明：
 #   1. Dify 控制台「创建应用 → 导入 DSL」选此文件
-#   2. 导入后需在「模型供应商」绑定 mimo-v2.6-flash（OpenAI-API-compatible，地址 https://api.xiaomimimo.com/v1），并在本应用模型设置里选它
+#   2. 导入后需在「模型供应商」绑定 OpenAI-API-compatible 模型（地址与模型名以 dify/docker/.env 客户配置为准），并在本应用模型设置里选它
 #   3. 建议挂载知识库《留学生生活FAQ》《学业考务指南》
 #   4. 后端会通过 inputs.restrictions 注入硬性限制（不承诺退费、不给医疗级建议），见 backend/app/services/student_service.py STUDENT_CAPABILITIES
 app:
@@ -13,7 +13,7 @@ app:
   use_icon_as_answer_icon: true
 model:
   provider: openai-api-compatible
-  name: mimo-v2.6-flash
+  name: your-model-name
   mode: chat
   completion_params:
     temperature: 0.8

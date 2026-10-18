@@ -20,9 +20,10 @@ class Settings(BaseSettings):
     DIFY_CUSTOMER_AGENT_KEY: str = ""
     DIFY_REPORT_AGENT_KEY: str = ""
     # 直连模型降级（Dify Agent 不可用时用，留空则跳过直连降级走本地话术）
+    # 模型为 OpenAI-API-compatible 通用配置：key/url/模型名均由客户自定义，默认全空，不绑定任何特定模型
     DIFY_MODEL_API_KEY: str = ""
-    DIFY_MODEL_BASE_URL: str = "https://api.xiaomimimo.com/v1"
-    DIFY_MODEL_NAME: str = "mimo-v2.6-flash"
+    DIFY_MODEL_BASE_URL: str = ""
+    DIFY_MODEL_NAME: str = ""
 
     # M5 智能报告数据来源开关（M5-02.3）：mock=模拟数据（默认）；production=真实业务表取数
     REPORT_DATA_SOURCE: str = "mock"
