@@ -3,6 +3,8 @@
 
 # Dify 运行时数据卷（不入库，首次启动自动生成）
 dify/docker/volumes/
+# Dify init 生成的 app key（含敏感信息，不入库）
+dify/docker/app_keys.txt
 
 # Python
 __pycache__/

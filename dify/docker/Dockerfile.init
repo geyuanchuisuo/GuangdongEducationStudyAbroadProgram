@@ -1,0 +1,12 @@
+# Dify 初始化容器镜像（轻量）
+FROM python:3.11-slim
+
+RUN pip install --no-cache-dir httpx pyyaml
+
+WORKDIR /app
+COPY dify_init.py /app/dify_init.py
+
+# 应用 DSL 挂载目录（由 docker-compose 挂载 dify/apps）
+ENV DIFY_APPS_DIR=/apps
+
+ENTRYPOINT ["python", "/app/dify_init.py"]

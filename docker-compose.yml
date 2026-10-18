@@ -1,5 +1,6 @@
 # 一体化部署：项目核心服务 + Dify（AI 平台）
-# Dify 配置见 dify/docker/.env，模型 API Key 需在 Dify 控制台手动配置
+# Dify 配置见 dify/docker/.env，模型 API Key / 管理员凭据在该文件配置
+# 启动后 dify-init 自动完成：创建管理员 → 添加模型供应商 → 导入应用 → 绑定模型 → 输出 app key
 include:
   - path: dify/docker/docker-compose.yaml
 
@@ -56,6 +57,9 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      # 长期挂载场景：Dify 初始化必须成功，backend 才启动
+      dify-init:
+        condition: service_completed_successfully
     volumes:
       - ./backend:/app
       # 独立命名卷保护镜像内构建好的 Linux venv，避免被宿主机 Windows venv 遮蔽
@@ -63,6 +67,29 @@ services:
       # 本地上传文件持久化（容器重建不丢）
       - backend_storage:/app/storage_data
     command: /app/.venv/bin/uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+
+  # Dify 一键初始化：创建管理员 → 配模型供应商 → 导入应用 → 绑模型 → 输出 app key
+  # 长期挂载场景：必须成功，否则 backend 不启动
+  dify-init:
+    build:
+      context: ./dify/docker
+      dockerfile: Dockerfile.init
+    container_name: edu-dify-init
+    # 从 dify/docker/.env 加载模型/管理员配置（客户只需改这一个文件）
+    env_file:
+      - ./dify/docker/.env
+    environment:
+      # dify-init 专用变量（不依赖客户配置）
+      DIFY_API_URL: http://api:5001
+      DIFY_APPS_DIR: /apps
+      DIFY_APP_KEYS_FILE: /output/app_keys.txt
+    volumes:
+      - ./dify/apps:/apps:ro
+      - ./dify/docker:/output
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: "no"
 
   nginx:
     image: nginx:alpine
