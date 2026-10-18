@@ -523,9 +523,9 @@ Dify（1.16.0-rc1）已作为子 compose 纳入项目，随 `docker compose up -
 | 步骤 | 操作 | 说明 |
 |------|------|------|
 | ① 填写模型配置 | 编辑 `dify/docker/.env`，填入 `DIFY_MODEL_API_KEY` / `DIFY_MODEL_BASE_URL` / `DIFY_MODEL_NAME`（三项必填，默认留空） | OpenAI-API-compatible 通用协议，key/url/模型名由客户自定义，**不绑定任何特定模型**；API Key 勿入库 |
-| ② 启动全部服务 | `docker compose up -d` | dify-init 自动：创建管理员→配模型供应商→导入 5 个 yml→绑定模型→输出 app key |
+| ② 启动全部服务 | `docker compose up -d` | dify-init 自动（v6.11.14）：创建管理员→装模型插件→配供应商→注册自定义模型→导入 5 个 yml（占位符注入）→绑定模型→发布工作流→输出 app key |
 | ③ 查看 init 日志 | `docker compose logs -f dify-init` | 成功标志：`🎉 Dify 初始化全部完成` |
-| ④ 回填 app key | 打开 `dify/docker/app_keys.txt`，复制三个业务 Agent key 到 `backend/.env` | `DIFY_CUSTOMER_AGENT_KEY` / `DIFY_EMPLOYEE_AGENT_KEY` / `DIFY_STUDENT_AGENT_KEY` |
+| ④ 回填 app key | 打开 `dify/docker/app_keys.txt`，复制 4 个应用 key 到 `backend/.env` | `DIFY_CUSTOMER_AGENT_KEY` / `DIFY_EMPLOYEE_AGENT_KEY` / `DIFY_STUDENT_AGENT_KEY` / `DIFY_REPORT_AGENT_KEY`（留档版不回填） |
 | ⑤ 重启 backend | `docker compose restart backend` | 使 app key 生效 |
 | ⑥ 验证 AI | 调用任一 AI 端点，确认返回 `source: "dify"` | 如返回 `fallback` 则检查 app key 是否回填正确 |
 
