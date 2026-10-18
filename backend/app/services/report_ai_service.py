@@ -1,17 +1,8 @@
-"""M5 智能报告模块 — 阶段 5：报告专用 AI 分析入口（v6.11.0 口径）
+"""M5 智能报告模块 — 报告 AI 分析入口（v6.11.10 决策）
 
-需求确认（2026-10-18）§2.7 明确：
-1. 一期必须接入**报告专用** AI，且必须经公共 AI 网关调用，不得直连 Dify、
-   不得复用客服/学生/员工 Agent；
-2. 没有专用配置时视为交付阻塞/不可用，**不得把 mock 文本标成真实 AI**；
-3. AI 只做文字归纳（摘要/趋势/分析/建议），数字一律由程序计算；
-4. schema 校验、超时/错误处理；失败时确定性指标仍保留。
+v6.11.9 经用户确认，M0 不登记 `AgentType.REPORT` / `DIFY_REPORT_AGENT_KEY`；报告调用保留动态 session ID。若后续重新接入 REPORT，动态 session 可能被 Dify 当作 conversation_id 并拒绝；当前按现有降级路径处理。
 
-实现：
-- 优先调用公共网关的报告 Agent（`AgentType.REPORT`，由 M0 在 ai_service.py 登记，
-  配置项 `DIFY_REPORT_AGENT_KEY`）——**M0 当前尚未登记该 Agent，属上游阻塞项**，
-  未登记时 AI 直接标「不可用」，不回落模型网关、不伪造；
-- 仅当 `REPORT_DATA_SOURCE=mock`（演示/测试环境）才允许本地模拟文本，并标 `ai_source=mock`。
+AI 只做文字归纳（摘要/趋势/分析/建议），数字由程序计算；schema 校验、超时/错误处理失败时保留确定性指标。模拟文本仅在 `REPORT_DATA_SOURCE=mock` 下使用并标记 `ai_source=mock`。
 """
 import json
 import logging
@@ -191,9 +182,9 @@ def _parse_json(text: str) -> dict | None:
 
 
 class ReportAIService:
-    """报告 AI 分析入口（报告专用 Agent，经公共 AI 网关）。
+    """报告 AI 分析入口（经公共 AI 网关；当前未登记专用 REPORT Agent）。
 
-    `source`：`dify`=报告专用 Agent 成功 / `mock`=演示环境模拟 / `unavailable`=不可用。
+    `source`：`dify`=专用 Agent 调用成功 / `mock`=演示环境模拟 / `unavailable`=不可用。
     """
 
     def __init__(self) -> None:
@@ -214,19 +205,16 @@ class ReportAIService:
     async def analyze(
         self, report_type: str, metrics: dict, context: dict | None = None
     ) -> dict | None:
-        # 1) 报告专用 Agent（经公共网关）；M0 未登记 REPORT 时直接判不可用
+        # M0 未登记 REPORT 时跳过专用 Dify 调用，继续走已有降级路径。
         try:
             from app.services.ai_service import AgentType, ai_service
 
             agent = getattr(AgentType, "REPORT", None)
             if agent is not None:
-                # v6.11.3：报告分析是单轮无状态调用，session 必须传 "new"。
-                # 曾传 f"report-{type}-{ts}" 被网关当作 conversation_id 发给 Dify，
-                # Dify 校验 conversation_id 必须是 UUID → 400 invalid_param。
                 resp = await ai_service.chat(
                     agent,
                     self._build_prompt(report_type, metrics, context),
-                    "new",
+                    f"report-{report_type}-{int(datetime.now().timestamp())}",
                     user_id="report",
                 )
                 analysis = _parse_json(getattr(resp, "content", ""))

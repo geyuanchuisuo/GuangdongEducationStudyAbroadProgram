@@ -23,8 +23,6 @@ class AgentType(str, Enum):
     CUSTOMER = "CUSTOMER"
     EMPLOYEE = "EMPLOYEE"
     STUDENT = "STUDENT"
-    # v6.11.3：M5 智能报告的专用 Agent（不与其他业务 Agent 混用）
-    REPORT = "REPORT"
 
 
 class AIResponse:
@@ -39,8 +37,6 @@ _AGENT_KEY_MAP: dict[AgentType, str] = {
     AgentType.CUSTOMER: settings.DIFY_CUSTOMER_AGENT_KEY,
     AgentType.EMPLOYEE: settings.DIFY_EMPLOYEE_AGENT_KEY,
     AgentType.STUDENT: settings.DIFY_STUDENT_AGENT_KEY,
-    # v6.11.3：M5 报告专用 Agent（.env 里 DIFY_REPORT_AGENT_KEY，不入库）
-    AgentType.REPORT: settings.DIFY_REPORT_AGENT_KEY,
 }
 
 _TIMEOUT = 60.0

@@ -1,7 +1,7 @@
 # 留学生智能管家 Agent 应用配置（v6.11.4 导出骨架）
 # 导入说明：
 #   1. Dify 控制台「创建应用 → 导入 DSL」选此文件
-#   2. Dify 一键初始化默认绑定 Agnes（OpenAI-API-compatible，配置由 dify/docker/.env 提供）
+#   2. Dify 一键初始化默认绑定 Mimo（OpenAI-API-compatible，配置由 dify/docker/.env 提供）
 #   3. 建议挂载知识库《留学生生活FAQ》《学业考务指南》
 #   4. 后端会通过 inputs.restrictions 注入硬性限制（不承诺退费、不给医疗级建议），见 backend/app/services/student_service.py STUDENT_CAPABILITIES
 app:
@@ -13,7 +13,7 @@ app:
   use_icon_as_answer_icon: true
 model:
   provider: openai-api-compatible
-  name: agnes-2.5-flash
+  name: mimo-v2.6-flash
   mode: chat
   completion_params:
     temperature: 0.8

@@ -29,8 +29,8 @@ DIFY_API_URL = os.environ.get("DIFY_API_URL", "http://api:5001")
 DIFY_ADMIN_EMAIL = os.environ.get("DIFY_ADMIN_EMAIL", "admin@example.com")
 DIFY_ADMIN_PASSWORD = os.environ.get("DIFY_ADMIN_PASSWORD", "")
 DIFY_MODEL_API_KEY = os.environ.get("DIFY_MODEL_API_KEY", "")
-DIFY_MODEL_BASE_URL = os.environ.get("DIFY_MODEL_BASE_URL", "https://apihub.agnes-ai.com/v1")
-DIFY_MODEL_NAME = os.environ.get("DIFY_MODEL_NAME", "agnes-2.5-flash")
+DIFY_MODEL_BASE_URL = os.environ.get("DIFY_MODEL_BASE_URL", "https://api.xiaomimimo.com/v1")
+DIFY_MODEL_NAME = os.environ.get("DIFY_MODEL_NAME", "mimo-v2.6-flash")
 AUTO_IMPORT = os.environ.get("DIFY_INIT_AUTO_IMPORT", "true").lower() == "true"
 AUTO_BIND = os.environ.get("DIFY_INIT_AUTO_BIND_MODEL", "true").lower() == "true"
 APPS_DIR = os.environ.get("DIFY_APPS_DIR", "/apps")
@@ -45,7 +45,6 @@ APP_KEY_ENV_NAMES = {
     ("粤教客服Agent", "advanced-chat"): "DIFY_CUSTOMER_AGENT_KEY",
     ("企业员工助手", "agent-chat"): "DIFY_EMPLOYEE_AGENT_KEY",
     ("留学生智能管家", "agent-chat"): "DIFY_STUDENT_AGENT_KEY",
-    ("智能报告", "advanced-chat"): "DIFY_REPORT_AGENT_KEY",
 }
 
 
@@ -183,49 +182,38 @@ def _app_identity(dsl: dict) -> tuple[str, str]:
     return name, mode
 
 
-def _find_existing_app(apps: dict[tuple[str, str], str], identity: tuple[str, str]) -> str | None:
-    """按名称和模式匹配；旧版 Dify 列表缺少 mode 时按同名应用兜底去重。"""
-    name, mode = identity
-    for (existing_name, existing_mode), app_id in apps.items():
-        if existing_name == name and (existing_mode == mode or not existing_mode):
-            return app_id
-    return None
+def _find_existing_app(apps: dict[str, str], name: str) -> str | None:
+    """按共用应用名称去重，同名应用只保留一个实例。"""
+    return apps.get(name)
 
 
-def list_existing_apps(client: httpx.Client, token: str) -> dict[tuple[str, str], str]:
-    """返回 {(app_name, mode): app_id}，避免同名不同模式互相覆盖。"""
+def list_existing_apps(client: httpx.Client, token: str) -> dict[str, str]:
+    """返回 {app_name: app_id}。"""
     headers = {"Authorization": f"Bearer {token}"}
     r = client.get(f"{DIFY_API_URL}/api/apps?page=1&limit=100", headers=headers, timeout=30)
     if r.status_code != 200:
         fail(f"查询应用列表失败: {r.status_code} {r.text[:300]}")
     apps = r.json().get("data", []) or []
-    return {
-        (str(a["name"]).strip(), str(a.get("mode") or "").strip()): a["id"]
-        for a in apps
-        if a.get("name") and a.get("id")
-    }
+    return {str(a["name"]).strip(): a["id"] for a in apps if a.get("name") and a.get("id")}
 
 
-def import_apps(client: httpx.Client, token: str) -> dict[tuple[str, str], str]:
-    """导入在用 DSL；按 DSL 名称和模式去重，跳过留档应用。"""
+def import_apps(client: httpx.Client, token: str) -> dict[str, str]:
+    """导入在用 DSL；按 DSL 应用名去重，跳过留档应用。"""
     headers = {"Authorization": f"Bearer {token}"}
     all_existing = list_existing_apps(client, token)
     yml_files = sorted(glob.glob(str(Path(APPS_DIR) / "*.yml")))
-    managed_identities = set()
+    managed_names = set()
     for yml_path in yml_files:
         path = Path(yml_path)
         if path.name in ARCHIVED_APP_FILES:
             continue
         try:
             dsl = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-            managed_identities.add(_app_identity(dsl))
+            managed_names.add(_app_identity(dsl)[0])
         except (yaml.YAMLError, ValueError):
             continue
-    managed_names = {name for name, _ in managed_identities}
     existing = {
-        identity: app_id
-        for identity, app_id in all_existing.items()
-        if identity in managed_identities or (not identity[1] and identity[0] in managed_names)
+        name: app_id for name, app_id in all_existing.items() if name in managed_names
     }
     log(f"Dify 现有应用: {list(existing.keys())}")
     if not yml_files:
@@ -248,9 +236,9 @@ def import_apps(client: httpx.Client, token: str) -> dict[tuple[str, str], str]:
             continue
 
         name, mode = identity
-        existing_id = _find_existing_app(existing, identity)
+        existing_id = _find_existing_app(existing, name)
         if existing_id:
-            log(f"  跳过已存在应用: {name} ({mode})")
+            log(f"  跳过已存在应用: {name}")
             continue
         log(f"  导入应用: {name} ({mode}) ...")
 
@@ -262,7 +250,7 @@ def import_apps(client: httpx.Client, token: str) -> dict[tuple[str, str], str]:
         )
         if r.status_code in (200, 201):
             app_id = r.json().get("id")
-            existing[identity] = app_id
+            existing[name] = app_id
             log(f"  ✅ {name} 导入成功 (id={app_id})")
         else:
             log(f"  ⚠️  {name} 导入返回 {r.status_code}: {r.text[:200]}，尝试继续")
@@ -273,8 +261,7 @@ def import_apps(client: httpx.Client, token: str) -> dict[tuple[str, str], str]:
 # ── 步骤 5：绑定模型 ──────────────────────────────────────
 def bind_model_to_apps(client: httpx.Client, token: str, apps: dict) -> None:
     headers = {"Authorization": f"Bearer {token}"}
-    for identity, app_id in apps.items():
-        name, mode = identity
+    for name, app_id in apps.items():
         log(f"  绑定模型到 {name} ...")
         # 先获取当前 model-config 结构
         r = client.get(f"{DIFY_API_URL}/api/apps/{app_id}/model-config", headers=headers, timeout=30)
@@ -306,8 +293,7 @@ def export_app_keys(client: httpx.Client, token: str, apps: dict) -> None:
         "# 由 backend 容器启动时自动加载；不要提交或公开此文件。",
         "",
     ]
-    for identity, app_id in apps.items():
-        name, mode = identity
+    for name, app_id in apps.items():
         r = client.get(f"{DIFY_API_URL}/api/apps/{app_id}/api-keys", headers=headers, timeout=30)
         key = ""
         if r.status_code == 200:
@@ -324,8 +310,9 @@ def export_app_keys(client: httpx.Client, token: str, apps: dict) -> None:
             )
             if r.status_code in (200, 201):
                 key = r.json().get("token", "")
-        env_name = APP_KEY_ENV_NAMES.get(identity, f"DIFY_APP_KEY_{mode.upper().replace('-', '_')}")
-        lines.append(f"{env_name}={key}")
+        env_name = APP_KEY_ENV_NAMES.get((name, "agent-chat")) or APP_KEY_ENV_NAMES.get((name, "advanced-chat"))
+        if env_name:
+            lines.append(f"{env_name}={key}")
 
     output = "\n".join(lines) + "\n"
     Path(APP_KEYS_FILE).parent.mkdir(parents=True, exist_ok=True)

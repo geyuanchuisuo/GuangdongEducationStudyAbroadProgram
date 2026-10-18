@@ -18,11 +18,9 @@ class Settings(BaseSettings):
     DIFY_STUDENT_AGENT_KEY: str = ""
     DIFY_EMPLOYEE_AGENT_KEY: str = ""
     DIFY_CUSTOMER_AGENT_KEY: str = ""
-    # v6.11.3：M5 报告专用 Agent（未配置时报告 AI 显式标不可用，不回落其他 Agent）
-    DIFY_REPORT_AGENT_KEY: str = ""
     DIFY_MODEL_API_KEY: str = ""
-    DIFY_MODEL_BASE_URL: str = "https://apihub.agnes-ai.com/v1"
-    DIFY_MODEL_NAME: str = "agnes-2.5-flash"
+    DIFY_MODEL_BASE_URL: str = "https://api.xiaomimimo.com/v1"
+    DIFY_MODEL_NAME: str = "mimo-v2.6-flash"
 
     # M5 智能报告数据来源开关（M5-02.3）：mock=模拟数据（默认）；production=真实业务表取数
     REPORT_DATA_SOURCE: str = "mock"

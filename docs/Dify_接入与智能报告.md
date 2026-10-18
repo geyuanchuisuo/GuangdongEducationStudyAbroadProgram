@@ -1,5 +1,9 @@
 # Dify 接入说明与资产清单（v6.11.2，2026-10-18）
 
+> ⚠️ **现状更新（v6.11.6~8，2026-10-18/19）**：本文档描述的 **VM 实例（192.168.184.128:80）为旧时代配置，已废弃**。Dify 现已一体化打包进项目 docker-compose（`dify/docker/`，服务名 `dify_nginx`，控制台/Service API 端口 **8081**），`DIFY_BASE_URL`：本机 `http://localhost:8081` / 容器内 `http://dify_nginx`；模型 key/url/模型名客户在 `dify/docker/.env` 自定义，dify-init 自动配置。**现行配置与调用规则见 [Dify部署与调用指南.md](./Dify部署与调用指南.md)**。下文保留为 VM 时代接入记录（资产 id/导出 DSL 流程仍可参考）。
+
+> **现行决策（v6.11.9）**：默认模型为 Mimo；按用户确认 M0 不登记 `AgentType.REPORT` / `DIFY_REPORT_AGENT_KEY`，M5 报告恢复动态 session ID，报告 AI 通过现有降级路径处理。以下 VM 实测与 REPORT 接入内容仅作历史记录。
+
 > 范围：**只接「智能报告」**。M2 客服 / M3 员工 / M4 学生 的 Agent 按用户要求保持原状（`.env` 里仍是占位 key），本次不动。
 
 ---

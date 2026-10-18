@@ -8,7 +8,7 @@
 
 v6.11.0 关键行为：
 - 下钻在生成时固化快照（§2.2），旧报告的详情/下钻/PDF 不再查实时库；
-- AI 走报告专用 Agent（经公共网关），未配置即不可用，不回落 mock（§2.7）。
+- AI 优先走报告专用 Agent（经公共网关）；当前 M0 未登记 REPORT，按 v6.11.10 决策走已有降级路径。
 """
 import logging
 from datetime import datetime, timedelta

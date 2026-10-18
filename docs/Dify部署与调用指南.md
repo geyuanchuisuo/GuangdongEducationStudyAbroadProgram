@@ -1,6 +1,6 @@
 # Dify 部署与调用指南
 
-> v6.11.9 起，Dify 已一体化打包进项目 docker-compose，并提供 **dify-init 一键初始化服务**。先复制 `dify/docker/.env.example` 为本地 `.env`，设置模型 API Key、管理员密码及 Dify 内部服务强密钥，再启动服务；本地 `.env` 不入库。
+> v6.11.10 起，Dify 已一体化打包进项目 docker-compose，并提供 **dify-init 一键初始化服务**。先复制 `dify/docker/.env.example` 为本地 `.env`，设置模型 API Key、管理员密码及 Dify 内部服务强密钥，再启动服务；本地 `.env` 不入库。
 
 ---
 
@@ -33,11 +33,11 @@ Dify 1.16.0-rc1 官方 compose 已纳入项目 `dify/docker/` 目录，随主 `d
     ↓
 添加 OpenAI-API-compatible 模型供应商（用客户填的 Key/URL/模型名）
     ↓
-导入 dify/apps/ 下 4 个在用应用 yml（跳过留档 DSL，按应用名称和模式去重）
+按 DSL 内应用名导入并去重在用应用（跳过留档 DSL）
     ↓
 为所有应用绑定模型
     ↓
-将 4 个 app key 写入受限 Docker 命名卷；backend 启动时自动读取，无需手动回填
+将 3 个业务 Agent key 写入受限 Docker 命名卷；backend 启动时自动读取，无需手动回填
 ```
 
 **硬性约束**：backend 依赖 `dify-init: service_completed_successfully`，即 init 失败则 backend 不启动（长期挂载场景，配置必须完整）。
@@ -119,8 +119,8 @@ docker compose up -d
 ```bash
 # ── 模型供应商（OpenAI-API-compatible）──
 DIFY_MODEL_API_KEY=                  # ⚠️ 必填，你的模型 API Key
-DIFY_MODEL_BASE_URL=https://apihub.agnes-ai.com/v1
-DIFY_MODEL_NAME=agnes-2.5-flash
+DIFY_MODEL_BASE_URL=https://api.xiaomimimo.com/v1
+DIFY_MODEL_NAME=mimo-v2.6-flash
 
 # ── Dify 管理员（dify-init 首次自动创建；已存在则用此账号登录）──
 DIFY_ADMIN_EMAIL=admin@example.com
@@ -145,8 +145,8 @@ DIFY_INIT_AUTO_BIND_MODEL=true       # 自动为所有应用绑定模型
 | 变量 | 必填 | 默认值 | 说明 |
 |------|------|--------|------|
 | `DIFY_MODEL_API_KEY` | ✅ | 空 | 模型 API Key（个人凭据，勿入库）。留空则 init 失败 |
-| `DIFY_MODEL_BASE_URL` | ✅ | Agnes 地址 | OpenAI-compatible 接口地址，可按需更换 |
-| `DIFY_MODEL_NAME` | ✅ | `agnes-2.5-flash` | 模型名称（需在供应商模型列表中存在） |
+| `DIFY_MODEL_BASE_URL` | ✅ | Mimo 地址 | OpenAI-compatible 接口地址，可按需更换 |
+| `DIFY_MODEL_NAME` | ✅ | `mimo-v2.6-flash` | 模型名称（需在供应商模型列表中存在） |
 | `DIFY_ADMIN_EMAIL` | ✅ | `admin@example.com` | Dify 管理员邮箱 |
 | `DIFY_ADMIN_PASSWORD` | ✅ | 无 | 本地 Dify 管理员强密码 |
 | `DIFY_INIT_AUTO_IMPORT` | 可选 | `true` | 是否自动导入 `dify/apps/*.yml` |
@@ -165,9 +165,8 @@ DIFY_INIT_AUTO_BIND_MODEL=true       # 自动为所有应用绑定模型
 | `DIFY_EMPLOYEE_AGENT_KEY` | 自动注入 | 空 | 企业员工助手 Agent 的 app key，由 `dify-init` 自动加载 |
 | `DIFY_CUSTOMER_AGENT_KEY` | 自动注入 | 空 | 粤教客服 Agent 的 app key，由 `dify-init` 自动加载 |
 | `DIFY_MODEL_API_KEY` | 可选 | 空 | 直连模型降级用的 API Key。留空则跳过直连降级，走本地话术 |
-| `DIFY_REPORT_AGENT_KEY` | 自动注入 | 空 | 智能报告专用 Agent 的 app key，由 `dify-init` 自动加载 |
-| `DIFY_MODEL_BASE_URL` | 可选 | `https://apihub.agnes-ai.com/v1` | 直连模型地址 |
-| `DIFY_MODEL_NAME` | 可选 | `agnes-2.5-flash` | 直连模型名称 |
+| `DIFY_MODEL_BASE_URL` | 可选 | `https://api.xiaomimimo.com/v1` | 直连模型地址 |
+| `DIFY_MODEL_NAME` | 可选 | `mimo-v2.6-flash` | 直连模型名称 |
 
 > `DIFY_*_AGENT_KEY` 留空时，对应 Agent 端点无法调用 Dify 并触发降级；不影响其他非 AI 功能。
 
@@ -230,7 +229,6 @@ Dify Agent 网关（主路径）
 | `CUSTOMER` | `DIFY_CUSTOMER_AGENT_KEY` | 粤教客服 |
 | `EMPLOYEE` | `DIFY_EMPLOYEE_AGENT_KEY` | 企业员工助手 |
 | `STUDENT` | `DIFY_STUDENT_AGENT_KEY` | 留学生智能管家 |
-| `REPORT` | `DIFY_REPORT_AGENT_KEY` | 智能报告 |
 
 ### 4.2 机制二：直连模型降级
 
@@ -299,7 +297,7 @@ DIFY_ADMIN_PASSWORD=your-local-strong-password
 docker compose up -d
 ```
 
-dify-init 容器会自动完成：创建管理员 → 配模型供应商 → 导入 4 个在用应用 → 绑定模型 → 将 app key 写入共享卷供 backend 自动加载。智能报告 `agent-chat` DSL 是留档文件，不会导入。
+dify-init 容器会自动完成：创建管理员 → 配模型供应商 → 按 DSL 应用名导入并去重、跳过留档 `agent-chat` DSL → 绑定模型 → 将 3 个业务 Agent key 写入权限为 `0600` 的共享卷供 backend 自动加载。
 
 查看 init 进度：
 ```bash
@@ -310,7 +308,7 @@ docker compose logs -f dify-init
 
 ### 步骤 3：验证
 
-`dify-init` 将 4 个 app key 写入权限为 `0600` 的 Docker 命名卷，backend 等待 init 成功后，在启动时自动加载这些 key。调用 AI 端点，确认返回 `source: "dify"` 而非 `fallback`：
+`dify-init` 将 3 个业务 Agent key 写入权限为 `0600` 的 Docker 命名卷，backend 等待 init 成功后，在启动时自动加载这些 key。调用 AI 端点，确认返回 `source: "dify"` 而非 `fallback`：
 
 ```bash
 # 客服
