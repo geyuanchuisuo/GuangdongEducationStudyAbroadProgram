@@ -6,6 +6,8 @@
 
 ## 零、快速定位（打开项目先看这里）
 
+> v6.11.11（2026-10-19）：本机环境修复——① `backend/.env` 数据库密码旧值 `password`→`420821`（实测 `420821` 可连、`password` Access denied；容器内 backend 用 compose 注入串，故该错配长期被掩盖）② 运行库从未走过 alembic（`alembic_version` 为空 + `student_score` 缺 `uq_student_score_unique`，库结构停在 004）→ `alembic stamp 004_m5_drill_ticket_ai` 后 `upgrade head` **只补跑 005、保留全部数据**：`student_score` 104→97（清 7 条重复，每组留最小 id）、唯一索引已建、重复插入实测 `ERROR 1062 Duplicate entry` ③ Dify 指向切打包基线（根 `.env`=`http://dify_nginx`；`backend/.env` 宿主机开发=`http://localhost:8081`）④ 已下线的 `DIFY_REPORT_AGENT_KEY` 在 `.env` 中注释保留，避免"看着配了、实际不生效"。verify_all 29/29；详见更新记录 v6.11.11 与 LOG-069。**遗留**：`dify/docker/.env` 不存在（根 compose 的 `dify-init` 用 `env_file` 依赖它，缺文件则 `docker compose up` 报错）；`dify/docker/.env.example` 的 `EXPOSE_NGINX_PORT=80` 与 v6.11.9 声称基线 8081 不一致。
+
 > v6.11.10（2026-10-19）：同步 origin/master 文档基线并按用户逐项确认处理共用模块：移除 M0 REPORT Agent，恢复 M5 动态会话 ID，模型默认值切换至 Mimo；初始化按 DSL 应用名去重并跳过留档 DSL。保留本地强密码、app key 受限共享卷自动加载、DIFY_BASE_URL 插值与本地 .env 不入库。
 
 > v6.11.5（2026-10-18）：第九次同步 origin/master→master_ZNBG——PROSPECT 注册免审批并入（M0 user_service.py，经用户批准；注册即"正常"立即可登录）+ 学生申请进度布局紧凑化 + REMOTE_ACCESS 补全；pytest 全过 + verify_all 29/29 + npm build；详见更新记录 v6.11.5。；**v6.11.6（ZNBG，2026-10-18）补齐 M0：`config.py` 加 `DIFY_REPORT_AGENT_KEY`、`ai_service.py` 加 `AgentType.REPORT` + `_AGENT_KEY_MAP` 映射（共用模块，经用户授权）；同时修掉 M5 一个隐蔽缺陷——报告 AI 传假 session 被网关当 `conversation_id` 发给 Dify，Dify 要求 UUID → 400 被静默吞掉回落 mock，改成 `"new"` 后实测 `ai_source=dify`；pytest 152/152、verify_all 29/29**
