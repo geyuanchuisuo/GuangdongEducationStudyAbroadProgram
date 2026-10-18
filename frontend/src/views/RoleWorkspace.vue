@@ -18,9 +18,11 @@ import SectionTitle from '../components/SectionTitle.vue'
 import { customers, events, notifications, projects, studentTodos } from '../data/mock'
 import { REPORT_TYPES, typeName } from '../config/reports'
 import { platformApi } from '../api/platform'
+import { useUserStore } from '../stores/user'
 
 const route = useRoute()
 const router = useRouter()
+const userStore = useUserStore()
 const role = computed(() => String(route.params.role || 'PROSPECT').toUpperCase())
 const section = computed(() => String(route.params.section || 'home'))
 const keyword = ref('')
@@ -47,6 +49,22 @@ const scoreRows = ref([] as any[])
 const dailyReportRows = ref([] as any[])
 const activeReport = ref(null as any)
 const reportDialog = ref(false)
+
+// ── v6.11.19：PROSPECT 本人客户档案 + 转化申请状态 ──────────
+const myCustomer = ref<any>(null)
+const CUSTOMER_STATUS_CN: Record<string, string> = {
+  NEW: '新录入', FOLLOWING: '跟进中', STRONG: '意向强烈', SIGNED: '已签约', ENROLLED: '已入学', LOST: '已流失',
+}
+const CONVERT_STATUS_CN: Record<string, string> = {
+  none: '暂无留学申请', pending: '转化申请审批中', approved: '转化申请已通过', rejected: '转化申请未通过', cancelled: '转化申请已取消',
+}
+function customerStatusCN(status: string) { return CUSTOMER_STATUS_CN[status] || status || '—' }
+function convertStatusCN(status: string) { return CONVERT_STATUS_CN[status] || status || '暂无留学申请' }
+const isConverted = computed(() => myCustomer.value?.convert_status === 'approved')
+function reloginAsStudent() {
+  userStore.logout()
+  router.push('/login')
+}
 
 async function loadScoreRows() {
   try {
@@ -166,6 +184,13 @@ onMounted(async () => {
   if (role.value === "EMPLOYEE") {
     await loadScoreRows()
     await loadDailyReports()
+  }
+  if (role.value === 'PROSPECT') {
+    try {
+      myCustomer.value = await platformApi.myCustomer()
+    } catch {
+      myCustomer.value = null
+    }
   }
 })
 
@@ -734,7 +759,7 @@ function revealPhone() {
     </template>
 
     <template v-else-if="role === 'EMPLOYEE' && section === 'convert'">
-      <div class="two-column"><section class="surface panel"><SectionTitle title="代客申请留学生" desc="一次审批：员工申请，管理层审批。" /><el-form label-position="top"><el-form-item label="选择意向客户"><el-select v-model="convertForm.customerId" style="width:100%"><el-option v-for="item in customerRows" :key="item.id" :label="item.name + '（' + item.project + '）'" :value="item.id" /></el-select></el-form-item><el-form-item label="转化项目"><el-select v-model="convertForm.project" style="width:100%"><el-option v-for="item in projects.slice(0,3)" :key="item.id" :label="item.title" :value="item.title" /></el-select></el-form-item><el-form-item label="转化理由 / 备注"><el-input v-model="convertForm.title" type="textarea" :rows="4" /></el-form-item><el-button type="primary" @click="submitConvertApply">提交审批申请</el-button></el-form></section><section class="surface panel"><SectionTitle title="学生流程审批" /><div v-for="item in (approvalRows.length ? approvalRows : [{title:'张三 · 病假申请',status:'pending'},{title:'陈同学 · 成绩复核',status:'pending'},{title:'李同学 · 宿舍调换',status:'approved'}])" :key="item.id || item.title" class="ticket-row"><div><b>{{ item.title || item.t }}</b><small>学生端提交 · {{ item.created_at || '2026-10-15' }}</small></div><el-tag :type="item.status === 'approved' ? 'success' : 'warning'">{{ item.status || item.s }}</el-tag></div></section></div>
+      <div class="two-column"><section class="surface panel"><SectionTitle title="代客申请留学生" desc="一次审批：员工申请，管理层审批。" /><el-form label-position="top"><el-form-item label="选择意向客户"><el-select v-model="convertForm.customerId" style="width:100%"><el-option v-for="item in customerRows" :key="item.id" :label="item.name + '（' + item.project + '）'" :value="item.id" /></el-select></el-form-item><el-form-item label="转化项目"><el-select v-model="convertForm.project" style="width:100%"><el-option v-for="item in projects.slice(0,3)" :key="item.id" :label="item.title" :value="item.title" /></el-select></el-form-item><el-form-item label="转化理由 / 备注"><el-input v-model="convertForm.title" type="textarea" :rows="4" /></el-form-item><el-button type="primary" @click="submitConvertApply">提交审批申请</el-button></el-form></section><section class="surface panel"><SectionTitle title="学生流程审批" /><div v-for="item in approvalRows" :key="item.id || item.title" class="ticket-row"><div><b>{{ item.title || item.t }}</b><small>学生端提交 · {{ item.created_at }}</small></div><el-tag :type="item.status === 'approved' ? 'success' : 'warning'">{{ item.status || item.s }}</el-tag></div><el-empty v-if="!approvalRows.length" description="暂无待审批的学生流程" :image-size="60" /></section></div>
     </template>
 
 <template v-else-if="role === 'EMPLOYEE' && section === 'reports'">
@@ -1105,6 +1130,29 @@ function revealPhone() {
         <section class="surface panel"><el-input :prefix-icon="Search" placeholder="搜索部门或姓名" /><el-tree :data="[{label:'广东省教育服务有限公司',children:[{label:'新加坡事业部',children:[{label:'李四'},{label:'陈顾问'}]},{label:'德国事业部',children:[{label:'赵敏'}]}]}]" default-expand-all /></section>
         <section class="surface panel"><SectionTitle title="组织能力" /><div class="life-grid"><article v-for="item in ['部门职能查询','同事联系方式','团队成员筛选','组织变更记录']" :key="item" class="surface life-card"><h3>{{ item }}</h3><p>按部门、经理和员工维度查看组织数据。</p></article></div></section>
       </div>
+    </template>
+
+    <template v-else-if="role === 'PROSPECT' && section === 'home'">
+      <section class="welcome surface">
+        <div>
+          <span class="badge">PROSPECT · 访客</span>
+          <h2>{{ userStore.userInfo?.real_name || '同学' }}，欢迎回来</h2>
+          <p>了解课程项目、报名活动，或与顾问沟通你的留学规划。</p>
+        </div>
+      </section>
+
+      <section class="surface panel">
+        <SectionTitle title="我的留学申请" desc="展示你的客户状态与留学转化进度。" />
+        <el-alert v-if="isConverted" type="success" :closable="false" show-icon style="margin-bottom:16px">
+          <template #title>您已转为留学生，请重新登录进入学生端</template>
+          <el-button type="success" size="small" style="margin-top:8px" @click="reloginAsStudent">退出登录并重新登录</el-button>
+        </el-alert>
+        <template v-if="myCustomer">
+          <div class="task-row"><b>档</b><div><strong>客户状态</strong><small>{{ customerStatusCN(myCustomer.status) }}</small></div></div>
+          <div class="task-row"><b>申</b><div><strong>转化申请</strong><small>{{ convertStatusCN(myCustomer.convert_status) }}</small></div></div>
+        </template>
+        <el-empty v-else description="暂无客户档案信息" :image-size="60" />
+      </section>
     </template>
 
     <template v-else>

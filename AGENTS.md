@@ -9,6 +9,8 @@
 > v6.11.17（2026-10-19，ZNBG/M5）：**production 投诉域静默清零缺陷修复**——`report_data_source.py` 漏 import `ComplaintReportInput`（v6.11.0 引入），调用处 NameError 被 v6.9.6 逐行容错当脏行静默吞掉、报告仍 completed → production 任意含工单周期投诉指标恒 0（本库 105 行全跳过；mock 不受影响）；补 import + 防回退用例后实测 orders_total 0→9 / new_count 6 / analyzed_count 8；回归 compileall + pytest 158/158 + Docker E2E 81/81 + production 冒烟 7/7；详见更新记录 v6.11.17 与 LOG-074（ZNBG）。
 >
 > v6.11.18（2026-10-19，anhoa）：**第十五次同步 origin/master**——M0 公共模块 10 项变更（Dify 共享卷/迁移006/种子补齐/投诉域修复等）经用户批准并入，解 8 冲突；无 M1/M2 业务逻辑变更；回归 compileall + verify_all 29/29 + pytest 164/164 + 前端 build ✅；详见更新记录「merge 第十五次同步」与 LOG-069。
+>
+> v6.11.19（2026-10-19，anhoa）：**PROSPECT→STUDENT 身份转换前端闭环**——新增 `GET /customers/me`（本人客户档案 + convert_status 只读查 approval_instance），PROSPECT「我的首页」展示客户状态与转化进度，approved 时引导重新登录进入学生端，员工端 convert 区块去除静态 mock fallback；详见更新记录 v6.11.19 与 LOG-075（anhoa）。
 
 > v6.11.16（2026-10-19）：Dify 1.16 首启脚本修正到 `/console/api/*` 并使用 cookie/CSRF 登录，补入智能报告 app key 映射；Agnes 模型配置仅保存在忽略的 `dify/docker/.env`。Dify API/Postgres/Redis/Sandbox 健康且管理员已创建，但 OpenAI 兼容插件和 DSL 依赖需访问 Marketplace；当前本机及容器均收到 403，dify-init 停在供应商配置，app keys 尚未生成。详见更新记录 v6.11.16、LOG-073。
 

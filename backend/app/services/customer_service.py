@@ -55,6 +55,19 @@ class CustomerService:
             raise NotFoundError(message="客户不存在")
         return customer
 
+    async def get_my_customer(self, user: User) -> tuple[Customer, str]:
+        """本人客户档案 + 转化申请状态（PROSPECT/STUDENT 自助查询，v6.11.19）。
+
+        按 sys_user_id 强制反查本人 customer，查不到返回 40401；
+        convert_status 只读查 approval_instance 表（biz_type=convert, biz_id=customer.id）
+        取最新一条，无申请记录返回 "none"，否则原样返回 pending/approved/rejected/cancelled。
+        """
+        customer = await self.repo.get_by_sys_user_id(user.id)
+        if not customer:
+            raise NotFoundError(message="当前账号未关联客户档案")
+        convert_status = await self.repo.get_latest_convert_status(customer.id) or "none"
+        return customer, convert_status
+
     async def update_customer(self, customer_id: int, data: dict) -> Customer:
         customer = await self.get_customer(customer_id)
         if "phone" in data and data["phone"]:
