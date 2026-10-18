@@ -1,3 +1,8 @@
+# 一体化部署：项目核心服务 + Dify（AI 平台）
+# Dify 配置见 dify/docker/.env，模型 API Key 需在 Dify 控制台手动配置
+include:
+  - path: dify/docker/docker-compose.yaml
+
 services:
   mysql:
     image: mysql:8.0
@@ -42,8 +47,8 @@ services:
       # 文件存储：一期本地磁盘（零外部镜像依赖）；二期切 s3 时改 STORAGE_BACKEND=s3 并启用 MinIO
       STORAGE_BACKEND: local
       STORAGE_LOCAL_DIR: /app/storage_data
-      # 容器内 localhost 指向自身，需经 host.docker.internal 回宿主机 80 端口访问 Dify nginx（/v1 → api:5001）
-      DIFY_BASE_URL: http://host.docker.internal
+      # Dify 已纳入一体化部署，通过 service 名 dify_nginx 访问（Dify 控制台端口 8081）
+      DIFY_BASE_URL: http://dify_nginx
     ports:
       - "8000:8000"
     depends_on:

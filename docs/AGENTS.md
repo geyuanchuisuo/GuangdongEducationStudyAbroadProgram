@@ -498,47 +498,46 @@ npm run dev
 # http://localhost:5173
 ```
 
-### 5.3 Dify（**v6.8.6 已全部配置完成**）
+### 5.3 Dify（**v6.11.5 起一体化打包进 docker-compose**）
+
+Dify（1.16.0-rc1）已作为子 compose 纳入项目，随 `docker compose up -d` 一键启动，无需单独部署。
 
 ```bash
-# ✅ 已完成（2026-10-17，全自动 console API 配置）：
-# 1. 大模型绑定：mimo-v2.6-flash @ https://api.xiaomimimo.com/v1
-#    （OpenAI-API-compatible 模型级凭据，API Key 见 backend/.env，勿入库）
-# 2. 3 个 Agent 应用已创建并绑定 mimo 模型（pre_prompt 含人设/限制预期）：
-#    - 粤教客服Agent（DIFY_CUSTOMER_AGENT_KEY）
-#    - 企业员工助手（DIFY_EMPLOYEE_AGENT_KEY，记忆窗口5轮）
-#    - 留学生智能管家（DIFY_STUDENT_AGENT_KEY，不承诺退费/不给医疗级建议）
-# 3. app key 已回填 backend/.env 并实测真实链路 6/6 通过
+# 一体化启动后，Dify 相关服务自动运行：
+#   dify_nginx（控制台入口，端口 8081）
+#   api / worker / worker_beat / web / sandbox / plugin_daemon / agent_backend / local_sandbox
+#   db_postgres（Dify 元数据库）/ dify_redis / weaviate（向量库）/ ssrf_proxy
 
-# 控制台管理入口：http://localhost
-# 管理员：zzh970724@outlook.com / Difyadmin2026（仅限本地开发环境，生产必须重置！）
-
-# Dify console API 自动化配置三要素（详见运行日志 LOG-020）：
-# ① password 字段传 base64 ② 全部请求带 X-CSRF-Token 头 ③ openai_api_compatible 用模型级凭据（models/credentials）
+# 控制台入口：http://localhost:8081
+# 管理员：首次访问自行注册，或用已有账号登录
+# Dify 配置文件：dify/docker/.env（数据库密码、redis 密码等默认值，可按需修改）
 ```
 
-#### 5.3.1 接手者 AI 配置 5 步清单（v6.11.4 补全）
+> ⚠️ **外部模型 API Key 需自行配置**：Dify 本身打包了，但大模型（如 mimo-v2.6-flash）的 API Key 属于个人凭据，未入库。首次启动后需在 Dify 控制台「模型供应商」手动添加。
 
-> 后端服务本身 `docker compose up -d` 即可拉起，AI 端点在 Dify 不可达时自动走本地兜底（降级话术+本地规则），不阻断业务。
-> 以下 5 步仅当需要**真实 AI 对话**时执行：
+#### 5.3.1 接手者 AI 配置清单（v6.11.5 一体化版）
+
+> 后端服务 + Dify 均随 `docker compose up -d` 自动启动，AI 端点在模型未配置时自动走本地兜底，不阻断业务。
+> 以下步骤仅当需要**真实 AI 对话**时执行：
 
 | 步骤 | 操作 | 说明 |
 |------|------|------|
-| ① 安装/启动 Dify | 本机跑 Dify（占 80 端口），或远程实例 | 控制台入口 `http://localhost`，账号见上 |
-| ② 导入 3 个 Agent 应用 | Dify 控制台「创建应用 → 导入 DSL」，选 `dify/apps/` 下 3 个 yml | `粤教客服__advanced-chat.yml`、`企业员工助手__agent-chat.yml`、`留学生智能管家__agent-chat.yml` |
-| ③ 绑定 mimo 模型 | 控制台「模型供应商」添加 OpenAI-API-compatible，地址 `https://api.xiaomimimo.com/v1`，填入 mimo API Key；再进每个应用「模型」选 `mimo-v2.6-flash` | mimo API Key 从小米 mimo 开放平台申请，勿入库 |
-| ④ 挂载知识库（可选） | 控制台「知识库」新建并上传文档，再在各应用「编排」里关联 | 客服→课程项目库+活动讲座库；员工→公司新人指南；学生→留学生生活FAQ+学业考务指南 |
-| ⑤ 回填 app key | 每个应用「访问 API」复制 app key，写入 `backend/.env` 的 `DIFY_CUSTOMER_AGENT_KEY` / `DIFY_EMPLOYEE_AGENT_KEY` / `DIFY_STUDENT_AGENT_KEY` | 三个 key 均以 `app-` 开头 |
+| ① 启动全部服务 | `docker compose up -d` | Dify 自动启动，控制台 `http://localhost:8081` |
+| ② 配置模型供应商 | Dify 控制台「模型供应商」添加 OpenAI-API-compatible，地址 `https://api.xiaomimimo.com/v1`，填入 mimo API Key | mimo API Key 从小米 mimo 开放平台申请，勿入库；也可用其他 OpenAI 兼容模型 |
+| ③ 导入 3 个 Agent 应用 | 控制台「创建应用 → 导入 DSL」，选 `dify/apps/` 下 3 个 yml | `粤教客服__advanced-chat.yml`、`企业员工助手__agent-chat.yml`、`留学生智能管家__agent-chat.yml` |
+| ④ 应用绑定模型 | 进入每个应用「编排 → 模型」选择已配置的 `mimo-v2.6-flash` | 导入后模型 ID 因环境而异，需手动重选 |
+| ⑤ 挂载知识库（可选） | 控制台「知识库」新建并上传文档，再在各应用关联 | 客服→课程项目库+活动讲座库；员工→公司新人指南；学生→留学生生活FAQ+学业考务指南 |
+| ⑥ 回填 app key | 每个应用「访问 API」复制 app key，写入 `backend/.env` 的 `DIFY_CUSTOMER_AGENT_KEY` / `DIFY_EMPLOYEE_AGENT_KEY` / `DIFY_STUDENT_AGENT_KEY` | 三个 key 均以 `app-` 开头；改完重启 backend 容器 |
 
-> **降级说明**：未完成 5 步时，三个 AI 端点返回本地兜底话术，不影响登录/成绩/CRM 等非 AI 功能。完成后真实链路自测：三个 chat 接口各发一条消息即可验证。
+> **降级说明**：未配置模型/应用时，三个 AI 端点返回本地兜底话术，不影响登录/成绩/CRM 等非 AI 功能。
 
 ### 5.4 Docker一键启动
 
 ```bash
-# 启动全部服务（mysql + redis + backend，文件存储用本地磁盘卷，零额外镜像）
+# 启动全部服务（mysql + redis + backend + nginx + Dify 全套）
 docker compose up -d
 
-# 只启动核心三件套（Dify 独立部署时）
+# 只启动核心三件套（不需要 Dify/AI 时，省资源）
 docker compose up -d mysql redis backend
 
 # 查看日志

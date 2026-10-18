@@ -1,6 +1,9 @@
 # Office临时文件
 ~$*
 
+# Dify 运行时数据卷（不入库，首次启动自动生成）
+dify/docker/volumes/
+
 # Python
 __pycache__/
 *.py[cod]
@@ -22,6 +25,8 @@ yarn-error.log*
 .env
 .env.local
 .env.*.local
+# Dify 默认 .env 含启动必需配置（DB/redis 默认密码，无个人密钥），允许入库
+!dify/docker/.env
 
 # 本地文件存储（STORAGE_BACKEND=local 落盘目录）
 storage_data/
