@@ -43,8 +43,8 @@
 
 | 位置 | 配置 | 说明 |
 |---|---|---|
-| `backend/.env`（gitignore） | `DIFY_BASE_URL=http://192.168.184.128`<br>`DIFY_REPORT_AGENT_KEY=app-…`（chatflow 的真实 key） | 其余 3 个 Agent key 保持占位 `app-xxx/yyy/zzz` |
-| `docker-compose.yml` | `DIFY_BASE_URL: http://192.168.184.128` | 原 `http://host.docker.internal`，容器内读不到 VM 就改这 1 行 |
+| `backend/.env`（gitignore） | `DIFY_BASE_URL=http://192.168.184.128`<br>`DIFY_REPORT_AGENT_KEY=app-…`（chatflow 的真实 key）（⚠️ 历史记录：现行值见文首横幅） | 其余 3 个 Agent key 保持占位 `app-xxx/yyy/zzz` |
+| `docker-compose.yml` | `DIFY_BASE_URL: http://192.168.184.128`（⚠️ 历史记录：现行为 `http://dify_nginx`） | 原 `http://host.docker.internal`，容器内读不到 VM 就改这 1 行 |
 | DSL 资产 | `dify/apps/智能报告__advanced-chat.yml`（在用）<br>`dify/apps/智能报告__agent-chat.yml`（旧，留档） | 均为 `include_secret=false` 导出，已核验**不含** API key |
 
 > `DIFY_BASE_URL` 不带 `/v1`：网关内部拼 `{base}/v1/chat-messages`。
@@ -96,7 +96,7 @@ irm http://localhost:8000/api/v1/reports/generate -Method Post -ContentType 'app
 ## 6. 内网穿透（本次未启用）
 
 项目已有 `scripts/start-ngrok.ps1`、`scripts/start-localtunnel.ps1`、`docs/REMOTE_ACCESS.md`。当前本机未装 ngrok/cloudflared，`edu-nginx` 容器未起、8080 未监听，现有脚本直接跑会失败。
-临时方案：宿主机执行 `cloudflared tunnel --url http://192.168.184.128:80`，把 `DIFY_BASE_URL` 换成 `https://xxx.trycloudflare.com`（不带 `/v1`）。⚠️ 会把 Dify 控制台一并暴露，穿透前须改弱口令或只放行 `/v1`。
+临时方案（⚠️ VM 时代记录，现行一体化部署无需穿透 Dify）：宿主机执行 `cloudflared tunnel --url http://192.168.184.128:80`，把 `DIFY_BASE_URL` 换成 `https://xxx.trycloudflare.com`（不带 `/v1`）。⚠️ 会把 Dify 控制台一并暴露，穿透前须改弱口令或只放行 `/v1`。
 
 ## 7. 副作用与清理提示
 

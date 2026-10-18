@@ -168,7 +168,7 @@ docker compose up -d
 - **后端**：FastAPI，端口 8000（容器内）
 - **数据库**：MySQL 8.0，端口 59000（宿主机映射）
 - **缓存**：Redis 7
-- **AI**：Dify（需单独部署，见 `docs/接口契约v1.md`）
+- **AI**：Dify 1.16.0-rc1（v6.11.6 起一体化打包随 docker-compose 启动，控制台/Service API 端口 8081，无需单独部署，见 `docs/Dify部署与调用指南.md`）
 
 ---
 
