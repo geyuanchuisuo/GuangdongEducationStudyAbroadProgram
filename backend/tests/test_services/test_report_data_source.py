@@ -15,7 +15,7 @@ from app.models import Base
 from app.models.crm import CustomerAssessment
 from app.models.customer import Customer
 from app.models.employee import EmployeeDailyReport
-from app.models.student import StudentPsychAlert, StudentPsychProfile
+from app.models.student import StudentFeedbackTicket, StudentPsychAlert, StudentPsychProfile
 from app.models.user import User
 from app.repositories.report_repo import ReportRepository
 from app.services import report_service as rs_module
@@ -151,6 +151,28 @@ async def test_fetch_complaints_partial_fields_marked_unavailable(db):
     assert "不可得字段" in res.note
 
 
+@pytest.mark.asyncio
+async def test_fetch_complaints_counts_rows_instead_of_silent_skip(db):
+    """防回退（v6.11.15）：漏 import ComplaintReportInput 曾让全部投诉行被逐行容错
+    静默吞掉（NameError 当脏行跳过，报告仍 completed）——周期内真实工单必须进 inputs。"""
+    db.add_all([
+        User(id=31, username="13800000031", password_hash="x", real_name="测三十一",
+             user_type="STUDENT", phone="13800000031"),
+        StudentFeedbackTicket(id=201, student_id=31, content="课程退费投诉",
+                              status="待处理", create_time=datetime(2026, 10, 14, 9)),
+    ])
+    await db.commit()
+
+    res = await fetch_complaints(db, START, END)
+    assert res.status == "ok"
+    assert len(res.inputs) == 1, f"投诉行被静默跳过: {res.note}"
+    row = res.inputs[0]
+    assert row.ticket_id == 201
+    assert row.submitted_at == datetime(2026, 10, 14, 9)
+    assert row.status == "open"  # 待处理 → 未解决
+    assert row.category_source == "unknown"  # 无 AI 分析记录
+
+
 # ── production 生成路径 ──────────────────────────────────
 
 class _BrokenDB:
@@ -191,6 +213,7 @@ async def test_production_generate_psych_ok_and_complaint_rejected(db, monkeypat
 async def test_production_read_failed_marks_unavailable_without_mock_fallback(db, monkeypatch):
     """v6.11.0：读取失败不再整体拒绝——报告照常生成但标不可得，且绝不回落 mock。"""
     monkeypatch.setattr(settings, "REPORT_DATA_SOURCE", "production")
+    # M0 未登记报告专用 Agent，因此本用例不依赖真实 Dify。
 
     async def _boom(*a, **k):
         raise DomainReadError("psych db down")
