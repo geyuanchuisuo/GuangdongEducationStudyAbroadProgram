@@ -70,7 +70,8 @@ COURSE_NAMES = [
 ]
 LOCATIONS = ["广州总部教室A", "广州总部教室B", "深圳分部教室", "线上直播", "东莞教学点"]
 
-INTENT_TYPES = ["course_inquiry", "event_registration", "price_consult", "study_abroad_consult", "general_chat"]
+# v6.10.6：演示意图码统一到后端契约 9 码（原 5 码为 seed 遗留词汇，与契约/Dify 均不一致）
+INTENT_TYPES = ["program_consult", "course_recommend", "policy_qa", "company_info", "event_query", "faq", "chitchat", "lead_capture"]
 SOURCE_CHANNELS = ["WEBSITE_REGISTER", "CS_LEAD", "EMPLOYEE_INPUT"]
 CUSTOMER_STATUSES = ["NEW", "FOLLOWING", "STRONG", "SIGNED", "ENROLLED", "LOST"]
 EDUCATION_LEVELS = ["初中", "高中", "大专", "专科", "本科", "其他"]
