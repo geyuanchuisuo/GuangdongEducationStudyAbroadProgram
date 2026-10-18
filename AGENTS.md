@@ -431,8 +431,8 @@ cp .env.example .env
 #   DATABASE_URL - MySQL数据库连接地址（端口59000，库名GuangdongEducationStudyAbroadProgram）
 #   REDIS_URL - Redis连接地址
 #   SECRET_KEY - JWT密钥（请用随机字符串）
-#   DIFY_BASE_URL - Dify API 地址（nginx 80 的 /v1 路由；本机 http://localhost，容器内由 compose 覆盖为 http://host.docker.internal）
-#   DIFY_*_AGENT_KEY - 各Agent的API Key（控制台各应用「API 访问」页生成，app-开头）
+#   DIFY_BASE_URL - Dify API 地址（v6.11.6 起一体化打包：本机 http://localhost:8081，容器内由 compose 覆盖为 http://dify_nginx）
+#   DIFY_*_AGENT_KEY - 各Agent的API Key（app-开头；dify-init 启动时自动创建应用并输出到 dify/docker/app_keys.txt，复制回填即可）
 #   STORAGE_BACKEND - 文件存储后端：local（默认，本地磁盘）/ s3（MinIO，二期可选）
 ```
 
@@ -565,13 +565,14 @@ docker volume inspect guangdongeducationstudyabroadprogram_backend_storage
 | `DATABASE_URL` | backend/.env、docker-compose.yml | 你本机 MySQL 地址与密码 | 直接沿用别人的密码导致连不上库 |
 | `REDIS_URL` | backend/.env、docker-compose.yml | 你本机 Redis 地址 | - |
 | `SECRET_KEY` | backend/.env | 随机字符串（自行生成） | 沿用仓库示例值上线 |
-| `DIFY_BASE_URL` | backend/.env、docker-compose.yml | **本机：`http://localhost`；Docker 容器内：`http://host.docker.internal`** | ❌ 写成其他成员的内网 IP（如 192.168.x.x）——你的机器上必不通 |
-| `DIFY_*_AGENT_KEY` | backend/.env（不入库，.env 已 gitignore） | 你自己在 Dify 控制台生成的 app-xxx | 直接用别人的 key（对方撤销后全体失效） |
+| `DIFY_BASE_URL` | backend/.env、docker-compose.yml | **本机：`http://localhost:8081`；Docker 容器内：`http://dify_nginx`**（v6.11.6 起 Dify 一体化打包，勿再用 host.docker.internal/3000/旧内网 IP） | ❌ 写成其他成员的内网 IP（如 192.168.x.x）或旧 VM 地址——你的机器上必不通 |
+| `DIFY_*_AGENT_KEY` | backend/.env（不入库，.env 已 gitignore） | dify-init 自动输出到 `dify/docker/app_keys.txt`，复制三个业务 Agent key 回填 | 直接用别人的 key（对方撤销后全体失效） |
+| `DIFY_MODEL_API_KEY` | dify/docker/.env（模型供应商） | 你自己的模型 API Key（mimo/deepseek 等 OpenAI 兼容），dify-init 自动配供应商 | 填错/留空 → dify-init 失败，backend 不启动 |
 | `STORAGE_BACKEND` | backend/.env、docker-compose.yml | 一期默认 `local` | - |
 | `VITE_API_BASE_URL` | frontend/.env | 本机 `http://localhost:8000/api/v1`；生产构建用相对路径 `/api/v1`（.env.production 已配） | 指到别人的机器 |
 
 **规则**：
-1. docker-compose.yml / 代码里只允许出现**通用别名**（host.docker.internal、localhost、服务名 mysql/redis），具体 IP 一律不入库
+1. docker-compose.yml / 代码里只允许出现**通用别名**（localhost、compose 服务名 mysql/redis/dify_nginx），具体 IP 一律不入库
 2. 个性化值放 `.env`（已 gitignore）或 `.env.example` 只放占位符
 3. 合并公共 compose/config 后，先检查环境变量类差异（IP/端口/URL）再启动，别只做代码冒烟
 4. 不确定某配置是不是环境特异 → 按环境特异处理
@@ -589,14 +590,20 @@ REDIS_URL=redis://localhost:6379
 SECRET_KEY=your-secret-key-here
 ACCESS_TOKEN_EXPIRE_MINUTES=1440
 
-# Dify（版本1.16.0-rc1，Service API：/v1/chat-messages）
-# API 走 Dify nginx(80) 的 /v1 路由（3000 是 web 控制台端口且未映射宿主机，不能作 API 地址）
-DIFY_BASE_URL=http://localhost
+# Dify（版本1.16.0-rc1，Service API：/v1/chat-messages，v6.11.6 起一体化打包）
+# 本机 http://localhost:8081（Dify 控制台+Service API 同端口）；容器内 http://dify_nginx
+DIFY_BASE_URL=http://localhost:8081
 DIFY_VERSION=1.16.0-rc1
 DIFY_API_PROTOCOL=openai
 DIFY_STUDENT_AGENT_KEY=app-xxx
 DIFY_EMPLOYEE_AGENT_KEY=app-yyy
 DIFY_CUSTOMER_AGENT_KEY=app-zzz
+# 三个 key 来源：dify-init 输出的 dify/docker/app_keys.txt（勿提交）
+
+# 直连模型降级（可选）：Dify Agent 不可用时直连 OpenAI 兼容模型兜底
+DIFY_MODEL_API_KEY=
+DIFY_MODEL_BASE_URL=https://api.xiaomimimo.com/v1
+DIFY_MODEL_NAME=mimo-v2.6-flash
 
 # 文件存储（local=本地磁盘，默认零外部依赖；s3=MinIO，仅二期生产需要时切换）
 STORAGE_BACKEND=local
@@ -706,10 +713,10 @@ chore: 构建
 ### Q2: Dify接口调用失败？
 
 检查：
-1. DIFY_BASE_URL是否正确（本机 http://localhost；容器内 http://host.docker.internal。**不是 3000**——3000 是 web 控制台且未映射宿主机）
-2. API Key是否正确（app-开头，在各应用「API 访问」页生成）
-3. Agent应用是否已发布
-4. 网络是否可达（容器内验证：docker exec edu-backend python -c "import socket;socket.create_connection(('host.docker.internal',80))"）
+1. DIFY_BASE_URL是否正确（本机 `http://localhost:8081`；容器内 `http://dify_nginx`。v6.11.6 起 Dify 一体化打包，**不是 3000、不是 host.docker.internal、不是旧内网 IP**）
+2. API Key是否正确（app-开头；dify-init 输出在 `dify/docker/app_keys.txt`，复制回填 backend/.env 后重启 backend）
+3. Agent应用是否已发布（`docker compose logs dify-init` 看导入/绑定是否成功）
+4. 网络是否可达（容器内验证：docker exec edu-backend python -c "import socket;socket.create_connection(('dify_nginx',80))"）
 5. Key 未配置/AI 不可用时系统自动降级：agent/chat 返回能力清单话术，commands/parse 走本地规则兜底（source=local），不阻断业务
 
 ### Q3: 前端跨域问题？
@@ -774,7 +781,7 @@ chore: 构建
 
 ---
 
-**最后更新**：2026-10-18（v6.11.4 REMOTE_ACCESS.md 补 localtunnel 方案一（免注册）+ 503 掉线已知问题与排查顺序，原方案顺延二/三/四；v6.11.3 M3 成绩三件套：新增 PUT /employee/scores/{id} 修改接口（不存在→40401）+ student_score 唯一约束 uq_student_score_unique（重复→40901，semester 归一空串）+ 成绩口径统一 0-100 + 迁移 005 清理存量 4 条重复 + E2E 幂等适配；HTTP 冒烟 7/7 + pytest 154/154 + E2E 两轮；同轮完成前端联通诊断（LOG-062）：双 MySQL 环境下 .env 3306→59000 已修、Dify 响应 13~30s 属环境性能；**+ v6.11.3 规则调整：访客 PROSPECT 注册免审批立即生效**（原 anhoa 审批门由 master 侧 qianduan 线推翻，经用户批准随第十一次同步并入）；**+ 同日第十一次同步 origin/master→anhoa（e635a93..d4aa045）**：公共模块 2 项经用户批准（M0 user_service 注册免审批反转、docker-compose DIFY_BASE_URL 回 host.docker.internal）+ M3 成绩三件套；7 份文档冲突按「双方条目均保留、以共用模块命名为基准」手工解齐）
+**最后更新**：2026-10-19（**v6.11.9 全文档配置信息同步**：用户审计发现 Dify 配置信息滞后，AGENTS.md（§6.0/§6.1/Q2）、开发路线图、接口契约v1（v2.9.9）、项目需求文档、Dify_接入与智能报告、M5_上游接口契约、前端无法解决问题清单全部更新为现行基线（`DIFY_BASE_URL` 本机 `http://localhost:8081`/容器内 `http://dify_nginx`，废弃 host.docker.internal/3000/192.168.184.128 旧值），三份文档补 v6.11.5~8 版本日志；v6.11.5~8：Dify 一体化打包 + dify-init 一键初始化（客户 dify/docker/.env 填模型 Key 自动配供应商/导入 5 应用/绑模型/导出 app key，见 docs/Dify部署与调用指南.md）+ 合并 master 10 项公共模块（注册免审批等，pytest 157/157）；上一版 v6.11.4 REMOTE_ACCESS.md 补 localtunnel 方案一（免注册）+ 503 掉线已知问题与排查顺序，原方案顺延二/三/四；v6.11.3 M3 成绩三件套：新增 PUT /employee/scores/{id} 修改接口（不存在→40401）+ student_score 唯一约束 uq_student_score_unique（重复→40901，semester 归一空串）+ 成绩口径统一 0-100 + 迁移 005 清理存量 4 条重复 + E2E 幂等适配；HTTP 冒烟 7/7 + pytest 154/154 + E2E 两轮；同轮完成前端联通诊断（LOG-062）：双 MySQL 环境下 .env 3306→59000 已修、Dify 响应 13~30s 属环境性能；**+ v6.11.3 规则调整：访客 PROSPECT 注册免审批立即生效**（原 anhoa 审批门由 master 侧 qianduan 线推翻，经用户批准随第十一次同步并入）；**+ 同日第十一次同步 origin/master→anhoa（e635a93..d4aa045）**：公共模块 2 项经用户批准（M0 user_service 注册免审批反转、docker-compose DIFY_BASE_URL 回 host.docker.internal）+ M3 成绩三件套；7 份文档冲突按「双方条目均保留、以共用模块命名为基准」手工解齐）
 
 **上一版记录（v6.10.5 anhoa FAQ）**：2026-10-18（**v6.10.5（anhoa）客服 FAQ 应答修复**：实测「公司简称是什么？」两入口均无回答——根因①Chatflow DSL 无知识检索节点而红线 1 要求公司信息以【知识库内容】为准→恒落兜底；②cs_faq 表依赖独立种子脚本，`seed_data.py` 重建库清空后不补跑即 P5 空转；③种子问法「公司简称什么?」差异。修复：Chatflow v3 内嵌 37 条 FAQ 速查表（逐字同源 cs_faq_seed.json，导入即生效零基础设施依赖）+ 红线 1 权威来源新增【FAQ 速查表】+ FAQ few-shot；种子 upsert+`QUESTION_RENAMES` 问法迁移+keywords；新增 `tests/test_cs_faq_match.py` 5 项。回归 pytest **151/151**、verify_all **29/29**、compileall、YAML 静态检查、种子连跑两次幂等、本机接口实测 P5 命中（answer=简称"粤教服务"、card_data.faq 正确）；**Dify 侧方案 B 已落地**：VM `2f92093f`（key 所指，v6.9.9 七分支编排）7 支 prompt 全注入速查表并发布实测三问全过 + `143c1127` 导入版修 kr 空绑并发布；备份 `dify/workflows/_vm_backup_v6.10.5/`；注意速查表第 25 条缴费账号在提示词内按红线 3 改为引导顾问，P5 路径仍按原文返回、两路径口径差异待业务确认；新发现意图码契约漂移（business/policy/event_signup vs 后端 9 码）待 M2 对齐；⚠ **本条中「注册审批门失效致 40006/审批实例不再触发」的表述已随 v6.11.3 免审批规则调整成为既定方向**）
 
