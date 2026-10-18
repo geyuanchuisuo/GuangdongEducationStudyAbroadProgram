@@ -8,8 +8,16 @@ from app.repositories.customer_service_repo import CustomerServiceRepository
 from app.repositories.course_repo import CourseRepository
 from app.schemas.ai import CsFaqOut, CsMessageOut
 from app.services.course_service import CourseService
+from app.services.cs_agent_service import CS_GREETING
 
 router = APIRouter(prefix="/cs", tags=["公开客服"])
+
+
+@router.get("/greeting", summary="客服开场白（前端打开客服窗时拉取展示，无需登录）")
+async def get_greeting():
+    # v6.10.3：Dify opening_statement 仅托管页生效，Service API 不返回；
+    # 自研前端打开客服窗时由此接口获取欢迎语，文案与 Dify 应用开场白同源（cs_agent_service.CS_GREETING）
+    return success_response(data={"greeting": CS_GREETING})
 
 
 @router.get("/courses", summary="公开课程列表（课程/项目浏览，无需登录）")

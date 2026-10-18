@@ -15,6 +15,16 @@ watch(() => props.autoOpen, (value) => {
 const input = ref('')
 const sessionId = ref('new')
 const messages = ref<Array<{ role: 'user' | 'agent'; text: string; recs?: AnyRec[] }>>([])
+// v6.10.3：客服窗（public 类型）首次打开时拉取后端开场白并插入消息流；
+// 仅 public 分支启用，student/employee/manager 窗口行为不变
+watch(open, async (value) => {
+  if (!value || messages.value.length > 0) return
+  if (props.type === 'student' || props.type === 'employee' || props.type === 'manager') return
+  try {
+    const data: any = await platformApi.csGreeting()
+    if (data?.greeting) messages.value.push({ role: 'agent', text: data.greeting })
+  } catch { /* 后端未就绪时静默降级，不阻塞正常聊天 */ }
+})
 const messageList = ref<HTMLElement | null>(null)
 watch(messages, async () => {
   await nextTick()

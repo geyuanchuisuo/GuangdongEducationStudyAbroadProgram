@@ -42,6 +42,82 @@ const studentProfile = ref<any>({})
 const studentTickets = ref<any[]>([])
 const lifeFaqRows = ref<any[]>([])
 const moreServiceRows = ref<any[]>([])
+const scoreForm = reactive({ studentId: 2, semester: String(), courseName: String(), score: 0 })
+const scoreRows = ref([] as any[])
+const dailyReportRows = ref([] as any[])
+const activeReport = ref(null as any)
+const reportDialog = ref(false)
+
+async function loadScoreRows() {
+  try {
+    const result: any = await platformApi.employee.listScores()
+    scoreRows.value = itemsOf(result)
+  } catch {}
+}
+async function loadDailyReports() {
+  try {
+    const result: any = await platformApi.employee.listReports()
+    dailyReportRows.value = itemsOf(result)
+  } catch {}
+}
+function errorMessage(error: unknown, fallback: string) {
+  return error instanceof Error && error.message ? error.message : fallback
+}
+
+async function submitScoreConfirmed() {
+  try {
+    const result: any = await platformApi.employee.createScore({
+      student_id: Number(scoreForm.studentId),
+      course_name: scoreForm.courseName.trim(),
+      score: Number(scoreForm.score),
+      semester: scoreForm.semester.trim() ? scoreForm.semester.trim() : undefined,
+    })
+    scoreRows.value = [result, ...scoreRows.value]
+    notifySuccess("成绩录入成功")
+  } catch (error: unknown) {
+    notifyInfo(errorMessage(error, "该学生、课程和学期已录入成绩，请使用编辑功能"))
+  }
+}
+
+function submitScore() {
+  const score = Number(scoreForm.score)
+  if (!scoreForm.studentId) {
+    ElMessage.warning("请输入学生 ID")
+    return
+  }
+  if (!scoreForm.courseName.trim()) {
+    ElMessage.warning("请输入课程名称")
+    return
+  }
+  if (!Number.isFinite(score) || score < 0 || score > 100) {
+    ElMessage.warning("请输入 0 到 100 之间的成绩")
+    return
+  }
+  confirmWrite("确认录入该成绩吗？", submitScoreConfirmed)
+}
+
+async function editScore(row: any) {
+  try {
+    const result = await ElMessageBox.prompt("请输入新的成绩", "修改成绩", {
+      inputValue: String(row.score),
+      inputValidator: (value: string) => {
+        const next = Number(value)
+        return (Number.isFinite(next) && next >= 0 && next <= 100) || "请输入 0 到 100 之间的成绩"
+      },
+    })
+    await platformApi.employee.updateScore(row.id, { score: Number(result.value) })
+    await loadScoreRows()
+    notifySuccess("成绩修改成功")
+  } catch (error: unknown) {
+    if (error === "cancel" || error === "close") return
+    notifyInfo(errorMessage(error, "成绩修改失败"))
+  }
+}
+
+function openDailyReport(row: any) {
+  activeReport.value = row
+  reportDialog.value = true
+}
 
 // ── M5 智能报告状态（M5-05.1~05.9） ──────────────────────────
 const reportFilterType = ref('')
@@ -86,6 +162,10 @@ onMounted(async () => {
     }
   } catch {
     // Keep the initial test set when a module endpoint is not available.
+  }
+  if (role.value === "EMPLOYEE") {
+    await loadScoreRows()
+    await loadDailyReports()
   }
 })
 
@@ -463,16 +543,28 @@ function submitLeave() {
 }
 
 function submitReport() {
-  if (!reportForm.content) {
-    ElMessage.warning('请填写日报内容')
+  const reportDate = reportForm.date.trim()
+  const content = reportForm.content.trim()
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(reportDate)) {
+    ElMessage.warning('请输入有效的日报日期')
+    return
+  }
+  if (!content) {
+    ElMessage.warning('请输入日报内容')
     return
   }
   confirmWrite('确认提交日报吗？提交后将进入日报记录。', async () => {
     try {
-      await platformApi.employee.submitReport({ report_date: reportForm.date, content: reportForm.content, status: 'submitted' })
+      const created: any = await platformApi.employee.submitReport({
+        report_date: reportDate,
+        content,
+        status: 'submitted',
+      })
+      dailyReportRows.value = [created, ...dailyReportRows.value]
+      reportForm.content = ''
       notifySuccess('日报提交成功')
-    } catch {
-      notifyInfo('日报接口尚未就绪，当前内容已保留')
+    } catch (error: unknown) {
+      notifyInfo(errorMessage(error, '日报提交失败'))
     }
   })
 }
@@ -620,19 +712,44 @@ function revealPhone() {
       <el-drawer v-model="activeCustomer" title="客户详情" size="min(620px, 94vw)"><template v-if="activeCustomer"><div class="customer-head"><div><h2>{{ activeCustomer.name }}</h2><p>{{ activeCustomer.project }} · {{ activeCustomer.phone }}</p></div><el-tag type="success">{{ activeCustomer.score }}</el-tag></div><h3>研判结果</h3><div class="assessment"><div><small>新加坡项目</small><b>{{ activeCustomer.score }}</b><p>学历、年龄和目标方向已形成初步匹配，缺失信息已列入跟进建议。</p></div><div><small>中德项目</small><b>待确认</b><p>德语能力、封闭实训接受度和无犯罪记录需要电话核实。</p></div></div><h3>推荐项目</h3><el-tag v-for="item in ['新加坡国际本硕升学计划','中德精英人才共建计划']" :key="item" class="recommend">{{ item }}</el-tag><h3>跟进记录</h3><el-timeline><el-timeline-item>官网注册留资 · 2026-10-13</el-timeline-item><el-timeline-item>Agent 自动采集 · 2026-10-13</el-timeline-item><el-timeline-item>员工首次跟进 · 2026-10-14</el-timeline-item></el-timeline><div class="drawer-actions"><el-button type="primary" @click="confirmWrite('确认添加一条跟进记录吗？', () => notifySuccess('跟进记录已添加'))">添加跟进</el-button><el-button @click="confirmWrite('确认更新客户状态吗？', () => notifySuccess('状态已更新'))">更新状态</el-button></div></template></el-drawer>
     </template>
 
+    <template v-else-if="role === 'EMPLOYEE' && section === 'scores'">
+      <div class="two-column">
+        <section class="surface panel"> <SectionTitle title="成绩录入" desc="每个学生、课程和学期只保留一条成绩。" />
+          <el-form label-position="top">
+            <el-form-item label="学生 ID"> <el-input-number v-model="scoreForm.studentId" :min="1" /> </el-form-item>
+            <el-form-item label="学期"> <el-input v-model="scoreForm.semester" /> </el-form-item>
+            <el-form-item label="课程名称"> <el-input v-model="scoreForm.courseName" /> </el-form-item>
+            <el-form-item label="成绩"> <el-input-number v-model="scoreForm.score" :min="0" :max="100" :precision="1" /> </el-form-item>
+            <el-button type="primary" @click="submitScore">保存成绩</el-button>
+          </el-form> </section>
+        <section class="surface panel"> <SectionTitle title="已录入成绩" />
+          <el-table :data="scoreRows">
+            <el-table-column prop="student_id" label="学生 ID" width="100" />
+            <el-table-column prop="course_name" label="课程名称" />
+            <el-table-column prop="semester" label="学期" width="110" />
+            <el-table-column prop="score" label="成绩" width="90" />
+            <el-table-column label="操作" width="100"> <template #default="{ row }"> <el-button text type="primary" @click="editScore(row)">编辑</el-button> </template> </el-table-column>
+          </el-table> </section>
+      </div>
+    </template>
+
     <template v-else-if="role === 'EMPLOYEE' && section === 'convert'">
       <div class="two-column"><section class="surface panel"><SectionTitle title="代客申请留学生" desc="一次审批：员工申请，管理层审批。" /><el-form label-position="top"><el-form-item label="选择意向客户"><el-select v-model="convertForm.customerId" style="width:100%"><el-option v-for="item in customerRows" :key="item.id" :label="item.name + '（' + item.project + '）'" :value="item.id" /></el-select></el-form-item><el-form-item label="转化项目"><el-select v-model="convertForm.project" style="width:100%"><el-option v-for="item in projects.slice(0,3)" :key="item.id" :label="item.title" :value="item.title" /></el-select></el-form-item><el-form-item label="转化理由 / 备注"><el-input v-model="convertForm.title" type="textarea" :rows="4" /></el-form-item><el-button type="primary" @click="submitConvertApply">提交审批申请</el-button></el-form></section><section class="surface panel"><SectionTitle title="学生流程审批" /><div v-for="item in (approvalRows.length ? approvalRows : [{title:'张三 · 病假申请',status:'pending'},{title:'陈同学 · 成绩复核',status:'pending'},{title:'李同学 · 宿舍调换',status:'approved'}])" :key="item.id || item.title" class="ticket-row"><div><b>{{ item.title || item.t }}</b><small>学生端提交 · {{ item.created_at || '2026-10-15' }}</small></div><el-tag :type="item.status === 'approved' ? 'success' : 'warning'">{{ item.status || item.s }}</el-tag></div></section></div>
     </template>
 
-    <template v-else-if="role === 'EMPLOYEE' && section === 'reports'">
-      <div class="two-column"><section class="surface panel"><SectionTitle title="提交日报" desc="次日0点前可补提；之后需要发起日报补报申请。" /><el-form label-position="top"><el-form-item label="日报日期"><el-input v-model="reportForm.date" /></el-form-item><el-form-item label="口述 / 文字内容"><el-input v-model="reportForm.content" type="textarea" :rows="10" placeholder="今天跟进了哪些客户？明天计划做什么？" /></el-form-item><el-button @click="notifyInfo('AI 整理预览已生成')">AI 整理日报</el-button><el-button type="primary" @click="submitReport">确认提交</el-button></el-form></section><section class="surface panel"><SectionTitle title="近7日日报" /><div v-for="item in ['10-14 跟进3客户 · 2方案','10-13 跟进2客户 · 1方案','10-12 跟进4客户 · 3方案']" :key="item" class="task-row"><b>✓</b><div><strong>{{ item }}</strong><small>已提交</small></div><el-button text>查看</el-button></div></section></div>
-    </template>
-
-    <template v-else-if="role === 'EMPLOYEE' && section === 'scores'">
-      <SectionTitle title="成绩录入" desc="录入后学生可在个人信息页查看，并同步触发学业提醒。" />
-      <div class="two-column"><section class="surface panel"><el-form label-position="top"><el-form-item label="选择学生"><el-select style="width:100%" model-value="张三"><el-option label="张三 · STU-2026-001" value="张三" /></el-select></el-form-item><el-form-item label="学期"><el-select style="width:100%" model-value="2026秋季"><el-option label="2026秋季" value="2026秋季" /></el-select></el-form-item><el-form-item label="课程名称"><el-input placeholder="Advanced Programming" /></el-form-item><el-form-item label="成绩（0-100）"><el-input placeholder="88" /></el-form-item><el-button type="primary" @click="confirmWrite('确认录入该成绩吗？', () => notifySuccess('成绩已录入'))">提交录入</el-button></el-form></section><section class="surface panel"><SectionTitle title="已录入成绩" /><el-table :data="[{course:'Advanced Programming',score:88},{course:'Data Structures',score:91},{course:'Academic Writing',score:85}]"><el-table-column prop="course" label="课程" /><el-table-column prop="score" label="成绩" width="100" /></el-table></section></div>
-    </template>
-
+<template v-else-if="role === 'EMPLOYEE' && section === 'reports'">
+<div class="two-column">
+<section class="surface panel"> <SectionTitle title="提交日报" desc="提交后可在右侧查看历史记录。" />
+<el-form label-position="top"> <el-form-item label="日报日期"> <el-input v-model="reportForm.date" /> </el-form-item>
+<el-form-item label="日报内容"> <el-input v-model="reportForm.content" type="textarea" :rows="10" /> </el-form-item>
+<el-button type="primary" @click="submitReport">确认提交</el-button> </el-form> </section>
+<section class="surface panel"> <SectionTitle title="日报记录" />
+<div v-for="item in dailyReportRows" :key="item.id" class="task-row"> <b>✓</b> <div> <strong>{{ item.report_date }}</strong> <small>{{ item.status }}</small> </div> <el-button text @click="openDailyReport(item)">查看</el-button> </div>
+<el-empty v-if="!dailyReportRows.length" description="暂无日报" />
+</section> </div>
+<el-drawer v-model="reportDialog" title="日报详情" size="min(620px, 94vw)"> <template #default>
+<div v-if="activeReport"> <h2>{{ activeReport.report_date }}</h2> <p>{{ activeReport.content }}</p> </div>
+</template> </el-drawer> </template>
     <template v-else-if="role === 'EMPLOYEE' && section === 'org'">
       <div class="two-column"><section class="surface panel"><SectionTitle title="组织架构查询" desc="联系方式默认脱敏，查看完整号码需要二次确认。" /><el-input :prefix-icon="Search" placeholder="搜索姓名或部门" /><el-tree :data="[{label:'广东省教育服务有限公司',children:[{label:'新加坡事业部',children:[{label:'陈顾问'},{label:'李四'}]},{label:'德国事业部',children:[{label:'赵敏'}]}]}]" default-expand-all /></section><section class="surface panel"><SectionTitle title="新人指引" /><div v-for="item in ['办公环境快速导航','IT支持与设备使用','团队协作与沟通','公司文化与价值观','新人成长与资源支持']" :key="item" class="task-row"><b>0{{ item.length % 4 + 1 }}</b><div><strong>{{ item }}</strong><small>知识库 + 引导式流程</small></div><el-button text type="primary">打开</el-button></div><el-button type="primary" round @click="revealPhone">查看脱敏联系方式</el-button></section></div>
     </template>
