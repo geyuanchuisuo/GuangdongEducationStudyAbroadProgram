@@ -5,7 +5,8 @@
 
 前置：
     - edu-mysql / edu-redis / edu-backend 已启动
-    - 已执行 python -m scripts.seed_data（测试账号 user001/user002/user005，密码 123456）
+    - 已执行 python -m scripts.seed_data（v6.10.0 起固定核心账号：username=手机号，
+      密码统一 Test@123456；MANAGER=13810000004 / EMPLOYEE=13810000003 / STUDENT=13810000002）
     - MinIO 本轮未启动：跳过文件上传相关用例（记 SKIP）
 """
 import asyncio
@@ -79,8 +80,10 @@ print("=" * 60)
 print("Section 1: 认证登录（seed 账号）")
 print("=" * 60)
 tokens, uids = {}, {}
-for uname, utype in [("user001", "MANAGER"), ("user002", "EMPLOYEE"), ("user005", "STUDENT")]:
-    ok, bj = call(client, "POST", "/auth/login", body={"username": uname, "password": "123456"})
+# v6.10.0 seed 规范化：核心角色固定 username=手机号，密码统一 Test@123456
+E2E_PASSWORD = "Test@123456"
+for uname, utype in [("13810000004", "MANAGER"), ("13810000003", "EMPLOYEE"), ("13810000002", "STUDENT")]:
+    ok, bj = call(client, "POST", "/auth/login", body={"username": uname, "password": E2E_PASSWORD})
     check(f"login {uname}({utype})", ok and bj.get("data", {}).get("user_type") == utype, str(bj)[:160])
     if ok:
         tokens[utype] = bj["data"]["access_token"]
