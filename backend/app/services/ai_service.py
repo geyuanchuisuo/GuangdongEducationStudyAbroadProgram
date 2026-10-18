@@ -23,6 +23,7 @@ class AgentType(str, Enum):
     CUSTOMER = "CUSTOMER"
     EMPLOYEE = "EMPLOYEE"
     STUDENT = "STUDENT"
+    REPORT = "REPORT"
 
 
 class AIResponse:
@@ -37,6 +38,7 @@ _AGENT_KEY_MAP: dict[AgentType, str] = {
     AgentType.CUSTOMER: settings.DIFY_CUSTOMER_AGENT_KEY,
     AgentType.EMPLOYEE: settings.DIFY_EMPLOYEE_AGENT_KEY,
     AgentType.STUDENT: settings.DIFY_STUDENT_AGENT_KEY,
+    AgentType.REPORT: settings.DIFY_REPORT_AGENT_KEY,
 }
 
 _TIMEOUT = 60.0
