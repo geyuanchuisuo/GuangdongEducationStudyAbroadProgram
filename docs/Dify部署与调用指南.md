@@ -170,7 +170,7 @@ DIFY_INIT_AUTO_BIND_MODEL=true       # 自动为所有应用绑定模型
 | `DIFY_BASE_URL` | ✅ | `http://localhost:8081` | Dify Service API 地址。Docker 容器内由 compose 覆盖为 `http://dify_nginx` |
 | `DIFY_VERSION` | ✅ | `1.16.0-rc1` | Dify 版本号 |
 | `DIFY_API_PROTOCOL` | ✅ | `openai` | API 协议 |
-| `DIFY_STUDENT_AGENT_KEY` | 按需 | 空 | 留学生智能管家 Agent 的 app key，从 `dify/docker/app_keys.txt` 复制 |
+| `DIFY_STUDENT_AGENT_KEY` | 按需 | 空 | 留学生智能管家 Agent 的 app key，由 dify-init 写入 `dify_app_keys` 共享卷，backend 启动时自动加载（无需手动回填） |
 | `DIFY_EMPLOYEE_AGENT_KEY` | 按需 | 空 | 企业员工助手 Agent 的 app key |
 | `DIFY_CUSTOMER_AGENT_KEY` | 按需 | 空 | 粤教客服 Agent 的 app key |
 | `DIFY_REPORT_AGENT_KEY` | 按需 | 空 | 智能报告 Agent 的 app key（v6.11.11 起支持，报告 AI 分析用；留空则报告 AI 恒 `unavailable`） |

@@ -6,11 +6,13 @@
 
 ## 零、快速定位（打开项目先看这里）
 
+> v6.11.16（2026-10-19，longtrying_test）：**第十二次同步 gitea/master→longtrying_test**——Dify 核心全部以本线为准（v6.11.14 十项契约适配 + v6.11.15 加固）；M0 共享卷机制并入（`dify_app_keys` 卷，backend 启动自动加载 app_keys.env，dify_init.py 适配 APP_KEY_ENV_MAP 输出 shell env 格式）+ 根 `.env.example` 新增 + `dify/docker/.env` 改不入库；M2 意图码归一 + FAQ 缴费口径 + M5 投诉域 import 缺陷修复 + 种子 INTENT_TYPES 9 码归一经批准并入；解 13 冲突；pytest **164/164**；详见更新记录 v6.11.16 merge 条目与 LOG-075。
+>
 > v6.11.17（2026-10-19，ZNBG/M5）：**production 投诉域静默清零缺陷修复**——`report_data_source.py` 漏 import `ComplaintReportInput`（v6.11.0 引入），调用处 NameError 被 v6.9.6 逐行容错当脏行静默吞掉、报告仍 completed → production 任意含工单周期投诉指标恒 0（本库 105 行全跳过；mock 不受影响）；补 import + 防回退用例后实测 orders_total 0→9 / new_count 6 / analyzed_count 8；回归 compileall + pytest 158/158 + Docker E2E 81/81 + production 冒烟 7/7；详见更新记录 v6.11.17 与 LOG-074（ZNBG）。
 >
 > v6.11.18（2026-10-19，anhoa）：**第十五次同步 origin/master**——M0 公共模块 10 项变更（Dify 共享卷/迁移006/种子补齐/投诉域修复等）经用户批准并入，解 8 冲突；无 M1/M2 业务逻辑变更；回归 compileall + verify_all 29/29 + pytest 164/164 + 前端 build ✅；详见更新记录「merge 第十五次同步」与 LOG-069。
 
-> v6.11.16（2026-10-19）：Dify 1.16 首启脚本修正到 `/console/api/*` 并使用 cookie/CSRF 登录，补入智能报告 app key 映射；Agnes 模型配置仅保存在忽略的 `dify/docker/.env`。Dify API/Postgres/Redis/Sandbox 健康且管理员已创建，但 OpenAI 兼容插件和 DSL 依赖需访问 Marketplace；当前本机及容器均收到 403，dify-init 停在供应商配置，app keys 尚未生成。详见更新记录 v6.11.16、LOG-073。
+> v6.11.16（2026-10-19，ZNBG 线，与本线 v6.11.16 同号异义）：Dify 1.16 首启脚本修正到 `/console/api/*` 并使用 cookie/CSRF 登录，补入智能报告 app key 映射；Agnes 模型配置仅保存在忽略的 `dify/docker/.env`。Dify API/Postgres/Redis/Sandbox 健康且管理员已创建，但 OpenAI 兼容插件和 DSL 依赖需访问 Marketplace；当前本机及容器均收到 403，dify-init 停在供应商配置，app keys 尚未生成。详见更新记录 v6.11.16、LOG-073。
 
 > v6.11.15（2026-10-19）：Dify 首启阻塞修复——根 `.env.example` 启用默认 PostgreSQL/Weaviate profiles；Dify Redis 使用独立服务名；backend 只读挂载 `dify_app_keys`；init_permissions 首启生成 sandbox 配置和依赖清单；Dify 示例移除可选空值并统一控制台 8081。本地 `.env` 保留但不跟踪。当前模型三项未配置，dify-init 尚未完成。详见更新记录 v6.11.15 与 LOG-073。
 
@@ -455,7 +457,7 @@ cp .env.example .env
 #   REDIS_URL - Redis连接地址
 #   SECRET_KEY - JWT密钥（请用随机字符串）
 #   DIFY_BASE_URL - Dify API 地址（v6.11.6 起一体化打包：本机 http://localhost:8081，容器内由 compose 覆盖为 http://dify_nginx）
-#   DIFY_*_AGENT_KEY - 各Agent的API Key（app-开头；dify-init 启动时自动创建应用并输出到 dify/docker/app_keys.txt，复制回填即可）
+#   DIFY_*_AGENT_KEY - 各Agent的API Key（app-开头；dify-init 启动时自动创建应用并写入 dify_app_keys 共享卷，backend 启动时自动加载，无需手动回填）
 #   STORAGE_BACKEND - 文件存储后端：local（默认，本地磁盘）/ s3（MinIO，二期可选）
 ```
 
@@ -590,7 +592,7 @@ docker volume inspect guangdongeducationstudyabroadprogram_backend_storage
 | `REDIS_URL` | backend/.env、docker-compose.yml | 你本机 Redis 地址 | - |
 | `SECRET_KEY` | backend/.env | 随机字符串（自行生成） | 沿用仓库示例值上线 |
 | `DIFY_BASE_URL` | backend/.env、docker-compose.yml | **本机：`http://localhost:8081`；Docker 容器内：`http://dify_nginx`**（v6.11.6 起 Dify 一体化打包，勿再用 host.docker.internal/3000/旧内网 IP） | ❌ 写成其他成员的内网 IP（如 192.168.x.x）或旧 VM 地址——你的机器上必不通 |
-| `DIFY_*_AGENT_KEY` | backend/.env（不入库，.env 已 gitignore） | dify-init 自动输出到 `dify/docker/app_keys.txt`，复制四个业务 Agent key 回填 | 直接用别人的 key（对方撤销后全体失效） |
+| `DIFY_*_AGENT_KEY` | `dify_app_keys` 共享卷（dify-init 自动写入，backend 只读挂载自动加载） | 无需手动回填；本地非 Docker 调试时才需在 backend/.env 手动填写 | 直接用别人的 key（对方撤销后全体失效） |
 | `DIFY_MODEL_API_KEY` / `DIFY_MODEL_BASE_URL` / `DIFY_MODEL_NAME` | dify/docker/.env（模型供应商） | 你自己的模型配置（任一 OpenAI-API-compatible 服务，key/url/模型名全部客户自定义，**三项默认全空、不绑定任何特定模型**），dify-init 自动配供应商 | 任一项填错/留空 → dify-init 失败，backend 不启动 |
 | `STORAGE_BACKEND` | backend/.env、docker-compose.yml | 一期默认 `local` | - |
 | `VITE_API_BASE_URL` | frontend/.env | 本机 `http://localhost:8000/api/v1`；生产构建用相对路径 `/api/v1`（.env.production 已配） | 指到别人的机器 |
@@ -622,7 +624,7 @@ DIFY_API_PROTOCOL=openai
 DIFY_STUDENT_AGENT_KEY=app-xxx
 DIFY_EMPLOYEE_AGENT_KEY=app-yyy
 DIFY_CUSTOMER_AGENT_KEY=app-zzz
-# 三个 key 来源：dify-init 输出的 dify/docker/app_keys.txt（勿提交）
+# key 来源：dify-init 自动写入 dify_app_keys 共享卷，backend 容器启动时自动加载（无需手动填写；此处仅为本地非 Docker 调试时手动配置用）
 
 # 直连模型降级（可选）：Dify Agent 不可用时直连 OpenAI-API-compatible 模型兜底
 # 三项默认全空（不绑定任何特定模型），启用时由客户自定义填写
@@ -739,7 +741,7 @@ chore: 构建
 
 检查：
 1. DIFY_BASE_URL是否正确（本机 `http://localhost:8081`；容器内 `http://dify_nginx`。v6.11.6 起 Dify 一体化打包，**不是 3000、不是 host.docker.internal、不是旧内网 IP**）
-2. API Key是否正确（app-开头；dify-init 输出在 `dify/docker/app_keys.txt`，复制回填 backend/.env 后重启 backend）
+2. API Key是否正确（app-开头；dify-init 自动写入 `dify_app_keys` 共享卷，backend 启动时自动加载——若怀疑 key 未生效，执行 `docker compose up dify-init` 重跑后 `docker compose restart backend`）
 3. Agent应用是否已发布（`docker compose logs dify-init` 看导入/绑定是否成功）
 4. 网络是否可达（容器内验证：docker exec edu-backend python -c "import socket;socket.create_connection(('dify_nginx',80))"）
 5. Key 未配置/AI 不可用时系统自动降级：agent/chat 返回能力清单话术，commands/parse 走本地规则兜底（source=local），不阻断业务
