@@ -15,6 +15,8 @@
 > v6.11.20（2026-10-19，anhoa）：**客服工作流骨架版恢复完整版——修复重复答案+偶发 50001**——Dify 实跑 v6.11.4 引入的 3.7KB 骨架版（无分类器）致回复漂移重复；经控制台 API 导入用户原始完整版（7 类分类器+7 分支 LLM，模型全替换 mimo-v2.6-flash，8 个失效知识检索节点剥离待知识库重建，分类器 `enable_thinking:false` + max_tokens 4096 防 reasoning 思考块截断）；全意图回归 7/7 + verify_all 29/29；详见更新记录 v6.11.20 与 LOG-076（anhoa）。
 >
 > v6.11.21（2026-10-19，anhoa）：**FAQ 知识库重建+检索节点挂回**——Dify 知识库是实例级资源不随 DSL 迁移，本机重建「FAQ知识库」（economy 关键词索引，37 条），kr_6 挂回 FAQ 分支并恢复 llm_6 context；实测 1.16 economy 检索三路径全瘫（keyword_search 500 / full_text 中文 0 命中 / semantic 需 embedding），精准回答主走 llm_6 内嵌速查表，端到端 6 问全对；详见更新记录 v6.11.21 与 LOG-077（anhoa）。
+>
+> v6.11.22（2026-10-19，anhoa）：**多轮 [intent:] 标记全剥离修复+「重复答案」排查闭环**——排查「还是只重复回答一个答案」：链路分层验证（后端直连/Dify 直连/vite 代理空载）均正常，所见重复文案实为前端 AgentDock 固定兜底（v6.11.21 发布+压测维护窗口致超时/空回答触发）；顺手修复多轮标记泄漏——Dify 会话历史含原始标记致模型模仿输出多个 [intent:]，`_extract_intent` 由剥首个改为 `INTENT_RE.sub` 全剥离；3 轮实测回答各异、意图正确、marker_leaked=False×3；详见更新记录 v6.11.22 与 LOG-078（anhoa）。
 
 > v6.11.16（2026-10-19）：Dify 1.16 首启脚本修正到 `/console/api/*` 并使用 cookie/CSRF 登录，补入智能报告 app key 映射；Agnes 模型配置仅保存在忽略的 `dify/docker/.env`。Dify API/Postgres/Redis/Sandbox 健康且管理员已创建，但 OpenAI 兼容插件和 DSL 依赖需访问 Marketplace；当前本机及容器均收到 403，dify-init 停在供应商配置，app keys 尚未生成。详见更新记录 v6.11.16、LOG-073。
 

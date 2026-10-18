@@ -367,11 +367,12 @@ class AiService:
 
     @staticmethod
     def _extract_intent(answer: str) -> tuple[str, str | None]:
-        match = INTENT_RE.search(answer)
-        if not match:
+        # 多轮时模型会模仿 Dify 历史中的原始标记而输出多个 [intent:]，取首个为意图、全部剥离（v6.11.22）
+        matches = list(INTENT_RE.finditer(answer))
+        if not matches:
             return answer, None
-        cleaned = (answer[: match.start()] + answer[match.end() :]).strip()
-        return cleaned, match.group(1).strip()
+        cleaned = INTENT_RE.sub("", answer).strip()
+        return cleaned, matches[0].group(1).strip()
 
     @staticmethod
     def _extract_recommendations(answer: str) -> tuple[str, list[dict] | None]:
