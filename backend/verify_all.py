@@ -17,7 +17,7 @@ def test(name, fn):
 
 # ===== Suite 1: 34 tables =====
 print('=' * 60)
-print('Suite 1: Model Import (32 tables)')
+print('Suite 1: Model Import (34 tables)')
 print('=' * 60)
 
 from app.models import Base
