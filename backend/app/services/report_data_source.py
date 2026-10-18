@@ -17,10 +17,10 @@ from datetime import date, datetime
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.crm import CustomerAssessment
+from app.models.crm import CustomerAssessment, TicketAIAnalysis
 from app.models.customer import Customer
 from app.models.employee import EmployeeDailyReport
-from app.models.student import StudentPsychAlert, StudentPsychProfile
+from app.models.student import StudentFeedbackTicket, StudentPsychAlert, StudentPsychProfile
 from app.models.user import User
 from app.schemas.report import (
     CustomerReportInput,
@@ -43,14 +43,15 @@ class DomainResult:
     status: str                      # ok / empty / read_failed / data_unavailable
     note: str = ""
     inputs: list = field(default_factory=list)
+    # v6.11.0：本域中「取不到、已标不可得」的字段名，写进报告 data_quality_detail
+    unavailable_fields: list[str] = field(default_factory=list)
 
 
-# 画像 4→3 映射（M5-03.4，保守默认，正式映射待业务拍板——见 docs/M5_字段映射表.md 待确认列）
-_PROFILE_4_TO_3 = {
+# 画像四类映射（v6.11.0 需求确认 §2.3：四类独立）
+_PROFILE_MAP = {
     "matched": "符合",
+    "partial": "部分符合",
     "not_matched": "不符合",
-    # partial / pending / 未知值一律归"信息不足"并标注，不擅自给业务结论
-    "partial": "信息不足",
     "pending": "信息不足",
 }
 
@@ -58,7 +59,7 @@ _PROFILE_4_TO_3 = {
 def _map_profile(conclusion: str | None) -> str | None:
     if conclusion is None:
         return None
-    return _PROFILE_4_TO_3.get(conclusion, "信息不足")
+    return _PROFILE_MAP.get(conclusion, "信息不足")
 
 
 def _status_source(c: Customer, status_code: str | None) -> str | None:
@@ -90,10 +91,15 @@ def normalize_customer_status(raw: str | None) -> str | None:
 
 
 async def fetch_customers(db: AsyncSession, start: datetime, end: datetime) -> DomainResult:
-    """客户经营输入：customer 主表 + 最新有效研判（两表分别查询，内存拼接，不 JOIN）。
+    """客户经营输入：customer 主表 + 周期末前最新有效研判（两表分别查询，内存拼接，不 JOIN）。
 
-    逐行容错（M5-10.7）：单行状态值/字段异常只跳过该行并计入口径说明，
-    不允许一行脏数据把 5 类报告全部打成 500。
+    v6.11.0 口径（需求确认 §2.3/§六）：
+    - **期末状态不可得**：M1 尚无历史时点状态能力，禁止用当前值冒充周期末值 →
+      `status_at_period_end` 置 None，由计算器把依赖状态的指标标「数据不可得」；
+    - **研判按时点过滤**：只用 `created_at < 周期末` 的研判（周期后产生的研判不用于该周期）；
+    - 逐行容错：单行字段异常只跳过该行并计入口径说明，不允许拖垮整份报告。
+
+    注：本期仍直读 M1 表（规范要求走模块接口，受上游接口阻塞，见 docs/M5_上游接口契约.md）。
     """
     try:
         custs = (await db.execute(select(Customer).where(Customer.phone.isnot(None)))).scalars().all()
@@ -110,16 +116,14 @@ async def fetch_customers(db: AsyncSession, start: datetime, end: datetime) -> D
 
     latest_assess: dict[int, CustomerAssessment] = {}
     for a in assess_rows:  # id 倒序 → 首见即最新
+        if a.created_at is not None and a.created_at >= end:
+            continue  # 周期后产生的研判不用于该周期
         latest_assess.setdefault(a.customer_id, a)
 
     inputs: list[CustomerReportInput] = []
     skipped: list[str] = []
     for c in custs:
         a = latest_assess.get(c.id)
-        status_code = normalize_customer_status(c.status)
-        if status_code is None:
-            skipped.append(f"id={c.id} status={c.status!r}")
-            continue
         try:
             inputs.append(CustomerReportInput(
                 customer_id=c.id,
@@ -128,24 +132,34 @@ async def fetch_customers(db: AsyncSession, start: datetime, end: datetime) -> D
                 source_channel=c.source_channel or "",
                 first_register_login_at=c.first_register_at,
                 first_employee_submit_at=c.first_submit_at,
-                status_at_period_end=status_code,
-                status_source=_status_source(c, status_code),
+                # 不可得：不用当前值冒充周期末状态
+                status_at_period_end=None,
+                status_source=None,
                 reflowed=c.reflowed_at is not None,
                 latest_assessment_at=a.created_at if a else None,
                 sg_conclusion=_map_profile(a.sg_conclusion) if a else None,
                 de_conclusion=_map_profile(a.de_conclusion) if a else None,
                 owner_employee_id=c.owner_employee_id,
-                follow_up_summary=None,  # 跟进摘要未纳入（见字段映射表：待确认是否需要）
+                follow_up_summary=None,  # 跟进摘要一期不取（见字段映射表）
             ))
         except Exception as exc:  # noqa: BLE001 — 单行不合规不阻断整份报告
             skipped.append(f"id={c.id} {type(exc).__name__}")
             logger.warning("M5 客户行跳过: customer_id=%s error=%s", c.id, exc)
+
     status = "ok" if inputs else "empty"
-    note = f"客户域：读取 {len(inputs)} 条有效客户（手机号非空）；最新有效研判 {len(latest_assess)} 条"
+    note = (f"客户域：读取 {len(inputs)} 条有效客户（手机号非空）；"
+            f"周期末前有效研判 {len(latest_assess)} 条")
+    note += ("；期末状态：不可得（M1 无历史时点能力，不用当前值冒充周期末值，"
+             "依赖状态的指标标「数据不可得」）")
     if skipped:
-        note += (f"；跳过 {len(skipped)} 行状态/字段不合规"
+        note += (f"；跳过 {len(skipped)} 行字段不合规"
                  f"（示例：{', '.join(skipped[:3])}）")
-    return DomainResult(status=status, note=note, inputs=inputs)
+    return DomainResult(
+        status=status,
+        note=note,
+        inputs=inputs,
+        unavailable_fields=["status_at_period_end"],
+    )
 
 
 async def fetch_employees_and_daily_reports(
@@ -239,29 +253,143 @@ async def fetch_psych(db: AsyncSession, start: datetime, end: datetime) -> Domai
             d["profile"] = p
         d["times"].append(p.last_interaction_time)
 
+    # v6.11.0 §2.5：心理个案授权后可见身份/联系方式 → 只读 sys_user 最小字段
+    user_map: dict[int, tuple[str | None, str | None]] = {}
+    try:
+        ids = list(agg.keys())
+        if ids:
+            rows = (await db.execute(
+                select(User.id, User.real_name, User.phone).where(User.id.in_(ids))
+            )).all()
+            user_map = {r[0]: (r[1], r[2]) for r in rows}
+    except Exception as exc:  # noqa: BLE001 — 身份字段失败不影响统计
+        logger.warning("M5 心理域身份字段读取失败: %s", exc)
+
     inputs: list[PsychReportInput] = []
     for sid, d in agg.items():
         alert, profile = d["alert"], d["profile"]
+        name, phone = user_map.get(sid, (None, None))
         inputs.append(PsychReportInput(
             student_id=sid,
             record_at=max(t for t in d["times"] if t is not None),
             emotion_tag=profile.latest_emotion_tag if profile else None,
             risk_level=(alert.risk_level if alert and alert.risk_level in ("高", "中", "低") else None),
-            feedback_summary=None,  # 预警原文不进报告（脱敏）
+            feedback_summary=(alert.trigger_reason if alert and alert.trigger_reason else None),
+            feedback_raw=(alert.trigger_reason if alert and alert.trigger_reason else None),
             responsible_employee_id=alert.teacher_id if alert else None,
+            student_name=name,
+            student_contact=phone,
         ))
     status = "ok" if inputs else "empty"
     note = (f"心理域：周期内预警 {len(alert_rows)} 条 + 画像交互 {len(profile_rows)} 条，"
-            f"按学生聚合 {len(inputs)} 人；负责员工仅预警记录有（teacher_id），画像记录缺该字段")
-    return DomainResult(status=status, note=note, inputs=inputs)
+            f"按学生聚合 {len(inputs)} 人；负责员工仅预警记录有（teacher_id），"
+            f"身份/联系方式来自 sys_user（{len(user_map)} 人可解析）")
+    unavailable = []
+    if not any(i.responsible_employee_id for i in inputs):
+        unavailable.append("responsible_employee_id")
+    return DomainResult(status=status, note=note, inputs=inputs, unavailable_fields=unavailable)
+
+
+_TICKET_STATUS_RESOLVED = {"已解决", "已关闭", "resolved", "closed"}
 
 
 async def fetch_complaints(db: AsyncSession, start: datetime, end: datetime) -> DomainResult:
-    """投诉域：M5-03.1 阻塞项——工单表缺 9 个报告字段，明确不可得，不伪造。"""
+    """投诉域（v6.11.0 §2.6 部分可用口径）。
+
+    M4 工单表目前只有 content/detail/status/时间，缺「学生所选类型、首次响应时间、
+    解决时间、满意度、负责人、处理过程、AI 字段」。按「部分生成 + 标不可得」原则：
+    - 可读字段照常读（原文、提交时间、状态、解决时间）；
+    - 缺的字段标不可得，不填零、不推测；
+    - AI 分析来自 M5 自建的 ticket_ai_analysis（不改 M4 表），无成功记录即「待分析」。
+    """
+    try:
+        tickets = (await db.execute(select(StudentFeedbackTicket))).scalars().all()
+        analyses = (
+            await db.execute(select(TicketAIAnalysis).order_by(TicketAIAnalysis.id.desc()))
+        ).scalars().all()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("M5 投诉域读取失败: %s", exc)
+        raise DomainReadError(f"投诉数据读取失败: {exc}") from exc
+
+    latest_analysis: dict[int, TicketAIAnalysis] = {}
+    for a in analyses:  # id 倒序 → 首见即最近一次
+        latest_analysis.setdefault(a.ticket_id, a)
+
+    # v6.11.0 §2.6：特别案例允许完整详情 → 需要学生身份/联系方式（只读 sys_user 最小字段）
+    user_map: dict[int, tuple[str | None, str | None]] = {}
+    try:
+        sids = list({t.student_id for t in tickets})
+        if sids:
+            rows = (await db.execute(
+                select(User.id, User.real_name, User.phone).where(User.id.in_(sids))
+            )).all()
+            user_map = {r[0]: (r[1], r[2]) for r in rows}
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("M5 投诉域身份字段读取失败: %s", exc)
+
+    inputs: list[ComplaintReportInput] = []
+    skipped: list[str] = []
+    for t in tickets:
+        created = t.create_time
+        if created is None:
+            skipped.append(f"id={t.id} 无创建时间")
+            continue
+        a = latest_analysis.get(t.id)
+        succeeded = a is not None and a.status == "succeeded"
+        category = a.category if succeeded and a.category in ("投诉", "建议", "咨询") else None
+        resolved = (t.status or "") in _TICKET_STATUS_RESOLVED
+        sname, sphone = user_map.get(t.student_id, (None, None))
+        try:
+            inputs.append(ComplaintReportInput(
+                ticket_id=t.id,
+                student_id=t.student_id,
+                # 类型来源：有 AI 分类则标 ai，否则 unknown（学生所选类型字段 M4 未落库）
+                feedback_type=category or "投诉",
+                category_source="ai" if category else "unknown",
+                submitted_at=created,
+                # M4 未记录首次响应时间 → 不可得
+                first_response_at=None,
+                resolved_at=t.update_time if resolved else None,
+                status="resolved" if resolved else "open",
+                # 满意度只取学生明确评价；M4 未落库 → 一律「未评价」，不推测
+                satisfaction="未评价",
+                ai_low_score=bool(a.low_satisfaction_candidate) if succeeded else False,
+                ai_high_risk=bool(a.high_risk) if succeeded else False,
+                review_status="pending",
+                owner_id=None,
+                progress=None,
+                analysis_status=(
+                    "analyzed" if succeeded else ("failed" if a is not None and a.status == "failed" else "pending")
+                ),
+                analysis_record_id=a.id if a else None,
+                ai_summary=a.summary if succeeded else None,
+                content=t.content,
+                detail=t.detail,
+                student_name=sname,
+                student_contact=sphone,
+            ))
+        except Exception as exc:  # noqa: BLE001
+            skipped.append(f"id={t.id} {type(exc).__name__}")
+            logger.warning("M5 投诉行跳过: ticket_id=%s error=%s", t.id, exc)
+
+    unavailable = [
+        "feedback_type(学生所选)",
+        "first_response_at",
+        "satisfaction",
+        "owner_id",
+        "progress",
+    ]
+    note = (
+        f"投诉域：读取工单 {len(inputs)} 条；其中已 AI 分析 "
+        f"{sum(1 for x in inputs if x.analysis_status == 'analyzed')} 条、"
+        f"待分析 {sum(1 for x in inputs if x.analysis_status != 'analyzed')} 条；"
+        f"不可得字段：{('、'.join(unavailable))}（M4 未落库，等对应负责人）"
+    )
+    if skipped:
+        note += f"；跳过 {len(skipped)} 行（示例：{', '.join(skipped[:3])}）"
     return DomainResult(
-        status="data_unavailable",
-        note="投诉域：数据不可得——student_feedback_ticket 缺 9 个报告字段"
-             "（feedback_type/first_response_at/resolved_at/满意度/review_status/"
-             "ai_high_risk/ai_low_score/owner_id/progress），需 M4 落库后开放（见字段映射表）",
-        inputs=[],
+        status="ok" if inputs else "empty",
+        note=note,
+        inputs=inputs,
+        unavailable_fields=unavailable,
     )

@@ -59,10 +59,15 @@ def build_report_content(
     generated_at: datetime,
     data_quality: dict | None = None,
     extra_notes: list[str] | None = None,
+    unavailable: dict | None = None,
+    comparison: dict | None = None,
+    sections: dict | None = None,
 ) -> dict:
     """组装统一报告内容。summary / trend / analysis / suggestions 由阶段 5 AI 填充。
 
     data_quality（M5-02.5 三态）：各数据域 ok/empty/read_failed/data_unavailable 如实标注；
+    unavailable（v6.11.0）：各域中已标「数据不可得」的具体字段，供前端显示状态徽标；
+    comparison（v6.11.0 §2.3）：客户月报的上一周期对比，不可比时显式标 unavailable；
     extra_notes：生产模式下各数据域的取数说明，追加到口径说明之后。
     """
     data_source_status = "production" if not ds.is_mock else "mock"
@@ -89,4 +94,10 @@ def build_report_content(
     }
     if data_quality is not None:
         content["data_quality"] = data_quality
+    if unavailable:
+        content["data_unavailable"] = unavailable
+    if comparison is not None:
+        content["comparison"] = comparison
+    if sections:
+        content.update(sections)
     return content

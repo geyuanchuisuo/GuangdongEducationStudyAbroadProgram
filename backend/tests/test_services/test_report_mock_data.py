@@ -75,13 +75,13 @@ def test_customer_scenarios():
     lost = [c for c in cs if c.status_at_period_end == "LOST"]
     assert {c.status_source for c in lost} == {"auto", "manual"}
 
-    # 场景：无研判结果 -> sg/de 为 None（后续归信息不足并标注未完成研判）
+    # 场景：无研判结果 -> sg/de 为 None（v6.11.0：无研判不补值、不计入分母）
     assert any(c.sg_conclusion is None and c.de_conclusion is None for c in cs)
 
-    # 场景：画像三分类均有样本
+    # 场景：画像四分类均有样本（v6.11.0 §2.3）
     for attr in ("sg_conclusion", "de_conclusion"):
         vals = {getattr(c, attr) for c in cs if getattr(c, attr) is not None}
-        assert vals == {"符合", "不符合", "信息不足"}
+        assert vals == {"符合", "部分符合", "不符合", "信息不足"}
 
 
 def test_employee_scenarios():
@@ -122,10 +122,13 @@ def test_complaint_scenarios():
     ds = build_mock_dataset()
     ts = ds.complaints
 
-    # 场景：投诉/建议/咨询混合，只有"投诉"计入
+    # 场景：投诉/建议/咨询混合，只有"投诉"计入（v6.11.0 增加 1 条待分析工单 t11）
     complaints = [t for t in ts if t.feedback_type == "投诉"]
-    assert len(ts) == 10
-    assert len(complaints) == 8
+    assert len(ts) == 11
+    assert len(complaints) == 9
+    # 待分析工单用于演示「只计工单总量、不进 AI 指标」
+    assert any(t.analysis_status == "pending" for t in ts)
+    assert any(t.analysis_status == "analyzed" for t in ts)
 
     # 场景：已响应 / 未响应均有
     assert any(t.first_response_at is not None for t in complaints)
@@ -146,7 +149,7 @@ def test_complaint_scenarios():
     # 场景：满意度 满意/不满意/未评价 均有
     assert {t.satisfaction for t in complaints} == {"满意", "不满意", "未评价"}
 
-    # 场景：AI 候选未复核不展示；复核通过才成为特别案例
-    pending = [t for t in complaints if t.ai_high_risk and t.review_status == "pending"]
-    approved = [t for t in complaints if t.ai_high_risk and t.review_status == "approved"]
-    assert pending and approved
+    # 场景：v6.11.0 一期 AI 判定（无人工复核）→ 高风险即特别案例，且带 AI 归纳理由
+    high_risk = [t for t in complaints if t.ai_high_risk and t.analysis_status == "analyzed"]
+    assert len(high_risk) >= 2
+    assert all(t.ai_summary for t in high_risk)

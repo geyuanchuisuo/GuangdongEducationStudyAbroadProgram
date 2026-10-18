@@ -43,7 +43,7 @@ services:
       STORAGE_BACKEND: local
       STORAGE_LOCAL_DIR: /app/storage_data
       # 容器内 localhost 指向自身，需经 host.docker.internal 回宿主机 80 端口访问 Dify nginx（/v1 → api:5001）
-      DIFY_BASE_URL: http://host.docker.internal
+      DIFY_BASE_URL: http://192.168.184.128
     ports:
       - "8000:8000"
     depends_on:

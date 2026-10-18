@@ -63,8 +63,11 @@ def test_customer_stats():
     assert r["new_this_period"] == 9
     assert r["new_outcomes"] == {"intent": 5, "signed": 1, "enrolled": 1, "lost": 2}
 
-    assert r["profiles"]["sg_conclusion"] == {"符合": 4, "不符合": 1, "信息不足": 1}
-    assert r["profiles"]["de_conclusion"] == {"符合": 3, "不符合": 1, "信息不足": 2}
+    # v6.11.0：画像四类独立；分母只计周期末有有效研判的意向客户（无研判不补值）
+    assert r["profiles"]["sg_conclusion"] == {"符合": 3, "部分符合": 1, "不符合": 1, "信息不足": 1}
+    assert r["profiles"]["de_conclusion"] == {"符合": 3, "部分符合": 1, "不符合": 1, "信息不足": 1}
+    assert r["profile_denominator"] == {"sg_conclusion": 6, "de_conclusion": 6}
+    assert r["availability"] == {"status": "ok", "profiles": "ok"}
 
 
 # ── 员工日报 / 周报 ───────────────────────────────────────
@@ -110,13 +113,21 @@ def test_complaint_stats():
     ds = build_mock_dataset()
     r = calculate_complaint_stats(ds.complaints, PERIOD_START, PERIOD_END)
 
+    # v6.11.0：工单总量/待分析单列；投诉与 AI 指标只算「已分析 + 来源可信」
+    assert r["orders_total"] == 9           # 周期内工单（t3/t8 早于周期起点，不计本期）
+    assert r["pending_analysis"] == 1       # t11 待分析
+    assert r["analyzed_count"] == 8
     assert r["new_count"] == 6              # t1/t2/t4/t7/t9/t10
     assert r["resolved_in_period"] == 2     # t1(10-14)、t7(10-16)
-    assert r["open_count"] == 6
+    assert r["open_count"] == 6             # 含跨期仍未解决的 t3/t8
     assert r["over7_unresolved"] == 2       # t3(10-06)、t8(10-11 23:59)，恰好 7 天不算
-    assert r["first_response_count"] == 5
-    assert r["not_responded_count"] == 3
-    assert r["avg_first_response_seconds"] == 5040.0   # (7200+7200+3600+3600+3600)/5
+    assert r["first_response_count"] == 4   # 本期投诉中 t1/t7/t9/t10
+    assert r["not_responded_count"] == 2    # t2/t4
+    assert r["avg_first_response_seconds"] == 4500.0   # (7200+3600+3600+3600)/4
     assert r["max_first_response_seconds"] == 7200.0
-    assert r["satisfaction"] == {"满意": 1, "不满意": 1, "未评价": 6}
-    assert r["special_cases"] == 1          # 仅 t10 复核通过
+    assert r["satisfaction"] == {"满意": 1, "不满意": 1, "未评价": 4}
+    # v6.11.0：一期 AI 判定（无需人工复核）→ t9/t10 都是特别案例
+    assert r["special_cases"] == 2
+    assert r["low_satisfaction_candidates"] == 1
+    assert r["high_risk_candidates"] == 2
+    assert r["availability"]["ai_analysis"] == "partial"  # 有 1 条待分析

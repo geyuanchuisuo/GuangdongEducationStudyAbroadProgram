@@ -57,3 +57,18 @@ class ReportRepository:
         items = list(latest.values())
         total = len(items)
         return items[(page - 1) * page_size: page * page_size], total
+
+    async def list_versions(
+        self, report_type: str, period_start, period_end
+    ) -> list[AiReport]:
+        """同类型同周期的全部历史版本（v6.11.0 §2.1：历史版本可查、不覆盖）。"""
+        stmt = (
+            select(AiReport)
+            .where(
+                AiReport.report_type == report_type,
+                AiReport.time_range_start == period_start,
+                AiReport.time_range_end == period_end,
+            )
+            .order_by(AiReport.version.desc(), AiReport.id.desc())
+        )
+        return list((await self.db.execute(stmt)).scalars().all())

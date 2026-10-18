@@ -14,7 +14,7 @@ from app.repositories.report_repo import ReportRepository
 from app.services import report_service as rs_module
 from app.services.report_ai_service import ReportAIService
 from app.services.report_calculator import calculate_complaint_stats
-from app.services.report_drilldown import special_cases_drilldown
+from app.services.report_drilldown import special_cases_snapshot
 from app.services.report_mock_data import PERIOD_END, PERIOD_START, build_mock_dataset
 
 
@@ -65,7 +65,7 @@ async def test_generate_records_ai_status_and_mock_source(svc_db):
 @pytest.mark.asyncio
 async def test_ai_degradation_marks_unavailable(svc_db):
     class _DownAI(ReportAIService):
-        async def analyze(self, report_type, metrics):
+        async def analyze(self, report_type, metrics, context=None):
             return None  # 模拟 AI 不可用
 
     svc = rs_module.ReportService(ReportRepository(svc_db), ai=_DownAI())
@@ -94,8 +94,8 @@ async def test_generate_with_explicit_past_period(svc_db):
 def test_special_cases_cross_consistency():
     ds = build_mock_dataset()
     m = calculate_complaint_stats(ds.complaints, PERIOD_START, PERIOD_END)
-    items = special_cases_drilldown(ds)
-    assert m["special_cases"] == len(items) == 1  # 同一 is_special_case 判定
+    items = special_cases_snapshot(ds)
+    assert m["special_cases"] == len(items) == 2  # 同一 is_special_case 判定（t9/t10）
 
 
 # ── M5-10.6 PDF 内容结构无个人字段（脱敏结构回归） ───────
@@ -130,6 +130,7 @@ def test_documented_unused_fields_stay_inert():
     c_inert = {"ai_low_score": False}
     ds = build_mock_dataset()
     m = calculate_complaint_stats(ds.complaints, PERIOD_START, PERIOD_END)
-    # ai_low_score 不影响任何指标（特别案例仅看 ai_high_risk + review_status）
-    assert m["special_cases"] == 1
+    # ai_low_score 不参与特别案例判定（v6.11.0：仅看「已分析 + ai_high_risk」）
+    assert m["special_cases"] == 2
+    assert m["low_satisfaction_candidates"] == 1  # 低满意候选单独统计
     assert c_inert["ai_low_score"] is False

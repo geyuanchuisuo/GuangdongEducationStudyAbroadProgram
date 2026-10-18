@@ -28,9 +28,9 @@ def test_validate_rejects_malformed():
 def test_mock_analysis_uses_program_metrics():
     m = _metrics("customer_analysis")
     analysis = _mock_analysis("customer_analysis", m)
-    # 数字来自程序计算，不自行计算
-    assert f"本期新增客户 {m['new_this_period']} 名" in analysis["summary"]
-    assert f"期末意向 {m['status_overview']['intent']} 名" in analysis["summary"]
+    # 数字来自程序计算，不自行计算（v6.11.0 文案：期末客户 / 意向客户）
+    assert f"期末客户 {m['status_overview']['total']} 名" in analysis["summary"]
+    assert f"意向客户 {m['status_overview']['intent']} 名" in analysis["summary"]
 
 
 def test_analyze_returns_valid_or_none():
@@ -39,3 +39,30 @@ def test_analyze_returns_valid_or_none():
         result = asyncio.run(svc.analyze(rt, _metrics(rt)))
         assert result is not None
         assert set(result.keys()) == {"summary", "trend", "analysis", "suggestions"}
+
+
+def test_parse_json_strips_reasoning_and_fence():
+    """真实 Dify 报告 Agent（deepseek 系）会输出 <think> 思考块 + 代码围栏（v6.11.1）。"""
+    from app.services.report_ai_service import _parse_json
+
+    text = (
+        '<think>用户要 JSON，形如 {"summary": ...}，先想想</think>\n'
+        "<!--dify-deepseek-reasoning-->\n"
+        "```json\n"
+        '{"summary": "本期新增客户为9；状态概览不可用。", "trend": null,'
+        ' "analysis": "状态类指标不可得。", "suggestions": ["补充状态概览数据"]}\n'
+        "```"
+    )
+    obj = _parse_json(text)
+    assert obj is not None
+    assert set(obj.keys()) == {"summary", "trend", "analysis", "suggestions"}
+    assert "本期新增客户为9" in obj["summary"]
+
+
+def test_parse_json_ignores_braces_inside_reasoning():
+    from app.services.report_ai_service import _parse_json
+
+    text = '<think>{假装是JSON}</think>{"summary":"a","trend":null,"analysis":"b","suggestions":["c"]}'
+    obj = _parse_json(text)
+    assert obj == {"summary": "a", "trend": None, "analysis": "b", "suggestions": ["c"]}
+    assert _parse_json("抱歉我无法输出") is None

@@ -91,8 +91,9 @@ async def db(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_fetch_customers_normalizes_chinese_and_skips_bad_rows(db):
-    """中文状态正常参与统计；无法识别的状态只跳过该行，不抛异常、不拖垮整篇。"""
+@pytest.mark.asyncio
+async def test_fetch_customers_status_unavailable_but_rows_kept(db):
+    """v6.11.0：期末状态不可得（不用当前值冒充），中文/英文/未知状态都不再影响取数。"""
     db.add_all([
         Customer(id=1, phone="13800000001", name="中文态", status="跟进中",
                  first_register_at=datetime(2026, 10, 13, 9)),
@@ -105,27 +106,20 @@ async def test_fetch_customers_normalizes_chinese_and_skips_bad_rows(db):
 
     res = await fetch_customers(db, PERIOD_START, PERIOD_END)
 
-    by_id = {i.customer_id: i for i in res.inputs}
-    assert set(by_id) == {1, 2}  # 第 3 行被跳过
-    assert by_id[1].status_at_period_end == "FOLLOWING"
-    assert by_id[2].status_at_period_end == "SIGNED"
-    assert "跳过 1 行" in res.note  # 口径说明显式记录跳过
+    # 三行都保留（状态不再参与字面量校验），但期末状态一律 None
+    assert {i.customer_id for i in res.inputs} == {1, 2, 3}
+    assert all(i.status_at_period_end is None for i in res.inputs)
+    assert all(i.status_source is None for i in res.inputs)
+    assert "status_at_period_end" in res.unavailable_fields
     assert res.status == "ok"
 
 
 @pytest.mark.asyncio
-async def test_fetch_customers_lost_source_uses_normalized_status(db):
-    """流失来源判定要基于归一号：中文「已流失」也必须识别为 LOST。"""
-    db.add(Customer(id=4, phone="13800000004", name="流失态", status="已流失",
-                    auto_churned=True, first_register_at=datetime(2026, 10, 13, 9)))
-    await db.commit()
-
-    res = await fetch_customers(db, PERIOD_START, PERIOD_END)
-    item = next(i for i in res.inputs if i.customer_id == 4)
-    assert item.status_at_period_end == "LOST"
-    assert item.status_source == "auto"
-
-
+async def test_status_normalizer_kept_as_defense(db):
+    """接口化后仍保留归一号作防御（上游若返回中文，M5 能自行归一）。"""
+    assert normalize_customer_status("已流失") == "LOST"
+    assert normalize_customer_status("跟进中") == "FOLLOWING"
+    assert normalize_customer_status("SIGNED") == "SIGNED"
 # ── M5-10.9 下钻与报告同源 ────────────────────────────────
 
 
@@ -159,45 +153,40 @@ async def _make_report(db, report_type: str, source: str) -> AiReport:
 
 
 @pytest.mark.asyncio
-async def test_psych_drilldown_uses_production_dataset_for_production_report(
-    svc_db, monkeypatch
-):
-    """production 报告的下钻必须走真实取数，而不是恒用 mock 数据集。"""
+@pytest.mark.asyncio
+async def test_psych_drilldown_reads_snapshot_not_live_data(svc_db, monkeypatch):
+    """v6.11.0 §2.2：下钻只读生成时固化的快照，旧报告不再查实时数据。"""
     report = await _make_report(svc_db, "psych_weekly", "production")
     admin = User(id=1, username="m", password_hash="x", real_name="经理", user_type="MANAGER")
     svc = ReportService(ReportRepository(svc_db))
 
-    prod_ds = build_mock_dataset(PERIOD_START, PERIOD_END)  # 桩数据，仅用于区分来源
-    prod_ds.psych_records = [
-        r for r in prod_ds.psych_records if r.student_id == 1
-    ]
-    calls = {"n": 0}
+    async def _should_not_call(self, report_type, start, end):
+        raise AssertionError("下钻不得再触发实时取数")
 
-    async def _fake_build(self, report_type, start, end):
-        calls["n"] += 1
-        return prod_ds, {"psych": "ok"}, ["stub"]
+    monkeypatch.setattr(ReportService, "_build_production_dataset", _should_not_call)
+    items, note = await svc.psych_cases(report.id, admin)
 
-    monkeypatch.setattr(ReportService, "_build_production_dataset", _fake_build)
-    items = await svc.psych_cases(report.id, admin)
-
-    assert calls["n"] == 1, "production 报告应触发真实取数"
-    assert {i["student_id"] for i in items} == {1}
+    # 该报告由 _make_report 直接插入（无快照）→ 返回空 + 明确提示，不回查实时库
+    assert items == []
+    assert "无下钻快照" in note
 
 
 @pytest.mark.asyncio
-async def test_psych_drilldown_uses_mock_dataset_for_mock_report(svc_db, monkeypatch):
-    """mock 报告仍用模拟数据，不得触发生产取数。"""
-    report = await _make_report(svc_db, "psych_weekly", "mock")
-    admin = User(id=1, username="m", password_hash="x", real_name="经理", user_type="MANAGER")
+async def test_drill_snapshot_written_on_generate(svc_db):
+    """生成报告时写入下钻快照，之后读下钻只读快照。"""
     svc = ReportService(ReportRepository(svc_db))
+    report = await svc.generate("psych_weekly", PERIOD_START, PERIOD_END, user_id=1)
+    from app.models.crm import AiReportDrill
+    from sqlalchemy import select
+    rows = (await svc_db.execute(
+        select(AiReportDrill).where(AiReportDrill.report_id == report.id)
+    )).scalars().all()
+    assert len(rows) == 1 and rows[0].drill_type == "psych_cases"
+    assert rows[0].row_count > 0
 
-    async def _should_not_call(self, report_type, start, end):
-        raise AssertionError("mock 报告不应走生产取数")
-
-    monkeypatch.setattr(ReportService, "_build_production_dataset", _should_not_call)
-    items = await svc.psych_cases(report.id, admin)
-    assert len(items) > 0  # 参考周期的 mock 心理记录
-
+    admin = User(id=1, username="m", password_hash="x", real_name="经理", user_type="MANAGER")
+    items, note = await svc.psych_cases(report.id, admin)
+    assert items and note == ""
 
 @pytest.mark.asyncio
 async def test_customer_drilldown_follows_report_source(svc_db, monkeypatch):

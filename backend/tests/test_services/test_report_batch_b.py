@@ -33,26 +33,28 @@ REF_NOW = datetime(2026, 10, 19, 8, 0, 0)  # 参考周期结束后
 
 def _complaint(**kw) -> ComplaintReportInput:
     base = dict(ticket_id=99, student_id=1, feedback_type="投诉",
+                category_source="student", analysis_status="analyzed",
                 submitted_at=datetime(2026, 10, 13, 9, 0, 0))
     base.update(kw)
     return ComplaintReportInput(**base)
 
 
-def test_special_case_requires_high_risk_and_approved():
-    # 仅复核通过、非 AI 候选 → 不是特别案例（calculator 旧口径的漏判场景）
-    assert is_special_case(_complaint(ai_high_risk=False, review_status="approved")) is False
-    # AI 候选但未复核 → 不是
-    assert is_special_case(_complaint(ai_high_risk=True, review_status="pending")) is False
-    # AI 候选且复核通过 → 是
-    assert is_special_case(_complaint(ai_high_risk=True, review_status="approved")) is True
+def test_special_case_requires_high_risk_and_analysis():
+    # v6.11.0：一期无人工复核，判定只看「已有成功 AI 分析 + AI 高风险」
+    assert is_special_case(_complaint(ai_high_risk=False)) is False
+    # 待分析 → 不算（分析结果不可用，不得当特别案例）
+    assert is_special_case(_complaint(ai_high_risk=True, analysis_status="pending")) is False
+    # 已分析且高风险 → 是
+    assert is_special_case(_complaint(ai_high_risk=True)) is True
 
 
 def test_special_case_count_matches_drilldown_criteria():
-    """calculator 计数与 drilldown 判定同源：approved 但非 AI 候选不进计数。"""
+    """calculator 计数与 drilldown 判定同源：未分析/非 AI 候选都不进计数。"""
     ds = build_mock_dataset()
-    ds.complaints.append(_complaint(ticket_id=20, ai_high_risk=False, review_status="approved"))
+    ds.complaints.append(_complaint(ticket_id=20, ai_high_risk=False))
+    ds.complaints.append(_complaint(ticket_id=21, ai_high_risk=True, analysis_status="pending"))
     m = calculate_complaint_stats(ds.complaints, PERIOD_START, PERIOD_END)
-    assert m["special_cases"] == 1  # 仍只有 t10（t20 非 AI 候选不计数）
+    assert m["special_cases"] == 2  # v6.11.0：t9/t10 均 AI 判定为特别案例
 
 
 # ── M5-04.1 期末状态周期约束 ─────────────────────────────

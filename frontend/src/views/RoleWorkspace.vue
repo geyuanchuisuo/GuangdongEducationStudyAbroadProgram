@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import {
   ArrowRight,
   Delete,
+  Document,
   Download,
   Edit,
   Plus,
@@ -54,6 +55,7 @@ const reportGenerating = ref('')
 const selectedReport = ref<any>(null)
 const detailLoading = ref(false)
 const drill = ref<Record<string, any[]>>({ customers: [], psychCases: [], specialCases: [] })
+const drillNote = ref('')
 const drillLoading = ref('')
 
 function itemsOf(value: any): any[] {
@@ -111,21 +113,106 @@ async function loadReports() {
   }
 }
 
+// ── v6.11.0 周期选择（自然周 / 自然月 / 指定月份） ──────────
+const periodMode = ref<'last_week' | 'this_week' | 'this_month' | 'last_month' | 'custom_month'>('last_week')
+const customMonth = ref<string>(new Date().toISOString().slice(0, 7))
+
+function pad2(n: number): string { return String(n).padStart(2, '0') }
+
+/** 计算请求周期（北京时间自然周/自然月，左闭右开），与后端 report_period 口径一致 */
+function resolvePeriod(): { period_start?: string; period_end?: string } {
+  const now = new Date()
+  const monday = (d: Date) => {
+    const x = new Date(d.getFullYear(), d.getMonth(), d.getDate())
+    const diff = (x.getDay() + 6) % 7
+    x.setDate(x.getDate() - diff)
+    return x
+  }
+  const iso = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T00:00:00`
+  if (periodMode.value === 'last_week') {
+    const m = monday(now); const prev = new Date(m); prev.setDate(m.getDate() - 7)
+    return { period_start: iso(prev), period_end: iso(m) }
+  }
+  if (periodMode.value === 'this_week') {
+    const m = monday(now); const next = new Date(m); next.setDate(m.getDate() + 7)
+    return { period_start: iso(m), period_end: iso(next) }
+  }
+  if (periodMode.value === 'this_month') {
+    const s = new Date(now.getFullYear(), now.getMonth(), 1)
+    const e = new Date(now.getFullYear(), now.getMonth() + 1, 1)
+    return { period_start: iso(s), period_end: iso(e) }
+  }
+  if (periodMode.value === 'last_month') {
+    const s = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+    const e = new Date(now.getFullYear(), now.getMonth(), 1)
+    return { period_start: iso(s), period_end: iso(e) }
+  }
+  // custom_month: YYYY-MM
+  const [y, m] = customMonth.value.split('-').map(Number)
+  if (!y || !m) return {}
+  return {
+    period_start: iso(new Date(y, m - 1, 1)),
+    period_end: iso(new Date(y, m, 1)),
+  }
+}
+
+function periodLabel(): string {
+  const p = resolvePeriod()
+  if (!p.period_start || !p.period_end) return '缺省周期（上一完整自然周）'
+  return `${p.period_start.slice(0, 10)} ~ ${p.period_end.slice(0, 10)}`
+}
+
 function generateReport(type: string) {
-  confirmWrite('确认生成「' + typeName(type) + '」吗？重复生成同类型同周期会保留历史版本。', async () => {
-    reportGenerating.value = type
-    try {
-      await platformApi.reports.generate({ report_type: type })
-      notifySuccess('报告已生成')
-      reportPage.value = 1
-      await loadReports()
-    } catch (error: any) {
-      // 拦截器已提示业务错误；这里补状态呈现
-      reportError.value = String(error?.message || '生成失败，请稍后重试')
-    } finally {
-      reportGenerating.value = ''
-    }
-  })
+  const period = resolvePeriod()
+  confirmWrite(
+    '确认生成「' + typeName(type) + '」（周期：' + periodLabel() + '）吗？重复生成同类型同周期会保留历史版本。',
+    async () => {
+      reportGenerating.value = type
+      try {
+        await platformApi.reports.generate({ report_type: type, ...period })
+        notifySuccess('报告已生成')
+        reportPage.value = 1
+        await loadReports()
+      } catch (error: any) {
+        // 拦截器已提示业务错误；这里补状态呈现
+        reportError.value = String(error?.message || '生成失败，请稍后重试')
+      } finally {
+        reportGenerating.value = ''
+      }
+    },
+  )
+}
+
+// ── v6.11.0 历史版本（同类型同周期） ────────────────────────
+const versionDialog = ref(false)
+const versionLoading = ref(false)
+const versionRows = ref<any[]>([])
+const versionContext = ref<{ type: string; start: string; end: string } | null>(null)
+
+async function openVersions(row: any) {
+  versionContext.value = {
+    type: row.report_type,
+    start: String(row.time_range_start || ''),
+    end: String(row.time_range_end || ''),
+  }
+  versionDialog.value = true
+  versionLoading.value = true
+  versionRows.value = []
+  try {
+    const res: any = await platformApi.reports.versions(
+      row.report_type, String(row.time_range_start || ''), String(row.time_range_end || ''),
+    )
+    versionRows.value = itemsOf(res)
+  } catch (error: any) {
+    ElMessage.warning(String(error?.message || '历史版本加载失败'))
+  } finally {
+    versionLoading.value = false
+  }
+}
+
+async function openVersion(row: any) {
+  versionDialog.value = false
+  await openReport(row)
 }
 
 async function openReport(row: any) {
@@ -142,14 +229,18 @@ async function openReport(row: any) {
 
 function backToReportList() {
   selectedReport.value = null
+  drillNote.value = ''
 }
 
 async function loadDrill(kind: 'customers' | 'psychCases' | 'specialCases') {
   if (!selectedReport.value) return
   drillLoading.value = kind
+  drillNote.value = ''
   try {
     const data: any = await platformApi.reports[kind](selectedReport.value.id)
     drill.value[kind] = itemsOf(data)
+    // v6.11.0：快照口径——历史报告无快照时后端给出提示，这里原样展示
+    drillNote.value = String(data?.note || '')
   } catch (error: any) {
     drill.value[kind] = []
     ElMessage.warning(String(error?.message || '下钻数据不可用'))
@@ -173,12 +264,76 @@ async function downloadReportPdf() {
   }
 }
 
-/** AI 文字来源文案（M5-10.6 差异字段 ai_source：model / mock / unavailable） */
+/** AI 文字来源文案（v6.11.0：dify=报告专用 Agent / mock=演示模拟 / unavailable=不可用） */
 function aiSourceText(content: any): string {
-  if (!content || content.ai_status !== 'available') return '不可用，仅展示确定性指标'
+  if (!content || content.ai_status !== 'available') return 'AI 不可用，仅展示确定性指标'
+  if (content.ai_source === 'dify') return '可用（报告专用 Agent）'
   if (content.ai_source === 'model') return '可用（共用模型网关）'
-  if (content.ai_source === 'mock') return '可用（模拟数据）'
+  if (content.ai_source === 'mock') return '可用（演示模拟数据）'
   return '可用'
+}
+
+/** 指标值渲染：null 一律显示「数据不可得」，不用 0 冒充（v6.11.0 §2.8） */
+function metricValueText(value: any): string {
+  if (value === null || value === undefined) return '数据不可得'
+  if (typeof value === 'object') return JSON.stringify(value)
+  return String(value)
+}
+
+/** 状态徽标：数据源 / 数据质量 / 不可得字段 / AI 可用性（v6.11.0 §2.8） */
+function reportBadges(content: any): { label: string; type: string }[] {
+  if (!content) return []
+  const out: { label: string; type: string }[] = []
+  const src = content.header?.data_source_status
+  out.push({ label: src === 'production' ? '正式数据' : '演示数据', type: src === 'production' ? 'success' : 'warning' })
+  const quality: any = content.data_quality || {}
+  const failed = Object.entries(quality).filter(([, v]) => v === 'read_failed').map(([k]) => k)
+  if (failed.length) out.push({ label: `读取失败：${failed.join('/')}`, type: 'danger' })
+  const unavailable: any = content.data_unavailable || {}
+  const fields = Object.values(unavailable).flat() as string[]
+  if (fields.length) out.push({ label: `数据不可得：${fields.length} 项`, type: 'info' })
+  const aiOk = content.ai_status === 'available'
+  out.push({ label: aiOk ? aiSourceText(content) : 'AI 不可用', type: aiOk ? 'success' : 'info' })
+  return out
+}
+
+/** 四类画像渲染（符合/部分符合/不符合/信息不足 + 分母） */
+function profileRows(metrics: any): { key: string; value: string }[] {
+  const rows: { key: string; value: string }[] = []
+  const profiles = metrics?.profiles || {}
+  const denom = metrics?.profile_denominator || {}
+  for (const [attr, label] of [['sg_conclusion', '新加坡'], ['de_conclusion', '德国']] as const) {
+    const item = profiles[attr]
+    if (!item) {
+      rows.push({ key: `${label}画像`, value: '数据不可得' })
+      continue
+    }
+    const total = denom[attr]
+    rows.push({
+      key: `${label}画像（分母 ${total ?? '—'}）`,
+      value: `符合 ${item['符合']} / 部分符合 ${item['部分符合']} / 不符合 ${item['不符合']} / 信息不足 ${item['信息不足']}`,
+    })
+  }
+  return rows
+}
+
+/** 上一周期对比文案 */
+function comparisonText(comp: any): string {
+  if (!comp) return ''
+  if (comp.status !== 'ok') return comp.note || '上一周期数据不可得，不做对比'
+  const m = comp.metrics || {}
+  const ov = m.status_overview || {}
+  return `对比周期 ${String(comp.period_start || '').slice(0, 10)} ~ ${String(comp.period_end || '').slice(0, 10)}：`
+    + `上期新增 ${metricValueText(m.new_this_period)} 名；上期期末意向 ${metricValueText(ov.intent)}、`
+    + `成交 ${metricValueText(ov.converted)}、流失 ${metricValueText(ov.lost)}`
+}
+
+/** 心理个案历史记录合并展示 */
+function historyText(history: any): string {
+  if (!Array.isArray(history) || history.length === 0) return '—'
+  return history
+    .map((h: any) => `${String(h.record_at || '').slice(5, 16)} ${h.emotion_tag || ''}/${h.risk_level || ''}`)
+    .join('；')
 }
 
 /** 展开层 metrics 为可渲染的键值行（一层嵌套展平） */
@@ -186,6 +341,7 @@ function metricRows(metrics: any): { key: string; value: any }[] {
   if (!metrics || typeof metrics !== 'object') return []
   const rows: { key: string; value: any }[] = []
   for (const [key, value] of Object.entries(metrics)) {
+    if (key === 'profiles' || key === 'profile_denominator' || key === 'availability') continue
     if (value !== null && typeof value === 'object') {
       for (const [k2, v2] of Object.entries(value as any)) rows.push({ key: key + ' · ' + k2, value: v2 })
     } else {
@@ -553,12 +709,28 @@ function revealPhone() {
     </template>
 
     <template v-else-if="role === 'MANAGER' && section === 'reports'">
-      <!-- M5-05.1~05.9：报告列表 → 详情 → 下钻 → 导出 真实接口闭环 -->
+      <!-- v6.11.0：列表 → 周期选择 → 生成 → 历史版本 → 详情 → 下钻（快照） → PDF -->
       <template v-if="!selectedReport">
         <div class="toolbar surface">
-          <el-select v-model="reportFilterType" clearable placeholder="全部报告类型" style="width:220px" @change="reportPage = 1; loadReports()">
+          <el-select v-model="reportFilterType" clearable placeholder="全部报告类型" style="width:200px" @change="reportPage = 1; loadReports()">
             <el-option v-for="t in REPORT_TYPES" :key="t.type" :label="t.name" :value="t.type" />
           </el-select>
+          <el-select v-model="periodMode" style="width:190px">
+            <el-option label="上一完整自然周" value="last_week" />
+            <el-option label="本周（未结束）" value="this_week" />
+            <el-option label="本月（未结束）" value="this_month" />
+            <el-option label="上一自然月" value="last_month" />
+            <el-option label="指定月份" value="custom_month" />
+          </el-select>
+          <el-date-picker
+            v-if="periodMode === 'custom_month'"
+            v-model="customMonth"
+            type="month"
+            value-format="YYYY-MM"
+            placeholder="选择月份"
+            style="width:150px"
+          />
+          <span class="muted">生成周期：{{ periodLabel() }}</span>
           <el-button :icon="Refresh" @click="loadReports()">刷新</el-button>
         </div>
         <el-alert v-if="reportError" :title="reportError" type="warning" show-icon :closable="false" />
@@ -586,15 +758,18 @@ function revealPhone() {
               <el-table-column label="生成时间" width="170">
                 <template #default="{ row }">{{ String(row.created_at || '').slice(0, 19).replace('T', ' ') }}</template>
               </el-table-column>
-              <el-table-column label="操作" width="90">
-                <template #default="{ row }"><el-button text type="primary" @click.stop="openReport(row)">详情</el-button></template>
+              <el-table-column label="操作" width="160">
+                <template #default="{ row }">
+                  <el-button text type="primary" @click.stop="openReport(row)">详情</el-button>
+                  <el-button text @click.stop="openVersions(row)">历史版本</el-button>
+                </template>
               </el-table-column>
             </el-table>
             <el-pagination v-model:current-page="reportPage" :page-size="reportPageSize" :total="reportTotal" layout="prev, pager, next, total" @current-change="loadReports" style="margin:14px 0 4px; justify-content:flex-end" />
           </template>
         </section>
         <section class="surface panel" style="margin-top:20px">
-          <SectionTitle title="手动生成报告" desc="一期为手动生成，无自动调度；重复生成同类型同周期保留历史版本。" />
+          <SectionTitle title="手动生成报告" desc="一期为手动生成，无自动调度；重复生成同类型同周期保留历史版本，不覆盖旧版本。" />
           <div class="report-gen-grid">
             <button v-for="t in REPORT_TYPES" :key="t.type" class="report-gen-card" :disabled="reportGenerating !== ''" @click="generateReport(t.type)">
               <b>{{ t.code }}</b><strong>{{ t.name }}</strong><small>{{ t.period }}</small>
@@ -605,14 +780,18 @@ function revealPhone() {
       </template>
 
       <template v-else>
-        <div class="toolbar surface" style="align-items:center">
+        <div class="toolbar surface" style="align-items:center; flex-wrap:wrap; gap:8px">
           <el-button @click="backToReportList">← 返回列表</el-button>
           <b style="font-size:16px">{{ selectedReport.report_title || typeName(selectedReport.report_type) }}</b>
-          <el-tag v-if="selectedReport.data_source_status === 'mock'" type="warning">演示数据</el-tag>
-          <el-tag v-else type="success">正式数据</el-tag>
-          <el-tag :type="selectedReport.status === 'completed' ? 'success' : selectedReport.status === 'failed' ? 'danger' : 'warning'">{{ selectedReport.status }}</el-tag>
-          <el-tag type="info">V{{ selectedReport.version }}</el-tag>
+          <el-tag
+            v-for="badge in reportBadges(selectedReport.report_content)"
+            :key="badge.label"
+            :type="badge.type as any"
+            size="small"
+          >{{ badge.label }}</el-tag>
+          <el-tag type="info" size="small">V{{ selectedReport.version }}</el-tag>
           <el-button style="margin-left:auto" :icon="Download" type="primary" @click="downloadReportPdf">导出 PDF</el-button>
+          <el-button :icon="Document" @click="openVersions(selectedReport)">历史版本</el-button>
           <el-button :disabled="reportGenerating !== ''" @click="generateReport(selectedReport.report_type)">
             {{ reportGenerating === selectedReport.report_type ? '重新生成中…' : '重新生成' }}
           </el-button>
@@ -622,6 +801,7 @@ function revealPhone() {
           <section class="surface panel">
             <div class="report-meta">
               <span>周期：{{ String(selectedReport.time_range_start || '').slice(0, 10) }} ~ {{ String(selectedReport.time_range_end || '').slice(0, 10) }}</span>
+              <span>数据截止：{{ String(selectedReport.report_content?.header?.data_updated_at || '').slice(0, 19).replace('T', ' ') || '未标注' }}</span>
               <span>AI 分析：{{ aiSourceText(selectedReport.report_content) }}</span>
             </div>
             <p v-if="selectedReport.report_content?.summary" class="report-summary-text">{{ selectedReport.report_content.summary }}</p>
@@ -631,43 +811,88 @@ function revealPhone() {
             </ul>
           </section>
 
+          <section v-if="selectedReport.report_content?.comparison" class="surface panel" style="margin-top:20px">
+            <SectionTitle title="上一周期对比" desc="客户月报默认与上一个自然月比较；不可比时明确提示，不当作零。" />
+            <p class="report-summary-text">{{ comparisonText(selectedReport.report_content.comparison) }}</p>
+          </section>
+
           <section class="surface table-card" style="margin-top:20px">
-            <SectionTitle title="核心指标" />
+            <SectionTitle title="核心指标" desc="「数据不可得」表示该指标缺上游数据，未用 0 或模拟值替代。" />
             <el-table :data="metricRows(selectedReport.report_content?.metrics)" size="small">
-              <el-table-column prop="key" label="指标" min-width="220" />
-              <el-table-column prop="value" label="数值" width="160" />
+              <el-table-column prop="key" label="指标" min-width="240" />
+              <el-table-column label="数值" width="220">
+                <template #default="{ row }">
+                  <span :class="{ muted: row.value === null || row.value === undefined }">{{ metricValueText(row.value) }}</span>
+                </template>
+              </el-table-column>
+            </el-table>
+            <el-table v-if="selectedReport.report_type === 'customer_analysis'" :data="profileRows(selectedReport.report_content?.metrics)" size="small" style="margin-top:12px">
+              <el-table-column prop="key" label="项目画像（四类）" min-width="240" />
+              <el-table-column prop="value" label="分布" width="360" />
             </el-table>
             <p class="muted" style="padding:12px 4px 4px; line-height:1.8">{{ selectedReport.report_content?.data_notes }}</p>
           </section>
 
           <section class="surface panel" style="margin-top:20px">
-            <SectionTitle title="明细下钻" desc="下钻与所选报告同源：正式数据读真实业务表，演示数据读模拟数据；个体信息按角色权限过滤。" />
+            <SectionTitle
+              title="明细下钻"
+              desc="下钻为生成报告时固化的快照：源数据变化、AI 补分析都不会改变旧报告；个体信息按角色权限过滤。"
+            />
             <div style="display:flex; gap:10px; margin-bottom:14px">
               <el-button v-if="selectedReport.report_type === 'customer_analysis'" :loading="drillLoading === 'customers'" @click="loadDrill('customers')">客户明细</el-button>
               <el-button v-if="selectedReport.report_type === 'psych_weekly'" :loading="drillLoading === 'psychCases'" @click="loadDrill('psychCases')">心理个案</el-button>
               <el-button v-if="selectedReport.report_type === 'complaint_weekly'" :loading="drillLoading === 'specialCases'" @click="loadDrill('specialCases')">投诉特别案例</el-button>
             </div>
+            <el-alert v-if="drillNote" :title="drillNote" type="info" show-icon :closable="false" style="margin-bottom:12px" />
+
             <el-table v-if="drill.customers.length" :data="drill.customers" size="small">
-              <el-table-column prop="name" label="客户" width="120" />
-              <el-table-column prop="phone" label="手机号（脱敏）" width="140" />
-              <el-table-column prop="status" label="期末状态" width="110" />
+              <el-table-column prop="name" label="客户" width="110" />
+              <el-table-column prop="phone" label="手机号（脱敏）" width="130" />
+              <el-table-column label="期末状态" width="110">
+                <template #default="{ row }">{{ row.status ? row.status : '数据不可得' }}</template>
+              </el-table-column>
               <el-table-column prop="source_channel" label="来源" width="150" />
+              <el-table-column prop="owner_employee_id" label="负责人ID" width="100" />
+              <el-table-column label="最新研判时间" width="160">
+                <template #default="{ row }">{{ String(row.latest_assessment_at || '').slice(0, 19).replace('T', ' ') || '—' }}</template>
+              </el-table-column>
               <el-table-column prop="sg_conclusion" label="新加坡画像" width="110" />
               <el-table-column prop="de_conclusion" label="德国画像" width="110" />
             </el-table>
+
             <el-table v-if="drill.psychCases.length" :data="drill.psychCases" size="small">
-              <el-table-column prop="student_id" label="学生ID" width="100" />
-              <el-table-column prop="risk_level" label="风险等级" width="100" />
-              <el-table-column prop="emotion_tag" label="情绪标签" width="120" />
-              <el-table-column prop="responsible_employee_id" label="负责员工ID" width="120" />
+              <el-table-column prop="student_name" label="学生" width="100" />
+              <el-table-column prop="student_contact" label="联系方式（脱敏）" width="140" />
+              <el-table-column prop="risk_level" label="风险等级" width="90" />
+              <el-table-column prop="emotion_tag" label="情绪标签" width="100" />
+              <el-table-column prop="feedback_summary" label="反馈摘要" min-width="160" />
+              <el-table-column prop="feedback_raw" label="反馈原文" min-width="180" />
+              <el-table-column label="周期内历史" width="220">
+                <template #default="{ row }">{{ historyText(row.history) }}</template>
+              </el-table-column>
+              <el-table-column prop="responsible_employee_id" label="负责员工ID" width="110" />
             </el-table>
+
             <el-table v-if="drill.specialCases.length" :data="drill.specialCases" size="small">
-              <el-table-column prop="ticket_id" label="工单号" width="120" />
-              <el-table-column prop="owner_id" label="负责人ID" width="120" />
-              <el-table-column prop="progress" label="处理进度" />
+              <el-table-column prop="ticket_id" label="工单号" width="90" />
+              <el-table-column prop="student_name" label="学生" width="100" />
+              <el-table-column prop="student_contact" label="联系方式（脱敏）" width="140" />
+              <el-table-column label="类型来源" width="110">
+                <template #default="{ row }">{{ row.category_source === 'student' ? '学生所选' : row.category_source === 'ai' ? 'AI 分类' : '未分类' }}</template>
+              </el-table-column>
+              <el-table-column prop="satisfaction" label="满意度" width="90" />
+              <el-table-column prop="content" label="工单内容" min-width="160" />
+              <el-table-column prop="detail" label="补充说明" min-width="150" />
+              <el-table-column prop="ai_summary" label="AI 归纳理由" min-width="180" />
+              <el-table-column prop="progress" label="处理过程" min-width="130" />
             </el-table>
+
             <el-empty v-if="selectedReport.report_type === 'customer_analysis' && drill.customers.length === 0 && drillLoading !== 'customers'"
-                      description="点击「客户明细」加载下钻数据" :image-size="60" />
+                      description="点击「客户明细」加载下钻快照" :image-size="60" />
+            <el-empty v-else-if="selectedReport.report_type === 'psych_weekly' && drill.psychCases.length === 0 && drillLoading !== 'psychCases'"
+                      description="点击「心理个案」加载下钻快照（仅本人负责或管理层可见）" :image-size="60" />
+            <el-empty v-else-if="selectedReport.report_type === 'complaint_weekly' && drill.specialCases.length === 0 && drillLoading !== 'specialCases'"
+                      description="点击「投诉特别案例」加载下钻快照（仅 MANAGER/ADMIN）" :image-size="60" />
           </section>
         </template>
       </template>
@@ -782,6 +1007,30 @@ function revealPhone() {
         <el-form-item label="补充说明"><el-input v-model="customerForm.note" type="textarea" :rows="4" /></el-form-item>
       </el-form>
       <template #footer><el-button @click="customerDialog = false">取消</el-button><el-button type="primary" @click="saveCustomer">确认录入</el-button></template>
+    </el-dialog>
+    <el-dialog v-model="versionDialog" title="历史版本（同类型同周期）" width="min(720px, 94vw)">
+      <el-skeleton v-if="versionLoading" :rows="4" animated />
+      <el-empty v-else-if="versionRows.length === 0" description="暂无历史版本" :image-size="60" />
+      <el-table v-else :data="versionRows" size="small">
+        <el-table-column prop="version" label="版本" width="80" />
+        <el-table-column label="周期" width="200">
+          <template #default="{ row }">{{ String(row.time_range_start || '').slice(0, 10) }} ~ {{ String(row.time_range_end || '').slice(0, 10) }}</template>
+        </el-table-column>
+        <el-table-column label="状态" width="110">
+          <template #default="{ row }">
+            <el-tag :type="row.status === 'completed' ? 'success' : row.status === 'failed' ? 'danger' : 'warning'" size="small">{{ row.status }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="数据来源" width="110">
+          <template #default="{ row }">{{ row.data_source_status === 'production' ? '正式数据' : '演示数据' }}</template>
+        </el-table-column>
+        <el-table-column label="生成时间" width="170">
+          <template #default="{ row }">{{ String(row.created_at || '').slice(0, 19).replace('T', ' ') }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="90">
+          <template #default="{ row }"><el-button text type="primary" @click="openVersion(row)">查看</el-button></template>
+        </el-table-column>
+      </el-table>
     </el-dialog>
 </template>
 

@@ -1,3 +1,4 @@
+from datetime import datetime
 from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -34,6 +35,19 @@ async def list_reports(
     })
 
 
+@router.get("/versions", summary="同类型同周期的历史版本（v6.11.0 §2.1）")
+async def list_versions(
+    report_type: str = Query(...),
+    period_start: datetime = Query(...),
+    period_end: datetime = Query(...),
+    current_user: User = Depends(require_user_type("MANAGER", "ADMIN")),
+    service: ReportService = Depends(_get_service),
+):
+    rows = await service.list_versions(report_type, period_start, period_end)
+    return success_response(data={"items": [ReportListOut.model_validate(r) for r in rows],
+                                  "total": len(rows)})
+
+
 @router.post("/generate", summary="手动生成报告")
 async def generate_report(
     data: ReportGenerateRequest,
@@ -60,8 +74,8 @@ async def report_customers(
     current_user: User = Depends(require_user_type("MANAGER", "ADMIN")),
     service: ReportService = Depends(_get_service),
 ):
-    items = await service.customer_drilldown(report_id)
-    return success_response(data={"items": items})
+    items, note = await service.customer_drilldown(report_id)
+    return success_response(data={"items": items, "note": note})
 
 
 @router.get("/{report_id}/psych_cases", summary="心理个案（按角色过滤）")
@@ -70,18 +84,18 @@ async def report_psych_cases(
     current_user: User = Depends(get_current_user),
     service: ReportService = Depends(_get_service),
 ):
-    items = await service.psych_cases(report_id, current_user)
-    return success_response(data={"items": items})
+    items, note = await service.psych_cases(report_id, current_user)
+    return success_response(data={"items": items, "note": note})
 
 
-@router.get("/{report_id}/special_cases", summary="投诉特别案例（仅已复核）")
+@router.get("/{report_id}/special_cases", summary="投诉特别案例（AI 判定，完整详情仅 MANAGER/ADMIN）")
 async def report_special_cases(
     report_id: int,
     current_user: User = Depends(require_user_type("MANAGER", "ADMIN")),
     service: ReportService = Depends(_get_service),
 ):
-    items = await service.special_cases(report_id)
-    return success_response(data={"items": items})
+    items, note = await service.special_cases(report_id)
+    return success_response(data={"items": items, "note": note})
 
 
 @router.get("/{report_id}/download", summary="下载脱敏 PDF")

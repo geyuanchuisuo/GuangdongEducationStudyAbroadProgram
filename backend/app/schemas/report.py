@@ -16,10 +16,9 @@ from pydantic import BaseModel, Field
 # 客户状态（6 态），与接口契约 §0.5 一致
 CustomerStatus = Literal["NEW", "FOLLOWING", "STRONG", "SIGNED", "ENROLLED", "LOST"]
 
-# 画像结论三分类（报告展示口径）。
-# 真实适配器后续将 M1 的 matched/partial/pending/not_matched 映射到此三分类，
-# 该 4->3 映射规则当前待业务确认，暂不在此落地。
-ProfileConclusion = Literal["符合", "不符合", "信息不足"]
+# 画像结论四分类（v6.11.0 需求确认 §2.3：四类独立，partial 不再并入「信息不足」）
+# matched→符合 / partial→部分符合 / not_matched→不符合 / pending→信息不足
+ProfileConclusion = Literal["符合", "部分符合", "不符合", "信息不足"]
 
 # 投诉工单类型（只有"投诉"计入投诉周报，建议/咨询排除）
 FeedbackType = Literal["投诉", "建议", "咨询"]
@@ -48,8 +47,10 @@ class CustomerReportInput(BaseModel):
     # 新增时间取两者中更早者：first_register_login_at / first_employee_submit_at
     first_register_login_at: datetime | None = None
     first_employee_submit_at: datetime | None = None
-    # 期末状态：周期结束时的客户状态（6 态）
-    status_at_period_end: CustomerStatus
+    # 期末状态：**周期结束时**的客户状态（6 态）。
+    # v6.11.0：M1 尚无历史时点能力，生产取数不得用当前值冒充期末值 →
+    # 不可得时置 None，由计算器把依赖状态的指标标记「数据不可得」。
+    status_at_period_end: CustomerStatus | None = None
     # 流失来源：仅 status=LOST 时有意义，其余为 None
     status_source: LossSource | None = None
     # 是否回流客户（曾流失后回流，不计入本期新增）
@@ -89,6 +90,10 @@ class PsychReportInput(BaseModel):
     feedback_summary: str | None = None
     responsible_employee_id: int | None = None
     has_psych_record: bool = True
+    # v6.11.0 §2.5：心理个案授权后可看完整详情（身份/联系方式/反馈原文），依赖 M4 提供
+    student_name: str | None = None
+    student_contact: str | None = None
+    feedback_raw: str | None = None
 
 
 class ComplaintReportInput(BaseModel):
@@ -96,18 +101,31 @@ class ComplaintReportInput(BaseModel):
     ticket_id: int
     student_id: int
     feedback_type: FeedbackType
+    # 类型来源标识（v6.11.0 §2.6）：student=学生所选、ai=AI 分类、unknown=未分类
+    category_source: Literal["student", "ai", "unknown"] = "unknown"
     submitted_at: datetime
     first_response_at: datetime | None = None
     resolved_at: datetime | None = None
     status: Literal["open", "resolved"] = "open"
     satisfaction: Satisfaction = "未评价"
-    # AI 低评分 / 高风险候选，经负责人复核通过后才成为特别案例
+    # AI 低评分 / 高风险候选（v6.11.0：一期无人工复核，特别案例由 AI 判定）
     ai_low_score: bool = False
     ai_high_risk: bool = False
+    # 保留字段仅为兼容旧数据；一期判定不再要求人工复核
     review_status: Literal["pending", "approved", "rejected"] = "pending"
     reviewer_id: int | None = None
     owner_id: int | None = None
     progress: str | None = None
+    # AI 分析记录（v6.11.0 §2.6）：analyzed=已有成功分析；pending=待分析；failed=分析失败
+    analysis_status: Literal["analyzed", "pending", "failed"] = "pending"
+    analysis_record_id: int | None = None
+    ai_summary: str | None = None
+    # 工单原文（v6.11.0：投诉特别案例在 MANAGER 权限下允许完整详情，快照需固化原文）
+    content: str | None = None
+    detail: str | None = None
+    # 学生身份/联系方式（依赖 M4 提供；缺失为 None，不伪造）
+    student_name: str | None = None
+    student_contact: str | None = None
 
 
 # ── 模拟数据包 ────────────────────────────────────────────

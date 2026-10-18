@@ -45,7 +45,7 @@ def _customers() -> list[CustomerReportInput]:
         CustomerReportInput(
             customer_id=1, phone="13800000001", name="客户1", source_channel="WEBSITE_REGISTER",
             first_register_login_at=_dt(13, 9), status_at_period_end="STRONG",
-            latest_assessment_at=_dt(13, 10), sg_conclusion="符合", de_conclusion="符合",
+            latest_assessment_at=_dt(13, 10), sg_conclusion="部分符合", de_conclusion="符合",
             owner_employee_id=1, follow_up_summary="意向强烈，跟进中",
         ),
         # 本期新增，去向=意向（NEW），员工首次提交
@@ -94,7 +94,7 @@ def _customers() -> list[CustomerReportInput]:
         CustomerReportInput(
             customer_id=8, phone="13800000008", name="客户8", source_channel="WEBSITE_REGISTER",
             first_register_login_at=_dt(16, 10), status_at_period_end="NEW",
-            latest_assessment_at=_dt(16, 11), sg_conclusion="不符合", de_conclusion="信息不足",
+            latest_assessment_at=_dt(16, 11), sg_conclusion="不符合", de_conclusion="部分符合",
             owner_employee_id=1, follow_up_summary="新录入",
         ),
         # 回流客户：新增时间在周期外，不计入本期新增
@@ -204,61 +204,95 @@ def _psych_records() -> list[PsychReportInput]:
     """
     return [
         PsychReportInput(student_id=1, record_at=_dt(13, 9), emotion_tag="焦虑", risk_level="高",
-                         feedback_summary="考前焦虑", responsible_employee_id=1),
+                         feedback_summary="考前焦虑", feedback_raw="最近考试很多，晚上睡不着",
+                         responsible_employee_id=1, student_name="李娜", student_contact="13800000001"),
         PsychReportInput(student_id=2, record_at=_dt(13, 10), emotion_tag="压力", risk_level="中",
-                         feedback_summary="学业压力", responsible_employee_id=2),
+                         feedback_summary="学业压力", feedback_raw="课程进度有点跟不上",
+                         responsible_employee_id=2, student_name="王强", student_contact="13800000002"),
         PsychReportInput(student_id=2, record_at=_dt(14, 10), emotion_tag="压力", risk_level="中",
-                         feedback_summary="学业压力（第二次记录，应去重）", responsible_employee_id=2),
+                         feedback_summary="学业压力（第二次记录，应去重）", feedback_raw="还是有点压力",
+                         responsible_employee_id=2, student_name="王强", student_contact="13800000002"),
         PsychReportInput(student_id=3, record_at=_dt(15, 10), emotion_tag="平稳", risk_level="低",
-                         feedback_summary="状态平稳", responsible_employee_id=3),
+                         feedback_summary="状态平稳", feedback_raw="最近状态不错",
+                         responsible_employee_id=3, student_name="赵敏", student_contact="13800000003"),
         PsychReportInput(student_id=4, record_at=_dt(16, 10), emotion_tag="低落", risk_level="高",
-                         feedback_summary="情绪低落", responsible_employee_id=1),
+                         feedback_summary="情绪低落", feedback_raw="有点想家，情绪低落",
+                         responsible_employee_id=1, student_name="陈杰", student_contact="13800000004"),
     ]
 
 
 def _complaints() -> list[ComplaintReportInput]:
     """投诉工单数据，覆盖 03 文档 §4 投诉场景 1-6。
 
+    v6.11.0 口径：类型来源标 `category_source="student"`（学生所选），
+    有 AI 分析结果的标 `analysis_status="analyzed"`；t11 故意留「待分析」用于演示。
     t5/t6 为建议/咨询，不计入投诉统计。
     长期未解决边界：截止 10-19 00:00；恰好 7×24h 不算，超过算。
     """
+    base = dict(category_source="student", analysis_status="analyzed")
     return [
         # 已响应、已解决、满意
         ComplaintReportInput(ticket_id=1, student_id=1, feedback_type="投诉",
                              submitted_at=_dt(12, 9), first_response_at=_dt(12, 11),
-                             resolved_at=_dt(14, 10), status="resolved", satisfaction="满意"),
+                             resolved_at=_dt(14, 10), status="resolved", satisfaction="满意",
+                             content="宿舍空调坏了三天没人修", detail="已经联系宿管两次",
+                             student_name="李娜", student_contact="13800000001", **base),
         # 未响应（无首次响应）
         ComplaintReportInput(ticket_id=2, student_id=2, feedback_type="投诉",
-                             submitted_at=_dt(13, 9), status="open", satisfaction="未评价"),
+                             submitted_at=_dt(13, 9), status="open", satisfaction="未评价",
+                             content="课程安排与宣传不符", student_name="王强",
+                             student_contact="13800000002", **base),
         # 已响应未解决，提交于 10-06，超过 7×24h -> 长期未解决
         ComplaintReportInput(ticket_id=3, student_id=3, feedback_type="投诉",
                              submitted_at=_dt(6, 9), first_response_at=_dt(6, 11),
-                             status="open", satisfaction="未评价"),
+                             status="open", satisfaction="未评价",
+                             content="退费流程复杂", student_name="赵敏",
+                             student_contact="13800000003", **base),
         # 恰好 7×24h（10-12 00:00 提交，截止 10-19 00:00）-> 不算长期未解决，未响应
         ComplaintReportInput(ticket_id=4, student_id=4, feedback_type="投诉",
-                             submitted_at=_dt(12, 0), status="open", satisfaction="未评价"),
+                             submitted_at=_dt(12, 0), status="open", satisfaction="未评价",
+                             content="签证材料指导不到位", student_name="陈杰",
+                             student_contact="13800000004", **base),
         # 建议（不计入投诉）
         ComplaintReportInput(ticket_id=5, student_id=5, feedback_type="建议",
-                             submitted_at=_dt(12, 10), status="open"),
+                             submitted_at=_dt(12, 10), status="open",
+                             content="希望增加德语角活动", **base),
         # 咨询（不计入投诉）
         ComplaintReportInput(ticket_id=6, student_id=6, feedback_type="咨询",
-                             submitted_at=_dt(13, 10), status="open"),
+                             submitted_at=_dt(13, 10), status="open",
+                             content="咨询新加坡院校截止时间", **base),
         # 已解决、不满意
         ComplaintReportInput(ticket_id=7, student_id=7, feedback_type="投诉",
                              submitted_at=_dt(15, 9), first_response_at=_dt(15, 10),
-                             resolved_at=_dt(16, 9), status="resolved", satisfaction="不满意"),
+                             resolved_at=_dt(16, 9), status="resolved", satisfaction="不满意",
+                             content="住宿安排与承诺不同", student_name="刘洋",
+                             student_contact="13800000007", **base),
         # 超过 7×24h（10-11 23:59 提交）-> 长期未解决
         ComplaintReportInput(ticket_id=8, student_id=8, feedback_type="投诉",
-                             submitted_at=_dt(11, 23, 59), status="open", satisfaction="未评价"),
-        # AI 高风险候选，未复核 -> 不展示为特别案例
+                             submitted_at=_dt(11, 23, 59), status="open", satisfaction="未评价",
+                             content="课堂老师频繁更换", student_name="周敏",
+                             student_contact="13800000008", **base),
+        # AI 判为高风险 -> 特别案例（v6.11.0 起一期无人工复核，AI 判定即成立）
         ComplaintReportInput(ticket_id=9, student_id=9, feedback_type="投诉",
                              submitted_at=_dt(14, 9), first_response_at=_dt(14, 10),
-                             status="open", ai_high_risk=True, review_status="pending"),
-        # AI 高风险候选，复核通过 -> 特别案例
+                             status="open", ai_high_risk=True,
+                             content="多次投诉同一问题未解决", detail="已第三次反馈",
+                             student_name="何静", student_contact="13800000009",
+                             owner_id=1, progress="已升级至主管",
+                             ai_summary="学生就同一问题多次反馈且未闭环，情绪升级风险高", **base),
+        # AI 判为高风险且低满意候选 -> 特别案例（完整详情演示）
         ComplaintReportInput(ticket_id=10, student_id=10, feedback_type="投诉",
                              submitted_at=_dt(14, 10), first_response_at=_dt(14, 11),
-                             status="open", ai_high_risk=True, review_status="approved",
-                             reviewer_id=5, owner_id=1, progress="已联系学生"),
+                             status="open", ai_low_score=True, ai_high_risk=True,
+                             content="承诺的实习岗位未落实", detail="合同附件中有岗位说明",
+                             student_name="郭婷", student_contact="13800000010",
+                             owner_id=1, progress="已联系学生",
+                             ai_summary="涉及招生承诺兑现，属高风险且学生明确表达不满", **base),
+        # 待分析工单（AI 未分析）：只计入工单总量，不进投诉/AI 指标
+        ComplaintReportInput(ticket_id=11, student_id=11, feedback_type="投诉",
+                             submitted_at=_dt(15, 14), status="open",
+                             content="（待分析）反馈食堂口味问题",
+                             analysis_status="pending", category_source="unknown"),
     ]
 
 

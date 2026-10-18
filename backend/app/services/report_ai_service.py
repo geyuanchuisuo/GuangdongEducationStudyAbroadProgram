@@ -1,43 +1,55 @@
-"""M5 智能报告模块 — AI 分析（阶段 5）
+"""M5 智能报告模块 — 阶段 5：报告专用 AI 分析入口（v6.11.0 口径）
 
-AI 只负责摘要 / 趋势 / 分析 / 建议的文字归纳，数字一律由程序计算后作为输入传入，
-禁止 AI 自行计算或编造。一期未配置报告 Agent，使用确定性模拟输出（明确标注"模拟"）；
-未来接入真实 Agent 后只替换 analyze 的实现，输出结构与降级逻辑不变。
-调用失败时返回 None，由调用方保留确定性统计并标记 AI 不可用。
+需求确认（2026-10-18）§2.7 明确：
+1. 一期必须接入**报告专用** AI，且必须经公共 AI 网关调用，不得直连 Dify、
+   不得复用客服/学生/员工 Agent；
+2. 没有专用配置时视为交付阻塞/不可用，**不得把 mock 文本标成真实 AI**；
+3. AI 只做文字归纳（摘要/趋势/分析/建议），数字一律由程序计算；
+4. schema 校验、超时/错误处理；失败时确定性指标仍保留。
+
+实现：
+- 优先调用公共网关的报告 Agent（`AgentType.REPORT`，由 M0 在 ai_service.py 登记，
+  配置项 `DIFY_REPORT_AGENT_KEY`）——**M0 当前尚未登记该 Agent，属上游阻塞项**，
+  未登记时 AI 直接标「不可用」，不回落模型网关、不伪造；
+- 仅当 `REPORT_DATA_SOURCE=mock`（演示/测试环境）才允许本地模拟文本，并标 `ai_source=mock`。
 """
+import json
 import logging
+from datetime import datetime
 
-from app.services.model_ai_service import model_ai_service
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 
+PROMPT_VERSION = "REPORT-v1.0"
 
-def _suggestion(content: str) -> dict:
-    """一期建议只展示、不自动创建待办；负责部门/负责人由人工补充。"""
-    return {"content": content, "department": None, "owner": None, "status": "待处理"}
+_KEYS = ("summary", "trend", "analysis", "suggestions")
+
+
+def _suggestion(text: str) -> dict:
+    return {"content": text, "department": None, "owner": None}
 
 
 def _mock_analysis(report_type: str, metrics: dict) -> dict:
-    """确定性模拟 AI 输出：仅复述程序计算出的指标，不自行计算。"""
+    """本地模拟输出（仅演示/测试环境可用，报告中标 ai_source=mock）。"""
     if report_type == "customer_analysis":
-        ov = metrics["status_overview"]
-        sg = metrics["profiles"]["sg_conclusion"]
-        de = metrics["profiles"]["de_conclusion"]
+        if metrics.get("status_overview") is None:
+            return {
+                "summary": "（模拟）本期期末状态不可得，仅展示可确定的新增客户数量。",
+                "trend": None,
+                "analysis": "（模拟）客户状态类指标因缺少历史时点数据标记为数据不可得。",
+                "suggestions": [_suggestion("（模拟）推动 M1 提供周期末状态与历史研判能力")],
+            }
+        total = metrics["status_overview"]["total"]
+        intent = metrics["status_overview"]["intent"]
         return {
-            "summary": (
-                f"（模拟）本期新增客户 {metrics['new_this_period']} 名，"
-                f"期末意向 {ov['intent']} 名、成交 {ov['converted']} 名、流失 {ov['lost']} 名。"
-            ),
-            "trend": None,  # 一期无上周数据，对比在阶段 6 接入历史后补齐
-            "analysis": (
-                f"（模拟）画像方面，新加坡：符合 {sg['符合']}、不符合 {sg['不符合']}、信息不足 {sg['信息不足']}；"
-                f"德国：符合 {de['符合']}、不符合 {de['不符合']}、信息不足 {de['信息不足']}。"
-            ),
-            "suggestions": [_suggestion("（模拟）关注信息不足客户的研判补全")],
+            "summary": f"（模拟）期末客户 {total} 名，其中意向客户 {intent} 名。",
+            "trend": None,
+            "analysis": "（模拟）本期新增客户来自多渠道，意向占比保持稳定。",
+            "suggestions": [_suggestion("（模拟）优先跟进信息不足客户的研判补全")],
         }
 
     if report_type == "daily_report_summary":
-        # M5-07.1 日报拆分：metrics 只有 days（按日应交/已交/未交），无全周人次/部门
         days = metrics["days"]
         total_submitted = sum(d["submitted"] for d in days)
         total_missing = sum(d["missing"] for d in days)
@@ -49,50 +61,56 @@ def _mock_analysis(report_type: str, metrics: dict) -> dict:
             ),
             "trend": None,
             "analysis": f"（模拟）存在未提交的日期：{missing_days}。",
-            "suggestions": [_suggestion("（模拟）跟进未提交日报的员工")],
+            "suggestions": [_suggestion("（模拟）跟进未提交日报的部门")],
         }
 
     if report_type == "weekly_report_summary":
         total = metrics["week_total"]
         depts = metrics["departments"]
         missing_depts = "、".join(
-            d for d, v in depts.items() if v["missing"] > 0
+            f"{name}（{d['missing']} 人次）" for name, d in depts.items() if d["missing"] > 0
         ) or "无"
         return {
             "summary": (
-                f"（模拟）全周应提交 {total['should_submit']} 人次、已提交 {total['submitted']} 人次、"
-                f"未提交 {total['missing']} 人次。"
+                f"（模拟）本周应交 {total['should_submit']} 人次、已交 {total['submitted']} 人次、"
+                f"未交 {total['missing']} 人次。"
             ),
             "trend": None,
-            "analysis": f"（模拟）存在未提交的部门：{missing_depts}。",
-            "suggestions": [_suggestion("（模拟）跟进未提交日报的员工")],
+            "analysis": f"（模拟）缺报集中在：{missing_depts}。",
+            "suggestions": [_suggestion("（模拟）按部门跟进缺报情况")],
         }
 
     if report_type == "psych_weekly":
         risk = metrics["risk"]
         return {
             "summary": (
-                f"（模拟）本期覆盖学生 {metrics['covered_students']} 名，"
-                f"其中高风险 {risk['高']} 名、中风险 {risk['中']} 名、低风险 {risk['低']} 名。"
+                f"（模拟）本周覆盖学生 {metrics['covered_students']} 人，"
+                f"高风险 {risk.get('高', 0)} 人。"
             ),
             "trend": None,
-            "analysis": "（模拟）高风险个案需按学生模块流程即时关注，不等待周报。",
-            "suggestions": [_suggestion("（模拟）对高风险个案保持跟进")],
+            "analysis": "（模拟）整体情绪态势平稳，个别学生需持续关注。",
+            "suggestions": [_suggestion("（模拟）对高风险学生安排一对一关怀")],
         }
 
     if report_type == "complaint_weekly":
-        sat = metrics["satisfaction"]
-        avg = metrics["avg_first_response_seconds"]
-        avg_h = round(avg / 3600, 1) if avg is not None else None
+        if not metrics.get("orders_total"):
+            return {
+                "summary": "（模拟）本周期无工单记录。",
+                "trend": None,
+                "analysis": "（模拟）无工单数据，无法分析投诉趋势。",
+                "suggestions": [_suggestion("（模拟）确认工单来源系统是否正常")],
+            }
+        sat = metrics.get("satisfaction") or {}
         return {
             "summary": (
-                f"（模拟）本期新增投诉 {metrics['new_count']} 件，"
-                f"期末未解决 {metrics['open_count']} 件、超过七天未解决 {metrics['over7_unresolved']} 件。"
+                f"（模拟）本期工单 {metrics.get('orders_total', 0)} 条，"
+                f"其中投诉 {metrics.get('new_count', 0)} 条，"
+                f"待分析 {metrics.get('pending_analysis', 0)} 条。"
             ),
             "trend": None,
             "analysis": (
-                f"（模拟）平均首次响应时长 {avg_h} 小时，"
-                f"满意度：满意 {sat['满意']}、不满意 {sat['不满意']}、未评价 {sat['未评价']}。"
+                f"（模拟）满意度：满意 {sat.get('满意', 0)}、不满意 {sat.get('不满意', 0)}、"
+                f"未评价 {sat.get('未评价', 0)}。"
             ),
             "suggestions": [_suggestion("（模拟）优先处理长期未解决与未响应投诉")],
         }
@@ -100,11 +118,8 @@ def _mock_analysis(report_type: str, metrics: dict) -> dict:
     raise ValueError(f"未知报告类型: {report_type}")
 
 
-_KEYS = ("summary", "trend", "analysis", "suggestions")
-
-
-def _validate(analysis: dict) -> dict | None:
-    """AI 输出结构校验：缺失/类型不符则视为失败。"""
+def _validate(analysis: dict | None) -> dict | None:
+    """AI 输出结构校验：缺失/类型不符视为失败（不得把半成品当真实结果）。"""
     if not isinstance(analysis, dict):
         return None
     if not all(k in analysis for k in _KEYS):
@@ -116,40 +131,123 @@ def _validate(analysis: dict) -> dict | None:
     return analysis
 
 
+def _strip_reasoning(text: str) -> str:
+    """剥离推理模型思考块（v6.11.1）。
+
+    真实 Dify 报告 Agent（deepseek 系）会在正文前输出
+    `<think>…</think>` + `<!--dify-deepseek-reasoning-->` 注释，
+    思考块里可能出现花括号，直接取首个 `{` 可能截到思考内容 → 必须先剥离。
+    """
+    if not text:
+        return ""
+    out = text
+    for tag in ("think", "thinking", "reasoning"):
+        while True:
+            start = out.lower().find(f"<{tag}>")
+            if start < 0:
+                break
+            end = out.lower().find(f"</{tag}>", start)
+            if end < 0:
+                out = out[:start]
+                break
+            out = out[:start] + out[end + len(f"</{tag}>"):]
+    # 去掉 <!-- … --> 注释（含 dify-deepseek-reasoning 标记）
+    while True:
+        s = out.find("<!--")
+        if s < 0:
+            break
+        e = out.find("-->", s)
+        if e < 0:
+            out = out[:s]
+            break
+        out = out[:s] + out[e + 3:]
+    return out
+
+
+def _parse_json(text: str) -> dict | None:
+    """从模型输出中提取 JSON（容忍思考块、```json 围栏与前后缀说明）。"""
+    raw = _strip_reasoning(text or "").strip()
+    if not raw:
+        return None
+    if raw.startswith("```"):
+        raw = raw.strip("`")
+        if raw.lower().startswith("json"):
+            raw = raw[4:]
+    # 优先整体解析，失败再退化为「首 { 到末 }」切片
+    try:
+        obj = json.loads(raw)
+        if isinstance(obj, dict):
+            return obj
+    except Exception:  # noqa: BLE001
+        pass
+    start, end = raw.find("{"), raw.rfind("}")
+    if start < 0 or end <= start:
+        return None
+    try:
+        obj = json.loads(raw[start:end + 1])
+        return obj if isinstance(obj, dict) else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
 class ReportAIService:
-    """报告 AI 分析入口（M5-10.6 统一到共用模型网关）。
+    """报告 AI 分析入口（报告专用 Agent，经公共 AI 网关）。
 
-    - 共用网关 `model_ai_service` 可用 → 采用模型输出，`source="model"`
-    - 网关不可用 / 输出结构不合法 → 回落本地模拟输出，`source="mock"`
-    - 两者皆失败 → 返回 None，`source="unavailable"`
-
-    `source` 由报告服务读取并落为报告内容的差异字段 `ai_source`，
-    与共用网关命名保持一致（不再用「可用（模拟）」这类含混文案）。
+    `source`：`dify`=报告专用 Agent 成功 / `mock`=演示环境模拟 / `unavailable`=不可用。
     """
 
     def __init__(self) -> None:
         self.source: str = "unavailable"
+        self.prompt_version: str = PROMPT_VERSION
 
-    async def analyze(self, report_type: str, metrics: dict) -> dict | None:
+    def _build_prompt(self, report_type: str, metrics: dict, context: dict | None) -> str:
+        payload = {"report_type": report_type, "metrics": metrics, "context": context or {}}
+        return (
+            "你是粤教留学项目的智能报告分析助手。只能基于给定指标与上下文归纳文字，"
+            "禁止自行计算或改写任何数字、禁止编造事实与时长、禁止评价个人绩效、"
+            "禁止引用工单原文作为判断理由。\n"
+            "严格输出 JSON，字段为 summary（字符串）、trend（字符串或 null）、"
+            "analysis（字符串）、suggestions（数组，元素为字符串）。不要输出 Markdown。\n"
+            f"输入：{json.dumps(payload, ensure_ascii=False)}"
+        )
+
+    async def analyze(
+        self, report_type: str, metrics: dict, context: dict | None = None
+    ) -> dict | None:
+        # 1) 报告专用 Agent（经公共网关）；M0 未登记 REPORT 时直接判不可用
         try:
-            analysis = await model_ai_service.analyze(report_type, metrics)
-            if isinstance(analysis, dict) and isinstance(analysis.get("suggestions"), list):
-                analysis["suggestions"] = [
-                    _suggestion(item) if isinstance(item, str) else item
-                    for item in analysis["suggestions"]
-                ]
-            validated = _validate(analysis)
-            if validated:
-                self.source = "model"
-                return validated
-        except Exception as exc:
-            logger.warning("Model report analysis failed: report_type=%s error=%s", report_type, exc)
-        try:
-            mock = _validate(_mock_analysis(report_type, metrics))
-            if mock:
-                self.source = "mock"
-                return mock
-        except Exception as exc:
-            logger.warning("Report mock analysis failed: report_type=%s error=%s", report_type, exc)
+            from app.services.ai_service import AgentType, ai_service
+
+            agent = getattr(AgentType, "REPORT", None)
+            if agent is not None:
+                resp = await ai_service.chat(
+                    agent,
+                    self._build_prompt(report_type, metrics, context),
+                    f"report-{report_type}-{int(datetime.now().timestamp())}",
+                    user_id="report",
+                )
+                analysis = _parse_json(getattr(resp, "content", ""))
+                if isinstance(analysis, dict) and isinstance(analysis.get("suggestions"), list):
+                    analysis["suggestions"] = [
+                        _suggestion(item) if isinstance(item, str) else item
+                        for item in analysis["suggestions"]
+                    ]
+                validated = _validate(analysis)
+                if validated:
+                    self.source = "dify"
+                    return validated
+        except Exception as exc:  # noqa: BLE001 — AI 失败不阻断确定性报告
+            logger.warning("报告专用 Agent 调用失败: type=%s error=%s", report_type, exc)
+
+        # 2) 演示/测试环境才允许模拟文本；生产环境标注不可用
+        if settings.REPORT_DATA_SOURCE == "mock":
+            try:
+                mock = _validate(_mock_analysis(report_type, metrics))
+                if mock:
+                    self.source = "mock"
+                    return mock
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("报告模拟分析失败: type=%s error=%s", report_type, exc)
+
         self.source = "unavailable"
         return None

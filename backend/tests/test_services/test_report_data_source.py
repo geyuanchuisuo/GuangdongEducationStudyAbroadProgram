@@ -70,11 +70,15 @@ async def test_fetch_customers_maps_latest_valid_assessment(db):
     res = await fetch_customers(db, START, END)
     assert res.status == "ok" and len(res.inputs) == 2  # 无手机号的客户3被排除
     c1 = next(c for c in res.inputs if c.customer_id == 1)
-    # 最新 valid 研判（id=2）：4→3 保守映射 matched→符合、not_matched→不符合
+    # v6.11.0：画像四类映射 matched→符合、not_matched→不符合
     assert c1.sg_conclusion == "符合" and c1.de_conclusion == "不符合"
-    assert c1.status_at_period_end == "LOST" and c1.status_source == "auto" and c1.reflowed is True
+    # v6.11.0：M1 无历史时点 → 期末状态一律不可得，不用当前值冒充
+    assert c1.status_at_period_end is None and c1.status_source is None
+    assert c1.reflowed is True
+    assert "status_at_period_end" in res.unavailable_fields
+    assert "不可得" in res.note
     c2 = next(c for c in res.inputs if c.customer_id == 2)
-    assert c2.sg_conclusion is None  # 仅 invalid 研判 → 无有效结论 → 信息不足由计算器归
+    assert c2.sg_conclusion is None  # 仅 invalid 研判 → 无有效结论（无研判不补值）
 
 
 @pytest.mark.asyncio
@@ -134,13 +138,17 @@ async def test_fetch_psych_merges_alert_and_profile(db):
     assert p.emotion_tag == "平稳" and p.risk_level is None
 
 
-# ── 投诉域：不可得 ───────────────────────────────────────
+# ── 投诉域：部分可用 + 缺字段标不可得（v6.11.0） ──────────
 
 @pytest.mark.asyncio
-async def test_fetch_complaints_unavailable(db):
+async def test_fetch_complaints_partial_fields_marked_unavailable(db):
     res = await fetch_complaints(db, START, END)
-    assert res.status == "data_unavailable" and res.inputs == []
-    assert "9" in res.note  # 明确写出缺 9 字段
+    # 空库：可读但无工单 → empty（不再整体 data_unavailable）
+    assert res.status == "empty" and res.inputs == []
+    # 缺的字段必须显式标不可得，不填零
+    for field in ("first_response_at", "satisfaction", "owner_id"):
+        assert field in res.unavailable_fields
+    assert "不可得字段" in res.note
 
 
 # ── production 生成路径 ──────────────────────────────────
@@ -170,18 +178,35 @@ async def test_production_generate_psych_ok_and_complaint_rejected(db, monkeypat
     # 数据质量标注进入口径说明（投诉域不可得等）
     assert "投诉域" in content["data_notes"]
 
-    # 投诉周报：必取域 data_unavailable → 拒绝生成
-    with pytest.raises(ValidationError):
-        await svc.generate("complaint_weekly", past_start, past_end, user_id=1)
+    # 投诉周报：v6.11.0 改为部分生成（缺字段标不可得），不再整体拒绝
+    complaint = await svc.generate("complaint_weekly", past_start, past_end, user_id=1)
+    assert complaint.status == "completed"
+    c_content = complaint.report_content
+    assert c_content["data_quality"]["complaints"] in ("ok", "empty")
+    assert c_content["data_unavailable"]["complaints"]  # 缺字段显式列在报告里
+    assert c_content["metrics"]["orders_total"] == 0
 
 
 @pytest.mark.asyncio
-async def test_production_read_failed_rejects_without_mock_fallback(monkeypatch):
+async def test_production_read_failed_marks_unavailable_without_mock_fallback(db, monkeypatch):
+    """v6.11.0：读取失败不再整体拒绝——报告照常生成但标不可得，且绝不回落 mock。"""
     monkeypatch.setattr(settings, "REPORT_DATA_SOURCE", "production")
-    svc = rs_module.ReportService(ReportRepository(_BrokenDB()))  # type: ignore[arg-type]
-    with pytest.raises(ValidationError) as ei:
-        await svc.generate("psych_weekly", START, END, user_id=1)
-    assert "不可用" in str(ei.value.message)  # 显式拒绝，不回落 mock
+
+    async def _boom(*a, **k):
+        raise DomainReadError("psych db down")
+
+    monkeypatch.setattr(rs_module, "fetch_psych", _boom)
+    svc = rs_module.ReportService(ReportRepository(db))
+    # 用已过去的自然周，避免未来周期校验先拦下来
+    past_start, past_end = datetime(2026, 10, 5), datetime(2026, 10, 12)
+    report = await svc.generate("psych_weekly", past_start, past_end, user_id=1)
+    content = report.report_content
+    assert report.status == "completed" and report.data_source_status == "production"
+    assert content["data_quality"]["psych"] == "read_failed"
+    assert content["ai_status"] == "unavailable" and content["ai_source"] == "unavailable"
+    assert "读取失败" in content["data_notes"]
+    # 关键：失败域只影响自己，不吃掉整份报告，也没有回落 mock 文本
+    assert "（模拟）" not in str(content.get("summary") or "")
 
 
 @pytest.mark.asyncio

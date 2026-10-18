@@ -1,6 +1,6 @@
 from app.models.base import Base
 from app.models.course import CourseProject
-from app.models.crm import AiReport, AiReportAttachment, CrmFollowUp, CrmLead, CustomerAssessment
+from app.models.crm import (AiReport, AiReportAttachment, AiReportDrill, CrmFollowUp, CrmLead, CustomerAssessment, TicketAIAnalysis)
 from app.models.customer import Customer, PendingLead
 from app.models.customer_service import CsChatMessage, CsChatSession, CsFaq, CsIntentLog, CsRecommendLog
 from app.models.employee import EmployeeDailyReport, EmployeeOrg, EmployeeTodo
@@ -33,6 +33,8 @@ __all__ = [
     "CrmFollowUp",
     "AiReport",
     "AiReportAttachment",
+    "AiReportDrill",
+    "TicketAIAnalysis",
     "CourseProject",
     "EventLecture",
     "EventRegistration",

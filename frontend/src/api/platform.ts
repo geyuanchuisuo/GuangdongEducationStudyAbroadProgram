@@ -159,6 +159,11 @@ export const platformApi = {
     list: (params: AnyRecord = {}) => toData(request.get('/reports', { params: query(params) })),
     generate: (data: AnyRecord) => toData(request.post('/reports/generate', data)),
     get: (id: number) => toData(request.get('/reports/' + id)),
+    // v6.11.0 §2.1：同类型同周期的历史版本
+    versions: (reportType: string, periodStart: string, periodEnd: string) =>
+      toData(request.get('/reports/versions', {
+        params: { report_type: reportType, period_start: periodStart, period_end: periodEnd },
+      })),
     customers: (id: number) => toData(request.get('/reports/' + id + '/customers')),
     psychCases: (id: number) => toData(request.get('/reports/' + id + '/psych_cases')),
     specialCases: (id: number) => toData(request.get('/reports/' + id + '/special_cases')),

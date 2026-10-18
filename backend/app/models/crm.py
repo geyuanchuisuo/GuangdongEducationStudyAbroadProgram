@@ -95,3 +95,49 @@ class AiReportAttachment(Base):
     file_path: Mapped[str] = mapped_column(String(500), nullable=False)
     file_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
     created_at = mapped_column(DateTime, server_default=func.now())
+
+
+class AiReportDrill(Base):
+    """报告下钻快照（v6.11.0 §2.2/§五）。
+
+    生成报告时把授权下钻数据一并固化，**旧报告的详情/下钻/PDF 永不再查实时库**；
+    心理个案与投诉特别案例的敏感原文按用户确认入库（仅授权接口可读）。
+    """
+    __tablename__ = "ai_report_drill"
+
+    id: Mapped[int] = mapped_column(BigInt, primary_key=True, autoincrement=True)
+    report_id: Mapped[int] = mapped_column(
+        BigInt, ForeignKey("ai_report.id"), nullable=False, index=True, comment="所属报告"
+    )
+    drill_type: Mapped[str] = mapped_column(
+        String(32), nullable=False, index=True, comment="customers / psych_cases / special_cases"
+    )
+    payload = mapped_column(JSON, nullable=False, comment="下钻行快照（含授权后可见字段）")
+    row_count: Mapped[int] = mapped_column(Integer, default=0, comment="快照行数")
+    created_at = mapped_column(DateTime, server_default=func.now())
+
+
+class TicketAIAnalysis(Base):
+    """投诉工单 AI 分析记录（v6.11.0 §2.6）。
+
+    独立于 M4 工单表：只保存 AI 分析结论与来源，不改 M4 任何表结构。
+    一次工单只保留最近一次成功分析（status=succeeded），失败/待分析也留痕。
+    """
+    __tablename__ = "ticket_ai_analysis"
+
+    id: Mapped[int] = mapped_column(BigInt, primary_key=True, autoincrement=True)
+    ticket_id: Mapped[int] = mapped_column(BigInt, nullable=False, index=True, comment="M4 工单ID（仅引用不建外键）")
+    category: Mapped[str | None] = mapped_column(String(32), nullable=True, comment="AI 分类：投诉/建议/咨询")
+    low_satisfaction_candidate: Mapped[bool] = mapped_column(Boolean, default=False)
+    high_risk: Mapped[bool] = mapped_column(Boolean, default=False)
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True, comment="AI 归纳摘要（不得引用原文）")
+    special_reason: Mapped[str | None] = mapped_column(Text, nullable=True, comment="特别案例归纳理由")
+    model_source: Mapped[str | None] = mapped_column(String(64), nullable=True, comment="模型/来源标识")
+    prompt_version: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    raw_output: Mapped[str | None] = mapped_column(Text, nullable=True, comment="原始输出（排障用，接口不外泄）")
+    status: Mapped[str] = mapped_column(
+        String(20), default="pending", index=True, comment="pending / succeeded / failed"
+    )
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    analyzed_at = mapped_column(DateTime, nullable=True)
+    created_at = mapped_column(DateTime, server_default=func.now())

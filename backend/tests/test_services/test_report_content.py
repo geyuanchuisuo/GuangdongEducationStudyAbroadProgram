@@ -41,7 +41,9 @@ def test_customer_metrics():
     m = content["metrics"]
     assert m["status_overview"]["total"] == 13
     assert m["new_this_period"] == 9
-    assert m["profiles"]["sg_conclusion"]["符合"] == 4
+    # v6.11.0：四类画像（mock 里已含「部分符合」样本）
+    assert m["profiles"]["sg_conclusion"] == {"符合": 3, "部分符合": 1, "不符合": 1, "信息不足": 1}
+    assert m["profile_denominator"]["sg_conclusion"] == 6
 
 
 def test_daily_and_weekly_split_submission_stats():
@@ -71,7 +73,12 @@ def test_complaint_metrics():
     m = _build("complaint_weekly")["metrics"]
     assert m["new_count"] == 6
     assert m["over7_unresolved"] == 2
-    assert m["special_cases"] == 1
+    # v6.11.0：一期 AI 判定（无需人工复核）→ t9/t10 都是特别案例
+    assert m["special_cases"] == 2
+    # 待分析工单只入工单总量，不进投诉/AI 指标
+    assert m["orders_total"] == 9
+    assert m["pending_analysis"] == 1
+    assert m["analyzed_count"] == 8
 
 
 def test_version_reflected_in_header():
