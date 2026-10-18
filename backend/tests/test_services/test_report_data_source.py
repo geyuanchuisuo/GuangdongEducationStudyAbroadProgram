@@ -191,6 +191,11 @@ async def test_production_generate_psych_ok_and_complaint_rejected(db, monkeypat
 async def test_production_read_failed_marks_unavailable_without_mock_fallback(db, monkeypatch):
     """v6.11.0：读取失败不再整体拒绝——报告照常生成但标不可得，且绝不回落 mock。"""
     monkeypatch.setattr(settings, "REPORT_DATA_SOURCE", "production")
+    # v6.11.3：M0 已登记 AgentType.REPORT 且本机配了真实 key，
+    # 这里显式清空报告 Agent 的 key，让「AI 不可用」成为确定性前提（否则会真调 Dify）
+    from app.services import ai_service as ai_svc
+
+    monkeypatch.setitem(ai_svc._AGENT_KEY_MAP, ai_svc.AgentType.REPORT, "")
 
     async def _boom(*a, **k):
         raise DomainReadError("psych db down")

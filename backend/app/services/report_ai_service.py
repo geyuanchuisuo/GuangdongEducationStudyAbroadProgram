@@ -220,10 +220,13 @@ class ReportAIService:
 
             agent = getattr(AgentType, "REPORT", None)
             if agent is not None:
+                # v6.11.3：报告分析是单轮无状态调用，session 必须传 "new"。
+                # 曾传 f"report-{type}-{ts}" 被网关当作 conversation_id 发给 Dify，
+                # Dify 校验 conversation_id 必须是 UUID → 400 invalid_param。
                 resp = await ai_service.chat(
                     agent,
                     self._build_prompt(report_type, metrics, context),
-                    f"report-{report_type}-{int(datetime.now().timestamp())}",
+                    "new",
                     user_id="report",
                 )
                 analysis = _parse_json(getattr(resp, "content", ""))

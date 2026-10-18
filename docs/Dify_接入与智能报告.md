@@ -47,7 +47,7 @@
 
 > `DIFY_BASE_URL` 不带 `/v1`：网关内部拼 `{base}/v1/chat-messages`。
 
-## 4. 唯一剩余阻塞（M0）
+## 4. M0 接入（v6.11.6 已补齐 ✅）
 
 网关里没有报告 Agent：实测容器内 `AgentType 成员 = [CUSTOMER, EMPLOYEE, STUDENT]`、`hasattr(settings,'DIFY_REPORT_AGENT_KEY') = False`。
 
@@ -68,7 +68,7 @@ _AGENT_KEY_MAP = {
 }
 ```
 
-M0 加完这 4 行并重启后端后，M5 **无需改任何代码**即可跑真实 AI（`ai_source` 会变成 `dify`）。
+已补齐并实测：`ai_source=dify`、`ai_status=available`。补丁原文如下（已落地，保留作说明）。
 
 **M0 加完后的一条验证命令**：
 

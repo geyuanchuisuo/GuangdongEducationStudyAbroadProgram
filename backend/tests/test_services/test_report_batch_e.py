@@ -49,12 +49,17 @@ async def test_generate_version_increments_and_list_folds(svc_db):
 
 
 @pytest.mark.asyncio
-async def test_generate_records_ai_status_and_mock_source(svc_db):
+async def test_generate_records_ai_status_and_mock_source(svc_db, monkeypatch):
+    # v6.11.3：M0 已登记 AgentType.REPORT，本机又配了真实 key；
+    # 这里清空报告 Agent 的 key，专门验证「演示环境回落模拟文本」这条分支
+    from app.services import ai_service as ai_svc
+
+    monkeypatch.setitem(ai_svc._AGENT_KEY_MAP, ai_svc.AgentType.REPORT, "")
     svc = rs_module.ReportService(ReportRepository(svc_db))
     report = await svc.generate("complaint_weekly", None, None, user_id=1)
     content = report.report_content
     assert content["ai_status"] == "available"
-    # M5-10.6 差异字段：无 model key 时回落模拟输出，来源标注 mock
+    # 报告专用 Agent 不可用时，演示环境回落模拟输出，来源标注 mock
     assert content["ai_source"] == "mock"
     assert report.data_source_status == "mock"
     assert content["header"]["data_source_status"] == "mock"
