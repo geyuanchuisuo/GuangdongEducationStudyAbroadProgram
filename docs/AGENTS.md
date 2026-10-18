@@ -1,4 +1,4 @@
-# AGENTS.md - 项目接手指南
+﻿# AGENTS.md - 项目接手指南
 
 > 给下一个接手这个项目的人/AI 的完整指南
 
@@ -844,4 +844,4 @@ chore: 构建
 > 文档索引补充：`docs/前端无法解决问题清单.md`（前端无法根治问题、后端解决方案、验收标准）。
 
 
-**最后更新**：2026-10-18（v6.10.3 第九次同步 origin/master→longtrying_test：M2 解耦（cs_agent_service）+ M5 一期改造 + Dify Chatflow；合并前 ai_service 保留验证通过，compileall + verify_all 29/29 + pytest 146/146；LOG-059）
+**最后更新**：2026-10-18（v6.10.4 DIFY_BASE_URL 环境特异配置修复：compose 改回 host.docker.internal，容器内 socket 连通 + /health 200，LOG-059 教训销账；v6.10.3 第九次同步 origin/master→longtrying_test：M2 解耦 + M5 一期改造 + Dify Chatflow，verify_all 29/29 + pytest 146/146）
