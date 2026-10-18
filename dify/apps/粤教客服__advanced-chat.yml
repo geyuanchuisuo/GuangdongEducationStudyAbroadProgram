@@ -5,7 +5,7 @@
 #
 # 导入说明：
 #   1. Dify 控制台「创建应用 → 导入 DSL」选此文件（advanced-chat 模式）
-#   2. 导入后绑定 mimo-v2.6-flash 模型（OpenAI-API-compatible，地址 https://api.xiaomimimo.com/v1）
+#   2. 导入后绑定 OpenAI-API-compatible 模型（地址与模型名以 dify/docker/.env 客户配置为准）
 #   3. 挂载知识库：课程项目库 + 活动讲座库
 #   4. pre_prompt 中三标记契约（[intent:] / [RECOMMEND] / [SLOTS]）是后端 cs_agent_service 解析的约定，勿删
 app:
@@ -56,7 +56,7 @@ workflow:
           type: llm
           model:
             provider: openai-api-compatible
-            name: mimo-v2.6-flash
+            name: your-model-name
             mode: chat
             completion_params: { temperature: 0.7, max_tokens: 4096 }
           prompt_template:
