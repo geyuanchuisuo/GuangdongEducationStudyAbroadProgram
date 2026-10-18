@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 
 class CrmLeadCreate(BaseModel):
     phone: str = Field(..., min_length=11, max_length=20, description="手机号(业务唯一键，落在 customer 表)")
+    wechat: str | None = Field(None, max_length=100, description="微信号")
     name: str | None = None
     gender: str | None = None
     age: int | None = None

@@ -1,8 +1,12 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { ChatDotRound, Close, Promotion } from '@element-plus/icons-vue'
 import { platformApi } from '../api/platform'
+import { useUserStore } from '../stores/user'
 
+const router = useRouter()
+const userStore = useUserStore()
 const props = defineProps<{ type?: 'public' | 'student' | 'employee' | 'manager'; autoOpen?: boolean }>()
 const open = ref(false)
 watch(() => props.autoOpen, (value) => {
@@ -10,7 +14,7 @@ watch(() => props.autoOpen, (value) => {
 }, { immediate: true })
 const input = ref('')
 const sessionId = ref('new')
-const messages = ref<Array<{ role: 'user' | 'agent'; text: string }>>([])
+const messages = ref<Array<{ role: 'user' | 'agent'; text: string; recs?: AnyRec[] }>>([])
 const messageList = ref<HTMLElement | null>(null)
 watch(messages, async () => {
   await nextTick()
@@ -28,6 +32,12 @@ const quick = computed(() => {
   return ['推荐适合我的项目', '近期有什么活动', '咨询报名条件']
 })
 
+interface AnyRec { name?: string; project?: string; type?: string }
+
+function goRec(rec: AnyRec) {
+  router.push(rec.type === 'event' ? '/events' : '/projects')
+}
+
 async function send(text = input.value) {
   const value = text.trim()
   if (!value) return
@@ -35,6 +45,7 @@ async function send(text = input.value) {
   input.value = ''
   try {
     let reply = ''
+    let recs: AnyRec[] | undefined
     if (props.type === 'student') {
       const result: any = await platformApi.student.agentChat({ message: value, session_id: sessionId.value })
       sessionId.value = result?.session_id || sessionId.value
@@ -43,9 +54,18 @@ async function send(text = input.value) {
       const result: any = await platformApi.employee.agentChat({ message: value, session_id: sessionId.value })
       sessionId.value = result?.session_id || sessionId.value
       reply = result?.reply || reply
+    } else {
+      const result: any = await platformApi.csChat({
+        message: value,
+        conversation_id: sessionId.value === 'new' ? null : sessionId.value,
+        user_id: userStore.userInfo?.id ?? null,
+      })
+      sessionId.value = result?.conversation_id || sessionId.value
+      reply = result?.answer || reply
+      recs = result?.recommendations || undefined
     }
     if (!reply) reply = '当前助手服务未返回内容，请稍后重试。'
-    messages.value.push({ role: 'agent', text: reply })
+    messages.value.push({ role: 'agent', text: reply, recs })
   } catch {
     messages.value.push({ role: 'agent', text: '当前助手服务暂不可用，请稍后重试。' })
   }
@@ -66,6 +86,12 @@ async function send(text = input.value) {
         <div ref="messageList" class="messages">
           <div v-for="(item, index) in messages" :key="index" class="message" :class="[item.role, { latest: index === messages.length - 1 }]">
             {{ item.text }}
+            <div v-if="item.recs?.length" class="rec-cards">
+              <button v-for="(rec, ri) in item.recs" :key="ri" class="rec-card" @click="goRec(rec)">
+                <el-tag size="small" :type="rec.type === 'event' ? 'warning' : 'success'" effect="plain">{{ rec.type === 'event' ? '活动' : '课程' }}</el-tag>
+                <span>{{ rec.name || rec.project }}</span>
+              </button>
+            </div>
           </div>
         </div>
         <div class="quick">
@@ -106,6 +132,13 @@ header small { display: block; margin-top: 4px; color: #cfcdf1; }
 .message.user { margin-left: auto; background: #5a50b8; color: #fff; }
 .message.latest { box-shadow: 0 8px 20px rgba(45,43,115,.12); }
 .message.latest::after { content: "最新"; display: block; margin-top: 5px; font-size: 10px; opacity: .65; }
+.rec-cards { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.rec-card {
+  display: flex; align-items: center; gap: 8px; padding: 8px 10px;
+  background: #f7f7fb; border: 1px solid #e8e6f1; border-radius: 10px;
+  font-size: 13px; cursor: pointer; text-align: left; color: inherit;
+}
+.rec-card:hover { border-color: #5a50b8; }
 .quick { display: flex; gap: 8px; padding: 10px 14px; overflow-x: auto; }
 .composer { display: flex; gap: 8px; padding: 12px 14px 16px; border-top: 1px solid #eeeef4; }
 .fade-enter-active, .fade-leave-active { transition: opacity .2s, transform .2s; }

@@ -15,22 +15,22 @@ def test(name, fn):
         print(f'  FAIL: {name} -> {e}')
         failed += 1
 
-# ===== Suite 1: 31 tables =====
+# ===== Suite 1: 32 tables =====
 print('=' * 60)
-print('Suite 1: Model Import (31 tables)')
+print('Suite 1: Model Import (32 tables)')
 print('=' * 60)
 
 from app.models import Base
 all_tables = sorted(Base.metadata.tables.keys())
 print(f'  Tables ({len(all_tables)}): {all_tables}')
-test(f'table count = 31 (got {len(all_tables)})',
-     lambda: None if len(all_tables) == 31 else
+test(f'table count = 32 (got {len(all_tables)})',
+     lambda: None if len(all_tables) == 32 else
      (_ for _ in ()).throw(Exception(f'got {len(all_tables)}')))
 
 from app.models.user import User
 from app.models.customer import Customer, PendingLead
 from app.models.crm import CrmLead, CustomerAssessment, CrmFollowUp, AiReport, AiReportAttachment
-from app.models.customer_service import CsChatSession, CsChatMessage, CsIntentLog, CsFaq
+from app.models.customer_service import CsChatSession, CsChatMessage, CsIntentLog, CsRecommendLog, CsFaq
 from app.models.student import (StudentAdminService, StudentPsychProfile, StudentPsychAlert,
                                  StudentFeedbackTicket, StudentScore, StudentAcademic,
                                  StudentApplicationProgress)
@@ -174,6 +174,15 @@ test('/api/v1/crm + /ai + /courses + /events (15 paths, M1/M2 v6.7.3)',
      lambda: None if all(p in routes for p in expected_m1m2_paths) else
      (_ for _ in ()).throw(Exception('missing')))
 
+# ── M2 公开客服路由（2 paths，v6.9.0 客服 Agent 二期） ─────────
+expected_cs_public_paths = [
+    '/api/v1/cs/faq',
+    '/api/v1/cs/sessions/{session_id}/messages',
+]
+test('/api/v1/cs (2 paths, M2 v6.9.0 公开FAQ+会话历史)',
+     lambda: None if all(p in routes for p in expected_cs_public_paths) else
+     (_ for _ in ()).throw(Exception('missing')))
+
 # ── M1 客户模块 6 态流转 + 待补全线索（3 paths，v6.8.0） ─────────
 expected_customer_v680_paths = [
     '/api/v1/customers/pending-leads',
@@ -296,6 +305,7 @@ for model_cls, label in [
     (CrmFollowUp, 'CrmFollowUp'),
     (CsChatSession, 'CsChatSession'),
     (CsIntentLog, 'CsIntentLog'),
+    (CsRecommendLog, 'CsRecommendLog'),
 ]:
     fk = get_fks(model_cls)
     actual = fk.get('customer_id', 'NONE')

@@ -1,15 +1,22 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ArrowRight, Search } from '@element-plus/icons-vue'
 import SectionTitle from '../../components/SectionTitle.vue'
-import { projects } from '../../data/mock'
+import { platformApi } from '../../api/platform'
 
 const router = useRouter()
 const keyword = ref('')
 const category = ref('全部')
 const categories = ['全部', '德国双元制', '新加坡本硕', '国际留学', '国际研学']
-const filtered = computed(() => projects.filter((item) =>
+const projects = ref<any[]>([])
+
+// v6.10.0：课程列表接真实 GET /cs/courses（platformApi 内映射页面形状、失败回落演示数据）
+onMounted(async () => {
+  projects.value = await platformApi.projects()
+})
+
+const filtered = computed(() => projects.value.filter((item) =>
   (category.value === '全部' || item.category === category.value) &&
   (!keyword.value || item.title.includes(keyword.value) || item.summary.includes(keyword.value)),
 ))

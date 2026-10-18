@@ -1,7 +1,8 @@
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.customer_service import CsChatMessage, CsChatSession, CsIntentLog
+from app.models.customer import PendingLead
+from app.models.customer_service import CsChatMessage, CsChatSession, CsFaq, CsIntentLog, CsRecommendLog
 
 
 class CustomerServiceRepository:
@@ -75,3 +76,74 @@ class CustomerServiceRepository:
         await self.db.commit()
         await self.db.refresh(log)
         return log
+
+    async def add_recommend_log(
+        self,
+        session_id: int,
+        customer_id: int | None = None,
+        course_id: int | None = None,
+        event_id: int | None = None,
+        recommendation_type: str | None = None,
+        item_name: str | None = None,
+    ) -> CsRecommendLog:
+        log = CsRecommendLog(
+            session_id=session_id,
+            customer_id=customer_id,
+            course_id=course_id,
+            event_id=event_id,
+            recommendation_type=recommendation_type,
+            item_name=item_name,
+        )
+        self.db.add(log)
+        await self.db.commit()
+        await self.db.refresh(log)
+        return log
+
+    async def list_recommend_logs(self, session_id: int) -> list[CsRecommendLog]:
+        result = await self.db.execute(
+            select(CsRecommendLog).where(CsRecommendLog.session_id == session_id).order_by(CsRecommendLog.id)
+        )
+        return list(result.scalars().all())
+
+    # ── 待补全线索（客服对话微信号入口，防重复建档） ──────────
+    async def get_pending_lead_by_wechat(self, wechat: str) -> PendingLead | None:
+        result = await self.db.execute(
+            select(PendingLead).where(PendingLead.wechat == wechat, PendingLead.status == "pending")
+        )
+        return result.scalar_one_or_none()
+
+    async def create_pending_lead(self, pending: PendingLead) -> PendingLead:
+        self.db.add(pending)
+        await self.db.commit()
+        await self.db.refresh(pending)
+        return pending
+
+    # ── 公开客服查询（/cs 路由组） ─────────────────────────
+    async def list_faqs(
+        self,
+        page: int = 1,
+        page_size: int = 50,
+        category: str | None = None,
+        keyword: str | None = None,
+    ) -> tuple[list[CsFaq], int]:
+        conditions = [CsFaq.enabled.is_(True)]
+        if category:
+            conditions.append(CsFaq.category == category)
+        if keyword:
+            conditions.append(CsFaq.question.like(f"%{keyword}%"))
+        count_result = await self.db.execute(select(func.count(CsFaq.id)).where(*conditions))
+        total = count_result.scalar_one()
+        result = await self.db.execute(
+            select(CsFaq)
+            .where(*conditions)
+            .order_by(CsFaq.sort_order, CsFaq.id)
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        )
+        return list(result.scalars().all()), total
+
+    async def list_messages(self, session_id: int) -> list[CsChatMessage]:
+        result = await self.db.execute(
+            select(CsChatMessage).where(CsChatMessage.session_id == session_id).order_by(CsChatMessage.id)
+        )
+        return list(result.scalars().all())

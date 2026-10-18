@@ -15,7 +15,7 @@ class DifyClient:
         self.agent_key = agent_key or settings.DIFY_CUSTOMER_AGENT_KEY
 
     async def chat(self, query: str, user: str, conversation_id: str | None = None) -> dict:
-        url = f"{self.base_url}/chat-messages"
+        url = f"{self.base_url}/v1/chat-messages"
         headers = {
             "Authorization": f"Bearer {self.agent_key}",
             "Content-Type": "application/json",

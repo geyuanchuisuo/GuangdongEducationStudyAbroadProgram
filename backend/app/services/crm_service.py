@@ -70,6 +70,7 @@ class CrmService:
         if customer is None:
             customer = Customer(
                 phone=data.phone,
+                wechat=data.wechat,
                 name=data.name,
                 gender=data.gender,
                 age=data.age,
@@ -90,7 +91,7 @@ class CrmService:
             customer = await self.customer_repo.create(customer)
         else:
             updates = {}
-            for field in ("name", "gender", "age", "education", *CUSTOMER_FACT_FIELDS):
+            for field in ("wechat", "name", "gender", "age", "education", *CUSTOMER_FACT_FIELDS):
                 value = getattr(data, field, None)
                 if value is not None:
                     updates[field] = value

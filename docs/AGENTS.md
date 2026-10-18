@@ -6,19 +6,18 @@
 
 ## 零、快速定位（打开项目先看这里）
 
-
-**当前进度**：Phase 0 公共地基已完成（v6.0.1），Phase 1 模块并行开发中；M3 员工模块全部交付（v6.5.0 收官）；v6.6.0 需求对齐差异全部落地；v6.7.0~v6.7.2 管理层端三项+需求核对 52/52；master 已合并 longtrying（62d4cff）与 longtrying_stu（a23fc49，第三次合并）全部工作；**M4 学生模块一期全部交付（v6.8.0 第一批 7 子模块 + v6.8.1 第二批 学生助手Agent/提醒聚合，11 paths / 13 endpoints）；v6.8.2 Docker 环境搭建 + M3/M4 数据库端到端验证通过（E2E 69/69，修复 7 项缺陷）；v6.8.3 指令解析本地兜底 + 提醒聚合缺陷修复（E2E 71/71 幂等全过）；v6.8.4 文件存储改本地磁盘后端（docker compose 移除 MinIO，零额外镜像三容器直跑）+ DIFY_BASE_URL 根因修正；v6.8.5 引入 M5 智能报告 7 paths 与前端界面，M3 dashboard 与《一期指标口径表V1》统一名称+新增差异字段（verify_all 25/25 + M5 测试 32/32 + 对齐 14/14）；v6.8.6 AI 全链路打通：Dify 绑定 mimo-v2.6-flash（api.xiaomimimo.com），3 个 Agent 应用创建并回填 app key，真实 AI 链路 6/6 验证通过，环境缺口全部关闭**；**anhoa 分支 v6.8.0：M1 客户模块 + M2 客服 Agent 一期补齐（客户 8 研判字段/6 态流转/pending_lead 待补全线索/客服 Agent 4 出口），2026-10-17 两次合并 origin/master 并线（v6.8.0 被两条分支并行使用，路由 81→99）**；**v6.8.8 P1 运行时缺陷修复：ai_service.py 恢复 M3/M4 依赖的 AgentType/AIService/ai_service（anhoa 合并重写所致，函数内延迟导入绕过静态检查），客服 AiService 与通用 AIService 双服务共存，容器内真实 Dify 调用成功（verify_all 27/27 + pytest 64/64）**；**v6.9.0 远端访问方案（longtrying_test 分支）：docker-compose 增加 nginx 统一 80 入口 + ngrok 内网穿透脚本 + 一键构建启动脚本 + 完整使用指南（REMOTE_ACCESS.md），本地执行 `.\scripts\build-and-serve.ps1` + `.\scripts\start-ngrok.ps1` 即可获得公网 URL**；**v6.9.1 远端访问实测修正：nginx 端口 80→8080（本机 80 被 Dify 占用），新增 localtunnel 免注册方案，公网实测通过（https://wide-cameras-pay.loca.lt 前端 200/API 正常）**；**v6.9.2 master 快进合并 longtrying_test（b84acf3..4c27071，13 文件 +406/-14，无冲突，verify_all 27/27），远端访问能力并入主干；**M5 智能报告 v6.9.0（ZNBG 分支线，与 master v6.9.0 远端访问同名异义）：批次 A~E 连续交付——口径健壮性 11 项 + 真实数据适配器骨架（REPORT_DATA_SOURCE 开关/三态质量标注）+ 前端报告闭环（列表/详情/生成/下钻/真实 PDF）+ 测试资产（全仓 pytest 113/113、verify_all 27/27、npm build 通过）**；**v6.9.5 第六次同步 origin/master（4d6547c，作者 geyuan）：先按硬性规则 5 上报公共模块（config 加 DIFY_MODEL_API_KEY/BASE_URL/NAME、新增 model_ai_service.py 共用模型网关被 M3/M4/M5 三处调用、compose/.env.example/启动脚本凭据、PublicLayout 公共导航），经用户同意后合并；按用户决定①数据库凭据保留 420821+59000（回退 master 的 123456+3306）②恢复 views/manager/Index.vue ③不引入 master 的 health/complaints 静态占位模板（无路由、与智能汇总口径重复）；M5 侧统一走共用网关并新增差异字段 `ai_source`（model/mock/unavailable，PDF 与前端文案同源标注，替代「可用（模拟）」）；修 master 自带缺陷 employee_service.py 缺 logger 导入（/employee/agent/chat 与 /employee/guide/ask 两处 50001）+ 解冲突引入的 TS6133；27/27 + 113/113 + build + E2E 80/80**；**v6.10.0 种子数据规范化：seed_data.py 加 random.seed(42) 可复现、统一密码 Test@123456、4 核心角色固定账号（13810000001~004）、AiReport version 递增适配 uq 约束；4 账号登录 200 + 各模块核心表 50+，其他分支合并后直接 `docker exec edu-backend /app/.venv/bin/python -m scripts.seed_data` 即可用**  
+**当前进度**：Phase 0 公共地基已完成（v6.0.1），Phase 1 模块并行开发中；M3 员工模块全部交付（v6.5.0 收官）；v6.6.0 需求对齐差异全部落地；v6.7.0~v6.7.2 管理层端三项+需求核对 52/52；master 已合并 longtrying（62d4cff）与 longtrying_stu（a23fc49，第三次合并）全部工作；**M4 学生模块一期全部交付（v6.8.0 第一批 7 子模块 + v6.8.1 第二批 学生助手Agent/提醒聚合，11 paths / 13 endpoints）；v6.8.2 Docker 环境搭建 + M3/M4 数据库端到端验证通过（E2E 69/69，修复 7 项缺陷）；v6.8.3 指令解析本地兜底 + 提醒聚合缺陷修复（E2E 71/71 幂等全过）；v6.8.4 文件存储改本地磁盘后端（docker compose 移除 MinIO，零额外镜像三容器直跑）+ DIFY_BASE_URL 根因修正；v6.8.5 引入 M5 智能报告 7 paths 与前端界面，M3 dashboard 与《一期指标口径表V1》统一名称+新增差异字段（verify_all 25/25 + M5 测试 32/32 + 对齐 14/14）；v6.8.6 AI 全链路打通：Dify 绑定 mimo-v2.6-flash（api.xiaomimimo.com），3 个 Agent 应用创建并回填 app key，真实 AI 链路 6/6 验证通过，环境缺口全部关闭**；**anhoa 分支 v6.8.0：M1 客户模块 + M2 客服 Agent 一期补齐（客户 8 研判字段/6 态流转/pending_lead 待补全线索/客服 Agent 4 出口），2026-10-17 两次合并 origin/master 并线（v6.8.0 被两条分支并行使用，路由 81→99）**；**v6.9.0（anhoa 分支）：M2 客服 Agent 二期补齐——cs_recommend_log 推荐落库新表 / [SLOTS] 槽位采集与画像更新 / 仅微信号→pending_lead / 公开 /cs/faq + /cs/sessions 接口 / FAQ 种子 37 条 / 前端客服窗接线（pytest 70/70 + verify_all 29/29；Dify 侧输出契约配置待 Docker，未配置时标记解析自动跳过）**；**v6.8.8 P1 运行时缺陷修复：ai_service.py 恢复 M3/M4 依赖的 AgentType/AIService/ai_service（anhoa 合并重写所致，函数内延迟导入绕过静态检查），客服 AiService 与通用 AIService 双服务共存，容器内真实 Dify 调用成功（verify_all 27/27 + pytest 64/64）**；**v6.9.0 远端访问方案（longtrying_test 分支）：docker-compose 增加 nginx 统一 80 入口 + ngrok 内网穿透脚本 + 一键构建启动脚本 + 完整使用指南（REMOTE_ACCESS.md），本地执行 `.\scripts\build-and-serve.ps1` + `.\scripts\start-ngrok.ps1` 即可获得公网 URL**；**v6.9.1 远端访问实测修正：nginx 端口 80→8080（本机 80 被 Dify 占用），新增 localtunnel 免注册方案，公网实测通过（https://wide-cameras-pay.loca.lt 前端 200/API 正常）**；**v6.9.2 master 快进合并 longtrying_test（b84acf3..4c27071，13 文件 +406/-14，无冲突，verify_all 27/27），远端访问能力并入主干；**M5 智能报告 v6.9.0（ZNBG 分支线，与 master v6.9.0 远端访问同名异义）：批次 A~E 连续交付——口径健壮性 11 项 + 真实数据适配器骨架（REPORT_DATA_SOURCE 开关/三态质量标注）+ 前端报告闭环（列表/详情/生成/下钻/真实 PDF）+ 测试资产（全仓 pytest 113/113、verify_all 27/27、npm build 通过）**；**v6.9.5 第六次同步 origin/master（4d6547c，作者 geyuan）：先按硬性规则 5 上报公共模块（config 加 DIFY_MODEL_API_KEY/BASE_URL/NAME、新增 model_ai_service.py 共用模型网关被 M3/M4/M5 三处调用、compose/.env.example/启动脚本凭据、PublicLayout 公共导航），经用户同意后合并；按用户决定①数据库凭据保留 420821+59000（回退 master 的 123456+3306）②恢复 views/manager/Index.vue ③不引入 master 的 health/complaints 静态占位模板（无路由、与智能汇总口径重复）；M5 侧统一走共用网关并新增差异字段 `ai_source`（model/mock/unavailable，PDF 与前端文案同源标注，替代「可用（模拟）」）；修 master 自带缺陷 employee_service.py 缺 logger 导入（/employee/agent/chat 与 /employee/guide/ask 两处 50001）+ 解冲突引入的 TS6133；27/27 + 113/113 + build + E2E 80/80**；**v6.9.8（anhoa，2026-10-18）M2 阶段B Dify VM 侧落地：192.168.184.128:8080 重建「粤教客服Agent」（deepseek-flash 临时代替共用网关，用户决定后续再调），pre_prompt 4336 字符注入三标记契约（[intent:]/[RECOMMEND]/[SLOTS]），4 知识库 7 文档 economy+全文检索兜底（siliconflow embedding 402、本机 ollama 跨网段不可达），dify_client /v1 前缀修复；7 场景端到端全过 + RAG 命中 16 条 + verify_all 29/29**；**v6.9.9（anhoa，2026-10-18）M2 阶段B-B4/B5 Chatflow 重建：advanced-chat 应用 2f92093f，B5 问题分类器 7 类节点编排（确定性 intent 前置），B4 检索工具改知识库兜底（课程活动库 f892116a，VM→宿主机网络不通）；后端 THINK_RE 剥离 reasoning 思考块，.env 换 chatflow key；7 场景端到端全过 + THINK 无泄漏 + pytest 129/130**；**v6.9.10（anhoa，2026-10-18）M1 AI 信息提取兜底：客服对话本地规则提取画像字段——LOCAL_EXTRACT_PATTERNS 5 组正则（name/age/education/gender/study_intent），_local_extract_merge 补缺不覆盖，_normalize_slot_value 清洗对齐；Dify 未输出 [SLOTS] 时自动补充，pytest 129/130 + 本地提取单元测试 5/5**；**v6.9.11（anhoa，2026-10-18）M1 客户注册/登录 PROSPECT 审批门：RegisterRequest 扩展 PROSPECT+phone/wechat/age/education 选填；UserService.register 注册即审批——用户 status=待审批→customer 主表创建（sys_user_id 关联）→审批实例 biz_type=prospect_register 自动分配 MANAGER；approve→用户激活+customer.registered 事件，reject→用户禁用；POST /auth/prospect/approve 审批接口，pytest 129/130**（⚠ 2026-10-18 实测发现 schema 漏改——PROSPECT 注册入口 422，**已由 v6.9.13 补齐**：pattern 扩 `^(STUDENT|EMPLOYEE|PROSPECT)$` + phone/wechat/age/education 选填，端到端实测 6/6 通过；遗留已由 v6.10.0 清）**；**v6.10.0（anhoa，2026-10-18）M1/M2 五项补齐：审批人 JWT+MANAGER 校验（40301）、注册事务原子化（孤儿缺陷消除）、登录待审批 40006、新增 GET /cs/courses 公开课程（路由 103 paths）、前端注册/课程页接线、活动枚举归一——活动报名闭环全通；测试资产 +15（注册审批门/本地提取入库/test_ai 环境隔离），pytest 143/143 + verify_all 29/29**
 
 **M5 移交待办清单（v6.9.0，接手者从这里继续）**：
 1. ✅ **环境级验收（v6.9.3 已实测完成）**：Docker E2E `tests/e2e_m3m4_test.py` **80/80**（含 Section 5.5 M5 报告链路 10 检查）；production 冒烟 `REPORT_DATA_SOURCE=production` 显式传「上一自然周」**7/7**（4/5 类 completed，complaint_weekly 按设计显式拒绝）。**但默认周期调用仅 2/7**——见第 6 项两条 P1，切 production 前必须先修（LOG-040）
-2. 🔴 **转告 M0/M1/anho**：修 `migrations/versions/002_customer_approval.py` 4 处 FK 列 BigInteger→Integer（customer.owner_employee_id/sys_user_id、approval_instance.initiator_id、approval_task.approver_id）——BIGINT→INT(sys_user.id) errno 150，**空库 alembic upgrade head 必失败**，M5 的 003 迁移空库验收被阻塞（LOG-033）
+2. ✅ ~~**转告 M0/M1/anho**：修 `migrations/versions/002_customer_approval.py` 4 处 FK 列 BigInteger→Integer~~ **v6.9.7 已修复（anhoa，2026-10-17）**：002 的 4 处 + 实测发现的 001 同类 4 处（sys_approval.initiator_id/approver_id、sys_operation_log.user_id、sys_notification.user_id，经用户批准「修类型保留表」）全部 BigInteger→Integer；另修 002.downgrade 的 FK/索引顺序缺陷（errno 1553/1828，先摘 FK 再删列）；空库 upgrade head + downgrade base + upgrade head 三步验收全过，ORM 逐列比对一致——**003 迁移空库验收阻塞解除，可切 `REPORT_DATA_SOURCE=production` 前置条件 +1（仍待清单第 4 项业务确认）**；遗留迁移漂移债见 LOG-045
 3. ✅ ~~P1 缺陷 M3/M4 Agent 断链~~ **已修复**：v6.8.8 上游在 ai_service.py 尾部恢复 M0 网关符号（与 M2 客服 AiService 双服务共存），并随本次合并（eaaea94）进入本分支（LOG-031）
-4. 🟡 **业务确认**：`docs/M5_字段映射表.md` 交 M1/M3/M4 负责人逐行确认（投诉 9 字段落库、画像 4→3 映射拍板、客户状态历史来源）→ 确认 + 修完第 6 项后才可切 `REPORT_DATA_SOURCE=production`
+4. 🟡 **业务确认（M1 部分已闭环 2026-10-18，v6.10.1）**：`docs/M5_字段映射表.md` M1 三口径已拍板——期末状态一期接受「当前值推算」近似、4→3 维持保守映射、follow_up_summary 一期不取（映射表 4.2/4.3 有拍板记录，与 `_PROFILE_4_TO_3` 实现一致，零代码）；**余 M3/M4 部分（迟报口径、预警闭环、投诉 9 字段落库）待对应负责人** → 全部确认后才可切 `REPORT_DATA_SOURCE=production`
 5. ✅ ~~ZNBG 分支本地提交未推送~~ **已推送**（v6.9.3 起本分支已同步远端；git 凭据本机已恢复，`git ls-remote` 免交互即通）
 6. ✅ ~~两条 P1（v6.9.3 实测发现，M5，阻断切 production）~~ **v6.9.6 已修复**：a) 缺省周期改用 `default_completed_week(now)`=上一完整自然周 `[上周一00:00, 本周一00:00)`（原为 `week_range(now)` 恒落未来 → 必 40002）b) `normalize_customer_status()` 复用 M1 词表 `STATUS_CN_TO_EN` 做中英归一 + `fetch_customers` 逐行容错（脏行跳过并写入口径说明，不再拖垮 5 类报告）。**仍留 P2（他模块）**：`seed_data.py` ai_report 段秒级 DATETIME 随机碰撞（2 跑 1 败，共用脚本需确认）、前端 `RoleWorkspace.vue` 部分区块仍为静态演示值（管理层看板 183/21.4%/689/3.2%、学生首屏「李同学」与登录账号不符，作者 ge yuan，属 M3 看板区块）
 7. ✅ ~~M5 报告 AI 只用模拟~~ **v6.9.5 已统一到共用网关**：`ReportAIService` 内部走 `model_ai_service`（共用模块名称），失败回落 mock；报告内容新增差异字段 `ai_source`（model/mock/unavailable）并与 `ai_status` 并存，PDF 头部/前端详情按来源标注；契约 §7 已同步。**v6.9.6 补**：三处下钻改为与报告**同源**（`_drilldown_dataset` 按 `data_source_status` 分流），前端「明细下钻」说明同步。**待办**：`DIFY_MODEL_API_KEY` 需在 `backend/.env` 配置后才可验证真实模型链路（当前自动回落 mock，不影响测试）；M3 `employee_service.py` 的 logger 导入为合并期最小修复，待 M3 负责人复审
 
-**数据库**：31张表（customer 加 8 研判画像列、cs_intent_log.user_id 放宽可空、AiReport 表加 version/data_source_status/error_message 3 列），99条路由路径（98 API + 1 health；employee 42 paths，student 11 paths/13 endpoints，reports 7 paths，crm/ai/courses/events 15 paths），MVC分层结构就绪；**Docker 环境：edu-mysql/edu-redis/edu-backend 全部健康，`docker compose up -d` 三容器零额外镜像直跑（文件存储默认本地磁盘 backend_storage 卷，不再依赖 MinIO）**  
+**数据库**：32张表（v6.9.0 新增 cs_recommend_log 推荐日志表；customer 加 8 研判画像列、cs_intent_log.user_id 放宽可空、AiReport 表加 version/data_source_status/error_message 3 列），103条路由路径（102 API + 1 health，v6.9.11 增 /auth/prospect/approve、v6.10.0 增 /cs/courses；employee 42 paths，student 11 paths/13 endpoints，reports 7 paths，crm/ai/cs/courses/events 18 paths），MVC分层结构就绪；**Docker 环境：edu-mysql/edu-redis/edu-backend 全部健康，`docker compose up -d` 三容器零额外镜像直跑（文件存储默认本地磁盘 backend_storage 卷，不再依赖 MinIO）**  
 **主基线文档**：`promts/lon/提示词整合测试_demo/docs/基础架构方案_五人并行开发.md`（v1.2.0，28项决策）
 
 **接手阅读顺序**：
@@ -26,8 +25,8 @@
 2. `docs/项目需求文档.md` — 完整业务需求
 3. `promts/lon/提示词整合测试_demo/docs/基础架构方案_五人并行开发.md` — **主基线，权重最高**
 4. `docs/开发路线图.md` — 当前进度、下一步任务
-5. `docs/接口契约v1.md` — API接口契约（v2.8.5 并集）
-6. `docs/更新记录.md` — 最近变更（v6.8.5 主线 + anhoa v6.8.0 并线）
+5. `docs/接口契约v1.md` — API接口契约（v2.9.3，M2 阶段B Dify 侧落地）
+6. `docs/更新记录.md` — 最近变更（v6.9.11 PROSPECT 审批门 + v6.9.8~v6.9.10 M2 阶段B/M1 提取兜底 + v6.9.7 迁移链修复 + 第五次合并 + 主线 v6.9.5/v6.9.6）
 
 **重要规则**：
 - 主基线文档（基础架构方案）权重 > 其他参考文档（共用基座方案、公共框架等）
@@ -163,7 +162,7 @@ GuangdongEducationStudyAbroadProgram/
 - 员工数据隔离：普通员工只能看到自己名下的客户
 - 二期拆分为3个独立角色：人事（HR，不可看客户/经营）、经理（MANAGER_DIRECTOR，只看下属+自己客户）、总裁（MANAGER_PRESIDENT，看全部）
 
-### 4.2 数据库表（31张，v6.5.0更新）
+### 4.2 数据库表（32张，v6.9.0更新）
 
 > **数据库**：MySQL 8.0+，端口59000，库名 `GuangdongEducationStudyAbroadProgram`
 > **自动建表**：应用启动时自动创建所有表，无需手动执行SQL
@@ -193,6 +192,7 @@ GuangdongEducationStudyAbroadProgram/
 16. **cs_chat_message** - 客服消息表
 17. **cs_intent_log** - 意图/转化日志表
 18. **cs_faq** - 常见问答对表
+18a. **cs_recommend_log** - 推荐日志表（v6.9.0 新增：课程/活动推荐逐条落库，session_id/customer_id/course_id/event_id/recommendation_type/item_name）
 
 **员工模块表（M3）**：
 19. **employee_daily_report** - 员工日报表（v6.3.0 加 status/is_late）
@@ -227,6 +227,7 @@ GuangdongEducationStudyAbroadProgram/
 - `/api/v1/approvals/*` - 审批引擎（v6.0.0 升级双表设计）
 - `/api/v1/notifications/*` - 通知中心
 - `/api/v1/files/*` - 文件存储
+- `/api/v1/cs/*` - 公开客服（v6.9.0：/cs/faq 公开FAQ、/cs/sessions/{id}/messages 会话历史；对话入口为 /ai/customer-service/chat）
 - `/api/v1/reports/*` - 智能报告（M5，v6.8.5 合并 master 引入；与 `/employee/reports` 员工日报区分）
 
 ### 4.3.1 模块划分与职责边界（v5.0.0新增）
@@ -574,7 +575,7 @@ VITE_API_BASE_URL=http://localhost:8000/api/v1
 ### 7.1 Git规范
 
 **分支**：
-- `master` - 主干（**2026-10-17 三次合并：cba3303（v6.5.0+v6.6.0）→ 62d4cff（v6.7.0~v6.7.2+硬性规则）→ a23fc49（v6.8.2~v6.8.5 全量：M4 学生模块+Docker E2E+存储本地化+M5 智能报告+前端界面+口径统一），均无冲突**；保护分支已解除，当前可直推）
+- `master` - 主干（**2026-10-17 四次合并：cba3303（v6.5.0+v6.6.0）→ 62d4cff（v6.7.0~v6.7.2+硬性规则）→ a23fc49（v6.8.2~v6.8.5 全量：M4 学生模块+Docker E2E+存储本地化+M5 智能报告+前端界面+口径统一）→ e6c06d0（anhoa 并入：M1 客户模块+M2 客服 Agent v6.8.0 一期补齐+v6.8.6 AI 全链路+v6.8.7 前端修复，快进无冲突）**；保护分支已解除，当前可直推）
 - `longtrying` - 开发分支（M3 员工模块，已全部收官并合入 master）
 - `longtrying_stu` - 开发分支（**M4 学生模块，2026-10-17 从 longtrying e3b0160 新建**；v6.8.2~v6.8.5 全量工作已合入 master a23fc49）
 - `develop` - 开发（预留）
@@ -695,11 +696,11 @@ chore: 构建
 | **AGENTS.md** | **./AGENTS.md**（根目录） | **项目接手指南（agent自动读取，这是主文件）** |
 | AGENTS.md 副本 | docs/AGENTS.md | 与根目录保持同步的副本 |
 | 项目需求文档 | docs/项目需求文档.md | 完整需求、架构、接口、数据库 |
-| 更新记录 | docs/更新记录.md | 版本变更记录（当前 v6.8.6 主线 + anhoa v6.8.0 并线条目） |
+| 更新记录 | docs/更新记录.md | 版本变更记录（当前 v6.9.0 anhoa M2 二期 + 主线 v6.8.6/v6.8.7 条目） |
 | 开发路线图 | docs/开发路线图.md | 分期任务表（Phase 0已完成，M3 收官，M1/M2 v6.8.0 补齐，M4/M5 后端已交付，AI 已接通） |
 | 运行日志 | docs/运行日志.md | 排查记录与教训（当前 LOG-025） |
 | 测试报告 | docs/测试报告_v6.8.2_M3M4端到端.md | v6.8.2 Docker E2E 69/69 检查明细+7项缺陷+7轮迭代留档 |
-| 接口契约v2 | docs/接口契约v1.md | API接口契约（v2.8.5 并集，31张表，99路由路径=98 API+1 health） |
+| 接口契约v2 | docs/接口契约v1.md | API接口契约（v2.9.8，32张表，103路由路径=102 API+1 health） |
 | **基础架构方案** | **promts/lon/提示词整合测试_demo/docs/基础架构方案_五人并行开发.md** | **主基线文档（v1.2.0，28项决策），所有参考文档权重低于此文件** |
 
 > **文档优先级**：基础架构方案_五人并行开发.md > 其他参考文档（共用基座方案、公共框架等）
@@ -727,7 +728,19 @@ chore: 构建
 
 ---
 
-**最后更新**：2026-10-18（**v6.10.0 种子数据规范化**：`seed_data.py` 加 `random.seed(42)` 可复现、统一密码 `Test@123456`、4 核心角色固定账号 `13810000001`~`13810000004`（PROSPECT/STUDENT/EMPLOYEE/MANAGER）、AiReport `version=i+1` 适配 v6.9.6 的 `uq_ai_report_version` 约束；4 账号登录 200 + 各模块核心表 50+ + verify_all 27/27；其他分支合并后 `docker exec edu-backend /app/.venv/bin/python -m scripts.seed_data` 即可重建全量数据并登录；详见更新记录 v6.10.0 与 LOG-045）  
+**最后更新**：2026-10-18（**v6.10.1 docs+数据，零代码**：①M5 字段映射表 M1 三口径拍板定稿——期末状态一期接受「当前值推算」近似（不新增流水表，二期评估 customer_status_log 另批）、4→3 维持保守映射（partial 归「信息不足」防高估，与 `_PROFILE_4_TO_3` 实现一致，二期可拆「部分符合」第四档）、follow_up_summary 一期不取——**M5 切 production 的 M1 前置全部闭环**，余 M3/M4 待对应负责人 ②课程状态 `open`→`上架` 归一（本地库 3 条遗留漂移，前端课程页 tag 恢复中文）③第 3 项其余按计划保持：驳回申诉=二期、Dify 语义检索/实时推荐=等 VM 网络与 embedding 供应商；回归 compileall + pytest 143/143 + verify_all 29/29 + LOG-053）  
+
+**上一版记录（v6.10.0）**：2026-10-18（**v6.10.0 M1/M2 五项补齐**，按用户批准的审查清单执行、严格限界我方模块：①`POST /auth/prospect/approve` 审批人改 JWT 取+MANAGER 校验（40301），v6.9.11 的 query 临时方案移除 ②注册事务原子化——先查可用 MANAGER、user+customer 同一请求会话单事务提交，LOG-051 实测的孤儿数据缺陷消除，服务层同步改为 repo 会话不再绕过 DI ③登录待审批改 40006「账号待开通」（原误用 40003）④新增 `GET /cs/courses` 公开课程（路由 103 paths=102 API+1 health），前端课程页切真实接口 + 注册页提交四画像字段/加微信号输入/提示等审批 ⑤本地库活动枚举归一（published→报名中）——活动报名闭环全通；测试资产 +15：tests/test_user_register.py 7 项（M0 审批引擎/事件总线打桩隔离）+ tests/test_local_extract.py 6 项（v6.9.10 逻辑入库）+ test_ai.py monkeypatch 隔离 .env；回归 compileall + pytest **143/143** + verify_all **29/29** + npm build + 端到端（JWT 审批激活 PROSPECT/四标准账号 13810000001~04 登录/报名成功+防重/课程 3 条真实数据）；遗留：M0 通用 /approvals/{id}/approve 无角色校验（他模块仅记录）、审批实例创建事务贯通待 M0 另批、课程种子 status=open 待统一、M5 映射表 3 个 M1 口径待业务确认 + LOG-052）  
+
+**上一版记录（v6.9.8~v6.9.13）**：2026-10-18（anhoa v6.9.8~v6.9.11 四连交付 + 文档截断修复：①**v6.9.8** M2 阶段B Dify VM 侧落地——192.168.184.128:8080 重建「粤教客服Agent」+ pre_prompt 4336 字符三标记契约 + 4 知识库 7 文档（siliconflow 402/ollama 跨网段不可达→economy+全文检索兜底）+ dify_client /v1 前缀修复 + 前端活动报名接线（Events.vue/platform.ts 切真实 GET /events 与 POST /events/{id}/register，登录回跳恢复报名意图）②**v6.9.9** Chatflow 重建——advanced-chat 2f92093f、B5 问题分类器 7 类节点编排、B4 检索改知识库兜底（f892116a，VM→宿主机不通）、THINK_RE 剥离思考块、.env 换 chatflow key ③**v6.9.10** M1 AI 信息提取本地兜底——LOCAL_EXTRACT_PATTERNS 5 组正则补缺不覆盖 ④**v6.9.11** M1 PROSPECT 注册审批门——注册即审批→MANAGER 审批→激活发 customer.registered 事件，⚠ **RegisterRequest schema 漏改**（user_type pattern 仍 STUDENT|EMPLOYEE、缺 4 选填字段，PROSPECT 注册实测 422），待补 schema 后闭环；另遗留：approver_id 暂从 query 传入待改 JWT、test_chat_unconfigured 环境依赖用例待 mock 化 ⑤**文档事故修复**——docs/更新记录.md 与 运行日志.md 曾被截断（历史条目全失），已自 git HEAD 恢复全部历史并重建 v6.9.8/v6.9.9、LOG-046/LOG-047 条目（均标注「重建」）；本日回归 compileall 通过 + pytest 129/130 + verify_all 29/29；收尾编 **v6.9.12**（docs，零代码）+ LOG-050；**v6.9.13**（经用户批准补齐 RegisterRequest schema——仅 schemas/user.py 一个文件，PROSPECT 审批门端到端实测 6/6，遗留：approver_id 待改 JWT、注册多步写入无整体事务、test_chat_unconfigured 待 mock 化）+ LOG-051）  
+
+**上一版记录（v6.9.7）**：2026-10-17（anhoa v6.9.7 迁移链修复：**M5 移交清单第 2 项闭环**——002 迁移 4 处 FK BigInteger→Integer + 实测扩大的 001 同类 4 处（sys_approval/sys_operation_log/sys_notification，经用户批准「修类型保留表」）+ 002.downgrade 两轮顺序修复（errno 1553 索引依赖 FK、errno 1828 列依赖 FK，先摘 FK 再删列，`_drop_column_fks` 运行时探测）；**空库 upgrade head + downgrade base + upgrade head 三步验收全过**，ORM 44 个 FK 列逐列比对一致，回归 pytest 130/130 + verify_all 29/29；模型/业务代码/契约零变更；遗留迁移漂移债（2 处 session_id 类型 + 5 项 ORM 演进未进迁移）见 LOG-045，建议后续专项对齐；详见更新记录 v6.9.7 与 LOG-045）  
+
+**上一版记录（第五次合并）**：2026-10-17（anhoa 第五次合并 origin/master（e6c06d0→0edd5e9，34 提交）：M5 批次 A~E + v6.9.6 修复 + 远端访问 + v6.9.5 共用模型网关并入，**公共模块 7 项更新经用户批准**（config 3 项 DIFY_MODEL_*/ai_service 追回 AIService/新增 model_ai_service.py/.env.example/依赖组/verify_all 动态断言/compose nginx）；冲突 10 文件并集解决（ai_service.py 客服 AiService 与通用 AIService 双服务共存、verify_all 取 master 动态断言、文档并集）；我方 M1/M2 模块零被改动，32 表/101 paths 不变；pytest 130/130 + verify_all 29/29 + build 通过；详见更新记录 merge 条目与 LOG-044）  
+
+**上一版记录（v6.9.6）**：2026-10-17 17:20（**v6.9.6 M5 三项缺陷修复**，未触碰其他模块代码：①production 缺省周期改用 `default_completed_week()`=上一完整自然周（原 `week_range(now)` 恒落未来必 40002）②`normalize_customer_status()` 复用 M1 的 `STATUS_CN_TO_EN` 做中英 6 态归一 + `fetch_customers` 逐行容错（脏行跳过并写入口径，不再拖垮 5 类报告）③三处下钻改 `_drilldown_dataset()` 与报告同源（production 读真实表、mock 读模拟），前端说明同步；新增 `tests/test_services/test_report_fixes_v696.py` 11 项含防回退断言；回归 compileall / verify_all **27/27** / pytest **124/124** / `npm run build` / Docker E2E **80/80** / **production 冒烟全过**（4 类默认周期 completed、中文状态行不再 500、客户下钻 122 条真实数据脱敏、PDF 5373 bytes、未来周期仍 40002）；详见更新记录 v6.9.6 与 LOG-043）  
+
+**上一版记录（anhoa v6.9.0）**：2026-10-17（anhoa v6.9.0：M2 客服 Agent 二期补齐——依据《客服Agent开发任务书》《客服Agent提示词_纯提示词版》核对现状后落地：①新增 cs_recommend_log 推荐落库表（[RECOMMEND] 标记逐条落库，31→32 张表）②[SLOTS] 槽位采集闭环（slots_json 留档+转线索建档携带画像+老客户画像更新，信息采集/信息更新策略落地）③仅微信号无手机号→pending_lead 待补全线索（同号去重，converted=true；CrmLeadCreate 贯通 wechat 字段）④公开接口 GET /cs/faq + GET /cs/sessions/{id}/messages（路由 99→101）⑤FAQ 种子脚本 scripts/seed_cs_faq.py（36 组问答对+退费红线 QA，幂等）⑥前端：AgentDock public 分支接 /ai/customer-service/chat + 推荐卡片渲染、Faq 页接真实接口；pytest 70/70 + verify_all 29/29 + npm build 通过；**遗留：阶段B Dify 侧配置（pre_prompt 换纯提示词版+输出契约三标记+知识库4目录+课程/活动工具+问题分类器）待 Docker 启动，未配置时标记解析自动跳过；统一 AI 网关（任务书阶段5）属 M0 待审批暂缓**；历史：anhoa 第三次合并 origin/master 并入 v6.8.7 前端交付、LOG-027 本机 MySQL 3306 直连；详见更新记录 v6.9.0 条目与 LOG-029）  
 
 **上一版记录（v6.9.5）**：2026-10-17 16:10（**v6.9.5 第六次同步 origin/master 4d6547c**：①按硬性规则 5 先上报公共模块并取得用户同意——config 新增 `DIFY_MODEL_API_KEY`/`DIFY_MODEL_BASE_URL`/`DIFY_MODEL_NAME`、**新增 `app/services/model_ai_service.py` 共用模型网关**（M3/M4/M5 三处调用）、compose/.env.example/启动脚本凭据、`PublicLayout.vue` 公共导航 ②用户三项决定落地：**数据库凭据保留 420821+59000**（回退 master 的 123456+3306）、**恢复 views/manager/Index.vue**、不引入 master 的 health/complaints 静态占位模板（无路由 + 与智能汇总口径重复）③命名统一 + 差异字段：M5 `ReportAIService` 统一走 `model_ai_service`，报告内容新增 `ai_source`（model/mock/unavailable），PDF/前端文案同源标注 ④合并引入缺陷修复：`employee_service.py`（M3）缺 logger 导入致两处 50001、解冲突后前端 TS6133 未用变量 ⑤回归：compileall / verify_all **27/27** / pytest **113/113** / `npm run build` / Docker E2E **80/80**（修复前 78/80）/ 接口实测 `ai_source=mock`；详见更新记录 merge 条目与 LOG-042）  
 
