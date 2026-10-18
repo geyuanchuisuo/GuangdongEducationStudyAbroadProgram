@@ -80,65 +80,25 @@ async def test_register_prospect_rejects_prospect_type_before_v913(client, monke
     assert r.json()["code"] != 422, "PROSPECT 应被注册契约接受（v6.9.13 schema 补齐）"
 
 
-async def test_register_prospect_pending_gate(client, monkeypatch):
-    created, _ = _patch_engine(monkeypatch)
+async def test_register_prospect_is_immediately_active(client, monkeypatch):
+    _, published = _patch_engine(monkeypatch)
     r = await client.post("/api/v1/auth/register", json=PROSPECT)
     body = r.json()
     assert body["code"] == 200, r.text
-    assert body["data"]["status"] == "待审批"
-    assert body["data"]["approval_id"] == 99
+    assert body["data"]["status"] == "正常"
+    assert "approval_id" not in body["data"]
     assert body["data"]["customer_id"] > 0
-    # 审批实例携带真实 user/customer 外键
-    inst = created["instance"]
-    assert inst.initiator_id == body["data"]["user_id"]
-    assert inst.biz_id == body["data"]["customer_id"]
-    # 待审批登录拦截（v6.10.0：40006 账号待开通，与 40003 禁用区分）
-    r2 = await client.post("/api/v1/auth/login", json={"username": PROSPECT["username"], "password": "123456"})
-    assert r2.json()["code"] == 40006, r2.text
 
-
-async def test_approve_prospect_requires_manager_role(client, monkeypatch, login):
-    _patch_engine(monkeypatch)
-    await client.post("/api/v1/auth/register", json=PROSPECT)
-    # 未登录 → 40101
-    r0 = await client.post("/api/v1/auth/prospect/approve", params={"approval_id": 99, "action": "approve"})
-    assert r0.json()["code"] == 40101, r0.text
-    # EMPLOYEE → 40301（v6.10.0：审批人从 JWT 取并校验 MANAGER）
-    emp = await login("employee01")
-    r1 = await client.post("/api/v1/auth/prospect/approve", params={"approval_id": 99, "action": "approve"}, headers=emp)
-    assert r1.json()["code"] == 40301, r1.text
-
-
-async def test_approve_prospect_approve_flow(client, monkeypatch, login):
-    _, published = _patch_engine(monkeypatch)
-    reg = (await client.post("/api/v1/auth/register", json=PROSPECT)).json()["data"]
-    mgr = await login("manager01")
-    r = await client.post(
-        "/api/v1/auth/prospect/approve",
-        params={"approval_id": reg["approval_id"], "action": "approve"},
-        headers=mgr,
-    )
-    assert r.json()["code"] == 200, r.text
-    assert r.json()["data"]["status"] == "approved"
-    # 激活后可登录，且发出 customer.registered 事件
-    r2 = await client.post("/api/v1/auth/login", json={"username": PROSPECT["username"], "password": "123456"})
-    assert r2.json()["code"] == 200, r2.text
-    assert r2.json()["data"]["user_type"] == "PROSPECT"
+    login = await client.post("/api/v1/auth/login", json={"username": PROSPECT["username"], "password": "123456"})
+    assert login.json()["code"] == 200, login.text
+    assert login.json()["data"]["user_type"] == "PROSPECT"
     assert len(published) == 1
 
 
-async def test_approve_prospect_reject_flow(client, monkeypatch, login):
-    _patch_engine(monkeypatch)
-    reg = (await client.post("/api/v1/auth/register", json={
-        **PROSPECT, "username": "13800000002", "phone": "13800000002", "contact_info": "13800000002",
-    })).json()["data"]
-    mgr = await login("manager01")
-    r = await client.post(
-        "/api/v1/auth/prospect/approve",
-        params={"approval_id": reg["approval_id"], "action": "reject"},
-        headers=mgr,
-    )
+async def test_register_prospect_customer_event_payload(client, monkeypatch):
+    _, published = _patch_engine(monkeypatch)
+    r = await client.post("/api/v1/auth/register", json={**PROSPECT, "username": "13800000002", "phone": "13800000002", "contact_info": "13800000002"})
     assert r.json()["code"] == 200, r.text
-    # 驳回后禁用登录拦截（40003 与待审批 40006 区分）
-    r2 = await client.post("/api/v1/auth/login", json={"username": "13800000002", "password": "123456"})
-    assert r2.json()["code"] == 40003, r2.text
+    event = published[0]
+    assert event[1] == "M1"
+    assert event[2]["phone"] == "13800000002"

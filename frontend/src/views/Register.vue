@@ -32,8 +32,8 @@ async function submit() {
       age,
       education: f.education,
     })
-    ElMessage.success('注册成功，请等待管理员审批通过后再登录')
-    router.push('/login')
+    ElMessage.success('注册成功，欢迎使用')
+    router.push('/')
   } catch {
     ElMessage.error('注册失败，请稍后重试')
   } finally { loading.value = false }
@@ -42,9 +42,9 @@ async function submit() {
 
 <template>
   <div class="register-shell">
-    <section class="register-intro"><span class="badge">30秒注册</span><h1>开启专属<br />留学规划</h1><p>注册后账号进入待审批状态，由管理层审批通过后即可登录。</p><ul><li>课程与项目预约</li><li>活动报名</li><li>咨询进度查询</li></ul></section>
+    <section class="register-intro"><span class="badge">30秒注册</span><h1>开启专属<br />留学规划</h1><p>注册成功后即可登录使用，无需等待管理员审批。</p><ul><li>课程与项目预约</li><li>活动报名</li><li>咨询进度查询</li></ul></section>
     <main class="register-panel">
-      <div class="register-card"><h2>创建账号</h2><p class="muted">必填 5 项基础资料 · 选填 1 项（微信号）· 提交后待管理员审批</p>
+      <div class="register-card"><h2>创建账号</h2><p class="muted">必填 5 项基础资料 · 选填 1 项（微信号）· 提交后即可登录使用</p>
         <el-form label-position="top" @submit.prevent="submit">
           <div class="form-grid">
             <el-form-item label="姓名" required><el-input v-model="form.real_name" /></el-form-item>
