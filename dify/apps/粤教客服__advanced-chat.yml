@@ -5,7 +5,7 @@
 #
 # 导入说明：
 #   1. Dify 控制台「创建应用 → 导入 DSL」选此文件（advanced-chat 模式）
-#   2. 导入后绑定 OpenAI-API-compatible 模型（地址与模型名以 dify/docker/.env 客户配置为准）
+#   2. 导入后需在「模型供应商」绑定 OpenAI-API-compatible 模型（地址与模型名以 dify/docker/.env 客户配置为准），并在本应用模型设置里选它
 #   3. 挂载知识库：课程项目库 + 活动讲座库
 #   4. pre_prompt 中三标记契约（[intent:] / [RECOMMEND] / [SLOTS]）是后端 cs_agent_service 解析的约定，勿删
 app:

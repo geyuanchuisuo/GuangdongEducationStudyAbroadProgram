@@ -5,6 +5,8 @@
 dify/docker/volumes/
 # Dify init 生成的 app key（含敏感信息，不入库）
 dify/docker/app_keys.txt
+# Dify 本机配置含管理员/数据库/服务密钥，不入库
+dify/docker/.env
 
 # Python
 __pycache__/
@@ -27,8 +29,6 @@ yarn-error.log*
 .env
 .env.local
 .env.*.local
-# Dify 默认 .env 含启动必需配置（DB/redis 默认密码，无个人密钥），允许入库
-!dify/docker/.env
 
 # 本地文件存储（STORAGE_BACKEND=local 落盘目录）
 storage_data/
