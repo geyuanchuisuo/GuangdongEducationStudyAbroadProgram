@@ -1,3 +1,9 @@
+# 一体化部署：项目核心服务 + Dify（AI 平台）
+# Dify 配置见 dify/docker/.env，模型 API Key / 管理员凭据在该文件配置
+# 启动后 dify-init 自动完成：创建管理员 → 添加模型供应商 → 导入应用 → 绑定模型 → 写入 app key 共享卷
+include:
+  - path: dify/docker/docker-compose.yaml
+
 services:
   mysql:
     image: mysql:8.0
@@ -42,9 +48,9 @@ services:
       # 文件存储：一期本地磁盘（零外部镜像依赖）；二期切 s3 时改 STORAGE_BACKEND=s3 并启用 MinIO
       STORAGE_BACKEND: local
       STORAGE_LOCAL_DIR: /app/storage_data
-      # 容器内 localhost 指向自身，需经 host.docker.internal 回宿主机 80 端口访问 Dify nginx（/v1 → api:5001）
-      # 环境特异配置（AGENTS.md §6.0）：默认通用别名，个性化值（如内网 Dify 虚拟机 IP）放项目根 .env 覆盖，禁止把具体 IP 硬编码入库
-      DIFY_BASE_URL: ${DIFY_BASE_URL:-http://host.docker.internal}
+      # Dify 已纳入一体化部署，通过 service 名 dify_nginx 访问（Dify 控制台端口 8081）
+      # 支持项目根 .env 覆盖；默认值用于同 compose 网络内的一体化部署。
+      DIFY_BASE_URL: ${DIFY_BASE_URL:-http://dify_nginx}
     ports:
       - "8000:8000"
     depends_on:
@@ -52,13 +58,41 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      # 长期挂载场景：Dify 初始化必须成功，backend 才启动
+      dify-init:
+        condition: service_completed_successfully
     volumes:
       - ./backend:/app
       # 独立命名卷保护镜像内构建好的 Linux venv，避免被宿主机 Windows venv 遮蔽
       - backend_venv:/app/.venv
       # 本地上传文件持久化（容器重建不丢）
       - backend_storage:/app/storage_data
-    command: /app/.venv/bin/uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+    command: >-
+      sh -c 'set -a && . /run/dify-keys/app_keys.env && set +a &&
+      exec /app/.venv/bin/uvicorn app.main:app --reload --host 0.0.0.0 --port 8000'
+
+  # Dify 一键初始化：创建管理员 → 配模型供应商 → 导入应用 → 绑模型 → 写入 app key 共享卷
+  # 长期挂载场景：必须成功，否则 backend 不启动
+  dify-init:
+    build:
+      context: ./dify/docker
+      dockerfile: Dockerfile.init
+    container_name: edu-dify-init
+    # 从 dify/docker/.env 加载模型/管理员配置（客户只需改这一个文件）
+    env_file:
+      - ./dify/docker/.env
+    environment:
+      # dify-init 专用变量（不依赖客户配置）
+      DIFY_API_URL: http://api:5001
+      DIFY_APPS_DIR: /apps
+      DIFY_APP_KEYS_FILE: /shared/app_keys.env
+    volumes:
+      - ./dify/apps:/apps:ro
+      - dify_app_keys:/shared
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: "no"
 
   nginx:
     image: nginx:alpine
@@ -78,3 +112,4 @@ volumes:
   redis_data:
   backend_venv:
   backend_storage:
+  dify_app_keys:

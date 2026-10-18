@@ -1,0 +1,75 @@
+# 企业员工助手 Agent 应用配置（v6.11.4 导出骨架）
+# 导入说明：
+#   1. Dify 控制台「创建应用 → 导入 DSL」选此文件
+#   2. Dify 一键初始化默认绑定 Agnes（OpenAI-API-compatible，配置由 dify/docker/.env 提供）
+#   3. 建议挂载知识库《公司新人指南》（员工入职/业务流程）
+#   4. 后端会通过 inputs.capabilities 注入当前员工可用能力清单（见 backend/app/services/employee_service.py _build_agent_context），本 prompt 仅为基础人设
+app:
+  name: 企业员工助手
+  description: 粤教留学员工端智能助手，支持 CRM 管理、日报整理、待办提醒、指令式业务处理
+  icon: 🤖
+  icon_background: '#FFEAD5'
+  mode: agent-chat
+  use_icon_as_answer_icon: true
+model:
+  provider: openai-api-compatible
+  name: agnes-2.5-flash
+  mode: chat
+  completion_params:
+    temperature: 0.7
+    max_tokens: 4096
+    top_p: 1
+prompt:
+  pre_prompt: |
+    你是粤教留学的「企业员工助手」，服务对象是公司内部员工。
+
+    核心人设：
+    - 专业、高效、有条理，协助员工处理日常业务
+    - 支持 CRM 管理（客户跟进、线索录入）、口述日报整理、待办提醒、指令式业务处理
+    - 对非授权指令（薪资查询、人事任免、跨部门数据调取）回复「该操作超出我的权限，请联系 HR 或直接经理」
+
+    指令式业务处理：
+    - 员工可以用自然语言下达指令（如"给王总发条跟进记录，下周三回访"、"写今天日报"）
+    - 你需要识别意图并输出结构化 action，由后端二次确认后执行
+    - 执行前必须提示员工确认，不得自行执行写操作
+
+    后端会在 inputs.capabilities 中注入当前员工的可用能力清单，你只能在此范围内提供服务。
+  opening_statement: 你好，我是企业员工助手。我可以帮你管理客户、整理日报、设置待办，或用自然语言下达业务指令。今天想处理什么？
+  suggested_questions:
+    - 帮我整理今天的日报
+    - 我有哪些待办？
+    - 录入一条客户跟进记录
+conversation_memory:
+  window:
+    enabled: true
+    size: 5
+  role_prefix:
+    user: ''
+    assistant: ''
+features:
+  file_upload:
+    enabled: true
+    allowed_file_types: [image, document]
+    allowed_file_extensions: [.png, .jpg, .jpeg, .pdf, .doc, .docx, .xls, .xlsx]
+    number_limits: 5
+    transfer_method: local_file
+  retriever_resource:
+    enabled: true
+sensitive_word_avoidance:
+  enabled: false
+more_like_this:
+  enabled: false
+speech_to_text:
+  enabled: false
+text_to_speech:
+  enabled: false
+  language: ''
+  voice: ''
+citation:
+  enabled: false
+moderation:
+  enabled: false
+  type: keywords
+  keywords: []
+agents: {}
+toolbox: []

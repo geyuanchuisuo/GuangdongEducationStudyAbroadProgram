@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "change-this-to-a-secure-random-string"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
 
-    DIFY_BASE_URL: str = "http://localhost"
+    DIFY_BASE_URL: str = "http://localhost:8081"
     DIFY_VERSION: str = "1.16.0-rc1"
     DIFY_API_PROTOCOL: str = "openai"
     DIFY_STUDENT_AGENT_KEY: str = ""

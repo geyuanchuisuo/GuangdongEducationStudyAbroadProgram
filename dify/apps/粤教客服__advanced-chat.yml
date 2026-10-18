@@ -1,0 +1,88 @@
+# 粤教客服 Agent 应用配置（v6.11.4 骨架）
+# 注意：v6.10.2 起客服 Agent 已迁移为 cs_agent_service 独立服务，走 Dify Chatflow（advanced-chat 模式）。
+# 完整 Chatflow 含问题分类器（7 类）+ 各分支 LLM + 槽位采集，节点较多，本 yml 为核心骨架。
+# 接手者可导入此骨架后，参照 docs/运行日志 LOG-020 / 更新记录 v2.9.4 的节点编排说明补全分支。
+#
+# 导入说明：
+#   1. Dify 控制台「创建应用 → 导入 DSL」选此文件（advanced-chat 模式）
+#   2. Dify 一键初始化默认绑定 Agnes（OpenAI-API-compatible，配置由 dify/docker/.env 提供）
+#   3. 挂载知识库：课程项目库 + 活动讲座库
+#   4. pre_prompt 中三标记契约（[intent:] / [RECOMMEND] / [SLOTS]）是后端 cs_agent_service 解析的约定，勿删
+app:
+  name: 粤教客服Agent
+  description: 公开主页智能客服，7 大场景应答 + 主动信息采集 + 高意向转线索
+  icon: 💬
+  icon_background: '#FFEAD5'
+  mode: advanced-chat
+  use_icon_as_answer_icon: true
+workflow:
+  conversation_variables: []
+  environment_variables: []
+  features:
+    file_upload:
+      enabled: false
+    retriever_resource:
+      enabled: true
+    sensitive_word_avoidance:
+      enabled: false
+    speech_to_text:
+      enabled: false
+    text_to_speech:
+      enabled: false
+    citation:
+      enabled: false
+  graph:
+    edges:
+      - data: { sourceType: start, targetType: llm }
+        id: edge-start-classifier
+        source: start
+        target: classifier
+        type: custom
+      - data: { sourceType: llm, targetType: answer }
+        id: edge-classifier-answer
+        source: classifier
+        target: answer
+        type: custom
+    nodes:
+      - data:
+          title: 开始
+          type: start
+          variables: []
+        id: start
+        position: { x: 80, y: 180 }
+        type: start
+      - data:
+          title: 问题分类与回复
+          type: llm
+          model:
+            provider: openai-api-compatible
+            name: agnes-2.5-flash
+            mode: chat
+            completion_params: { temperature: 0.7, max_tokens: 4096 }
+          prompt_template:
+            - id: prompt
+              role: system
+              text: |
+                你是粤教留学的智能客服，面对潜在客户（意向客户/留学生）。
+
+                7 大场景：① 项目咨询（德国双元制/新加坡升学/全球留学/国际研学）② 课程/活动查询 ③ 报名流程 ④ 费用咨询 ⑤ 留学政策 ⑥ 进度查询 ⑦ 其他闲聊
+
+                ⚠️ 输出契约（后端 cs_agent_service 会解析，必须遵守）：
+                - 如识别到用户意图，在回复末尾附 [intent:意图类型]，意图类型如 project_consult / course_query / activity_enroll / fee / policy / progress / other
+                - 如推荐课程或活动，在末尾附 [RECOMMEND] 后接 JSON 数组，每项含 name/desc/url
+                - 如采集到用户画像信息（姓名/年龄/学历/手机号/微信），在末尾附 [SLOTS] 后接 JSON 对象
+
+                限制预期：不承诺录取结果、不承诺退费，费用相关引导咨询招生老师。
+          variables: []
+        id: classifier
+        position: { x: 400, y: 150 }
+        type: llm
+      - data:
+          title: 回答
+          type: answer
+          answer: '{{#classifier.text#}}'
+        id: answer
+        position: { x: 760, y: 180 }
+        type: answer
+  kind: app
+  version: 0.5.0
