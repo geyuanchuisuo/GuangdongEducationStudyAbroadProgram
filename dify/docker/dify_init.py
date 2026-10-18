@@ -363,7 +363,8 @@ def bind_model_to_apps(client: httpx.Client, token: str, apps: dict) -> None:
         # 先获取当前 model-config 结构
         r = client.get(f"{DIFY_API_URL}/console/api/apps/{app_id}/model-config", headers=headers, timeout=30)
         if r.status_code != 200:
-            log(f"    获取 model-config 失败: {r.status_code}，跳过")
+            # chatflow（advanced-chat）无 app 级 model-config（405/404），其 LLM 节点模型已由 DSL 占位符注入
+            log(f"    （{name} 无 app 级 model-config，节点模型已由 DSL 注入，跳过：{r.status_code}）")
             continue
         current = r.json()
         # 用新模型覆盖
@@ -437,7 +438,7 @@ def export_app_keys(client: httpx.Client, token: str, apps: dict) -> None:
     log("-" * 60)
     log(output)
     log("-" * 60)
-    log("⚠️  请将上方三个业务 Agent 的 key 复制到 backend/.env，然后重启 backend")
+    log("⚠️  请将上方 4 个应用 key（除留档版外）复制到 backend/.env，然后重启 backend")
 
 
 # ── 主流程 ────────────────────────────────────────────────

@@ -22,6 +22,16 @@ if errorlevel 1 (
   exit /b 1
 )
 
+echo [1.5/6] Checking legacy Dify instance conflicts...
+docker ps --format "{{.Names}}" 2>nul | findstr /b "docker-" >nul 2>nul
+if not errorlevel 1 (
+  echo [警告] 检测到旧的手动 Dify 实例（docker-* 容器）正在运行。
+  echo        它会与项目一体化 Dify 抢占 8081/5003 端口，导致启动失败。
+  echo        请先执行: docker compose -p docker down   （数据卷保留）
+  pause
+  exit /b 1
+)
+
 set COMPOSE=docker compose
 docker compose version >nul 2>nul
 if errorlevel 1 set COMPOSE=docker-compose

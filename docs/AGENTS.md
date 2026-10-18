@@ -12,7 +12,7 @@
 
 **M5 一期口径与外部阻塞（v6.11.0~v6.11.2，2026-10-18）**：
 - ✅ **已按需求文件改造**：画像四类（含「部分符合」）、期末状态标不可得、数据源部分生成、下钻快照、投诉 AI 独立表、报告专用 Agent、前端周期/版本/对比/徽标/完整详情。**口径以 `C:\Users\Windows\Desktop\M5_一期需求确认与执行提示词.md`（2026-10-18）为准，v6.10.1 的「4→3 映射」与「当前值推算」已被推翻**。
-- 🔴 **阻塞（需他人改动，M5 不得越权）**：①M1 历史时点状态能力 ②M1/M3/M4 四个报告聚合接口（M5 现为直读表，属登记偏离）③M4 工单 6 字段 ~~④M0 补 4 行~~（✅ **v6.11.11 已落地**：config.py 加 `DIFY_REPORT_AGENT_KEY`、ai_service.py 加 `AgentType.REPORT` + `_AGENT_KEY_MAP` 映射，pytest 157/157）⑤Dify 侧建议补 Chatflow 的 system prompt 约束并降温。
+- 🔴 **阻塞（需他人改动，M5 不得越权）**：①M1 历史时点状态能力 ②M1/M3/M4 四个报告聚合接口（M5 现为直读表，属登记偏离）③M4 工单 6 字段 ~~④M0 补 4 行~~（✅ **v6.11.11 已落地**：config.py 加 `DIFY_REPORT_AGENT_KEY`、ai_service.py 加 `AgentType.REPORT` + `_AGENT_KEY_MAP` 映射，pytest 157/157）~~⑤Dify 侧建议补 Chatflow 的 system prompt 约束并降温~~（✅ **v6.11.15 已落地**：智能报告 Chatflow system prompt 补 JSON 契约约束 + temperature 0.2）。
 - 📄 **新增文档**：`docs/M5_上游接口契约.md`（四份上游契约 + 阻塞清单）、`docs/Dify_接入与智能报告.md`（实例/应用/DSL/阻塞/上云合并）、`dify/apps/智能报告__advanced-chat.yml`（在用）与 `智能报告__agent-chat.yml`（留档）。
 
 **M5 移交待办清单（v6.9.0，接手者从这里继续）**：
@@ -901,6 +901,8 @@ chore: 构建
 
 > v6.11.14：dify-init Dify 1.16 真实环境适配（10 项）——console API 路径/密码双契约（login base64、setup 明文）/cookie 会话+CSRF/供应商接口迁移/模型插件自动安装/自定义模型注册（models/credentials）/DSL 两步导入/工作流发布/yml model_config 0.5.0 结构+mode chat+LLM 节点 context/`your-model-provider` 占位符；`docker compose up -d` 一条命令全链拉起，AI 三端 source=dify 真实可用；pytest 157/157；详见更新记录 v6.11.14。
 
-**最后更新**：2026-10-19（v6.11.14 dify-init Dify 1.16 适配：10 项契约修复（路径/密码/CSRF/插件安装/模型注册/两步导入/工作流发布/yml 结构），一条命令全链拉起、AI 三端 source=dify 真实可用、pytest 157/157；v6.11.13 种子数据差异补齐 + 迁移链漂移债清偿：seed_supplement_v6_11_13.py 补 16 类字段缺口真实数据；005 防御式 + 006_schema_drift 对齐 ORM，全链建库 diff 归零、开发库 stamp 006；v6.11.12 Dify 模型配置去供应商绑定：三变量默认值全空 + dify-init 必填校验 + yml 模型占位符注入，全仓 MiMo/供应商绑定痕迹清零，历史日志仅作留痕标注；2026-10-18 合并 gitea/master→longtrying_test：10 项公共模块经用户逐项审批并入——注册免审批反转（客户模块二期升级）、approval.approved 事件总线（PROSPECT 自动转 STUDENT）、客服 FAQ 修复、CRM 画像字段、测评工具、前端 6 文件；Dify 部分以我方为准（恢复 dify/apps/智能报告__*.yml）；pytest 157/157；v6.11.5~8 Dify 一体化打包 + dify-init 一键初始化（见 docs/Dify部署与调用指南.md））
+> v6.11.15：遗留问题清零——`start-project.bat` 旧 Dify 实例冲突预检（docker-* 检测→提示 down）；dify_init.py 文案/日志语义修正；**阻塞清单⑤销账**（智能报告 Chatflow 补 system prompt JSON 契约约束 + temperature 0.2，实例已重导一致）；pytest 157/157；详见更新记录 v6.11.15。
+
+**最后更新**：2026-10-19（v6.11.15 遗留问题清零：启动防冲突预检、dify_init 文案语义、阻塞清单⑤销账（报告 Chatflow system prompt 约束+降温）；v6.11.14 dify-init Dify 1.16 适配：10 项契约修复（路径/密码/CSRF/插件安装/模型注册/两步导入/工作流发布/yml 结构），一条命令全链拉起、AI 三端 source=dify 真实可用、pytest 157/157；v6.11.13 种子数据差异补齐 + 迁移链漂移债清偿：seed_supplement_v6_11_13.py 补 16 类字段缺口真实数据；005 防御式 + 006_schema_drift 对齐 ORM，全链建库 diff 归零、开发库 stamp 006；v6.11.12 Dify 模型配置去供应商绑定：三变量默认值全空 + dify-init 必填校验 + yml 模型占位符注入，全仓 MiMo/供应商绑定痕迹清零，历史日志仅作留痕标注；2026-10-18 合并 gitea/master→longtrying_test：10 项公共模块经用户逐项审批并入，pytest 157/157）
 
 > 合并回归（2026-10-18）：qianduan 已并入 origin/master 成绩三件套、环境修复与远端访问文档更新；verify_all 29/29、pytest 152/152、npm build 通过。

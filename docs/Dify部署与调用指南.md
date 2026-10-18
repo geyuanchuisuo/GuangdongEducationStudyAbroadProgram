@@ -385,7 +385,7 @@ A: 检查①三个 app key 是否已回填 ②`dify-init` 是否成功 ③模型
 A: 修改 `dify/docker/.env` 的 `DIFY_MODEL_BASE_URL` / `DIFY_MODEL_NAME` / `DIFY_MODEL_API_KEY`，然后 `docker compose up dify-init` 重新初始化。支持任何 OpenAI-API-compatible 模型，无需改代码（init 会自动注册新模型名并重绑 5 个应用；yml 占位符机制保证 Chatflow 节点同源生效）。
 
 **Q: 启动报端口 5003/8081 被占用？**
-A: 多半是旧的手动 Dify 实例（`docker-*` 容器）还在跑。执行 `docker compose -p docker down` 停旧套（数据卷保留），再 `docker compose up -d`。
+A: 多半是旧的手动 Dify 实例（`docker-*` 容器）还在跑。执行 `docker compose -p docker down` 停旧套（数据卷保留），再 `docker compose up -d`。`start-project.bat` 启动时会自动预检并提示（v6.11.15）。
 
 **Q: 业务 Agent（学生/员工/客服）调用报 blocking 不支持？**
 A: Dify 的 `agent-chat` 模式不支持 blocking 调用。项目 yml 已统一 `mode: chat`（v6.11.14），如自行改回 agent-chat 会复现该问题。
