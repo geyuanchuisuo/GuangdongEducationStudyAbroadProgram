@@ -34,7 +34,7 @@
 3. `promts/lon/提示词整合测试_demo/docs/基础架构方案_五人并行开发.md` — **主基线，权重最高**
 4. `docs/开发路线图.md` — 当前进度、下一步任务
 5. `docs/接口契约v1.md` — API接口契约（v2.11.3，M3 成绩三件套 + v2.9.9 注册免审批反转/Dify 配置基线）
-6. `docs/更新记录.md` — 最近变更（v6.11.9 全文档配置同步 + v6.11.5~8 Dify 一体化/dify-init + merge master 10 项公共模块（注册免审批等）+ v6.11.3/v6.11.4）
+6. `docs/更新记录.md` — 最近变更（v6.11.13 Dify 1.16 环境实跑+dify_init.py 重写 + v6.11.9 全文档配置同步 + v6.11.5~8 Dify 一体化/dify-init + merge master 公共模块 + v6.11.3/v6.11.4）
 
 **重要规则**：
 - 主基线文档（基础架构方案）权重 > 其他参考文档（共用基座方案、公共框架等）
@@ -498,7 +498,7 @@ npm run dev
 
 ### 5.3 Dify（**v6.11.8 起 dify-init 一键初始化**）
 
-Dify（1.16.0-rc1）已作为子 compose 纳入项目，随 `docker compose up -d` 一键启动，无需单独部署。**v6.11.8 新增 `dify-init` 服务**：自动完成管理员创建、模型供应商配置、应用导入、模型绑定、app key 输出，客户全程无需进入 Dify 控制台。
+Dify（1.16.0-rc1）已作为子 compose 纳入项目，随 `docker compose up -d` 一键启动，无需单独部署。**v6.11.8 新增 `dify-init` 服务**；**v6.11.13 重写为 Dify 1.16 Console API 适配版**（base64 密码+cookie/CSRF、插件制供应商 marketplace 安装+轮询、模型凭据实时校验、advanced-chat 导入后 publish、agent-chat 创建+model-config、草稿工作流 hash 补丁重绑模型）：自动完成管理员创建/登录、模型供应商插件安装、模型凭据添加、应用导入/创建、模型绑定、app key 输出，客户全程无需进入 Dify 控制台。
 
 > 📖 **完整配置说明、调用规则、降级机制、失败排查见 [Dify部署与调用指南.md](./docs/Dify部署与调用指南.md)**
 
@@ -525,7 +525,7 @@ Dify（1.16.0-rc1）已作为子 compose 纳入项目，随 `docker compose up -
 | ① 填写模型配置 | 编辑 `dify/docker/.env`，填入 `DIFY_MODEL_API_KEY` / `DIFY_MODEL_BASE_URL` / `DIFY_MODEL_NAME`（三项必填，默认留空） | OpenAI-API-compatible 通用协议，key/url/模型名由客户自定义，**不绑定任何特定模型**；API Key 勿入库 |
 | ② 启动全部服务 | `docker compose up -d` | dify-init 自动：创建管理员→配模型供应商→导入 5 个 yml→绑定模型→输出 app key |
 | ③ 查看 init 日志 | `docker compose logs -f dify-init` | 成功标志：`🎉 Dify 初始化全部完成` |
-| ④ 回填 app key | 打开 `dify/docker/app_keys.txt`，复制三个业务 Agent key 到 `backend/.env` | `DIFY_CUSTOMER_AGENT_KEY` / `DIFY_EMPLOYEE_AGENT_KEY` / `DIFY_STUDENT_AGENT_KEY` |
+| ④ 回填 app key | 打开 `dify/docker/app_keys.txt`，复制四个业务 Agent key 到 `backend/.env` | `DIFY_CUSTOMER_AGENT_KEY` / `DIFY_EMPLOYEE_AGENT_KEY` / `DIFY_STUDENT_AGENT_KEY` / `DIFY_REPORT_AGENT_KEY` |
 | ⑤ 重启 backend | `docker compose restart backend` | 使 app key 生效 |
 | ⑥ 验证 AI | 调用任一 AI 端点，确认返回 `source: "dify"` | 如返回 `fallback` 则检查 app key 是否回填正确 |
 
@@ -566,7 +566,7 @@ docker volume inspect guangdongeducationstudyabroadprogram_backend_storage
 | `REDIS_URL` | backend/.env、docker-compose.yml | 你本机 Redis 地址 | - |
 | `SECRET_KEY` | backend/.env | 随机字符串（自行生成） | 沿用仓库示例值上线 |
 | `DIFY_BASE_URL` | backend/.env、docker-compose.yml | **本机：`http://localhost:8081`；Docker 容器内：`http://dify_nginx`**（v6.11.6 起 Dify 一体化打包，勿再用 host.docker.internal/3000/旧内网 IP） | ❌ 写成其他成员的内网 IP（如 192.168.x.x）或旧 VM 地址——你的机器上必不通 |
-| `DIFY_*_AGENT_KEY` | backend/.env（不入库，.env 已 gitignore） | dify-init 自动输出到 `dify/docker/app_keys.txt`，复制三个业务 Agent key 回填 | 直接用别人的 key（对方撤销后全体失效） |
+| `DIFY_*_AGENT_KEY` | backend/.env（不入库，.env 已 gitignore） | dify-init 自动输出到 `dify/docker/app_keys.txt`，复制四个业务 Agent key 回填 | 直接用别人的 key（对方撤销后全体失效） |
 | `DIFY_MODEL_API_KEY` / `DIFY_MODEL_BASE_URL` / `DIFY_MODEL_NAME` | dify/docker/.env（模型供应商） | 你自己的模型配置（任一 OpenAI-API-compatible 服务，key/url/模型名全部客户自定义，**三项默认全空、不绑定任何特定模型**），dify-init 自动配供应商 | 任一项填错/留空 → dify-init 失败，backend 不启动 |
 | `STORAGE_BACKEND` | backend/.env、docker-compose.yml | 一期默认 `local` | - |
 | `VITE_API_BASE_URL` | frontend/.env | 本机 `http://localhost:8000/api/v1`；生产构建用相对路径 `/api/v1`（.env.production 已配） | 指到别人的机器 |

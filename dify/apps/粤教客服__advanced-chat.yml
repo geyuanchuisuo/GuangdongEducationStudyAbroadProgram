@@ -54,8 +54,13 @@ workflow:
       - data:
           title: 问题分类与回复
           type: llm
+          context:
+            enabled: false
+            variable_selector: []
+          vision:
+            enabled: false
           model:
-            provider: openai-api-compatible
+            provider: langgenius/openai_api_compatible/openai_api_compatible
             name: your-model-name
             mode: chat
             completion_params: { temperature: 0.7, max_tokens: 4096 }
