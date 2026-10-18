@@ -1,10 +1,32 @@
-# 远程访问指南
+﻿# 远程访问指南
 
 > 如何让你本地运行的项目通过公网 URL 被他人访问
 
 ---
 
-## 方案一：ngrok 内网穿透（推荐，最快）
+## 方案一：localtunnel 内网穿透（免注册，实测最快）
+
+> v6.9.1 实测成功的主力方案，无需注册任何账号，npx 直跑。
+
+### 步骤
+```powershell
+# 1. 确认 nginx 已启动（8080）
+curl http://localhost:8080
+
+# 2. 启动穿透（或直接跑脚本）
+.\scripts\start-localtunnel.ps1
+# 等价于：npx localtunnel --port 8080
+
+# 3. 输出形如 https://xxxx-yyyy-zzzz.loca.lt 即公网地址
+```
+
+### 已知问题（重要）
+- **随机域名，每次启动变化**——重启后 URL 会变，需重新分发给访问者
+- **免费服务端会话不稳定**：运行中可能中途掉线返回 **503**（本地 8080 仍正常）。排查顺序：先确认 `http://localhost:8080` 是 200，再重跑穿透脚本拿新 URL 即可，本地服务无需重启
+- 首次打开会显示 localtunnel 确认页，点 Continue 进入
+- 极少数网络环境（公司防火墙）可能拦截 loca.lt 域名，此时换方案二
+
+## 方案二：ngrok 内网穿透（需注册 authtoken）
 
 ### 适用场景
 - 本地开发机演示给同事/客户
@@ -65,7 +87,7 @@ Forwarding  https://abc123.ngrok.io -> http://localhost:80
 
 ---
 
-## 方案二：Cloudflare Tunnel（备选，更稳定）
+## 方案三：Cloudflare Tunnel（备选，更稳定）
 
 ### 适用场景
 - 需要长期稳定的公网访问
@@ -99,7 +121,7 @@ cloudflared tunnel --url http://localhost:80
 
 ---
 
-## 方案三：云服务器部署（生产环境）
+## 方案四：云服务器部署（生产环境）
 
 如果你已有云服务器（阿里云/腾讯云/AWS 等），直接部署：
 

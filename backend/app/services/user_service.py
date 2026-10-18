@@ -53,21 +53,11 @@ class UserService:
             contact_info=request.contact_info,
         )
 
-        # PROSPECT 注册走审批门：customer 主表 + 审批实例（biz_type=prospect_register）
+        # PROSPECT 自助注册立即生效，无需管理员审批
         if request.user_type == "PROSPECT":
-            # v6.10.0：先查可用审批人，避免建完用户/客户后因「无可用审批人」失败留孤儿
-            from sqlalchemy import select
-            manager_result = await self.repo.db.execute(
-                select(User.id).where(User.user_type == "MANAGER", User.status == "正常").limit(1)
-            )
-            manager_id = manager_result.scalar_one_or_none()
-            if not manager_id:
-                raise BusinessError(code=50001, message="无可用审批人，请联系管理员")
-
-            # v6.10.0：user + customer 同一事务提交（原实现分两次提交，中途失败留孤儿）
-            user.status = "待审批"
+            user.status = "正常"
             self.repo.db.add(user)
-            await self.repo.db.flush()  # 先取 user.id 供 customer.sys_user_id 关联
+            await self.repo.db.flush()
             customer = Customer(
                 phone=request.phone,
                 wechat=request.wechat,
@@ -83,21 +73,19 @@ class UserService:
             await self.repo.db.commit()
             await self.repo.db.refresh(user)
             await self.repo.db.refresh(customer)
-
-            # 创建审批实例（M0 审批引擎自带事务）
-            instance = await approval_engine.create(
-                biz_type="prospect_register",
-                initiator_id=user.id,
-                approver_id=manager_id,
-                biz_id=customer.id,
-                title=f"客户注册审批：{request.real_name}",
+            await event_bus.publish(
+                EventType.CUSTOMER_REGISTERED,
+                "M1",
+                {
+                    "customer_id": customer.id,
+                    "phone": customer.phone,
+                    "name": customer.name or "未知客户",
+                },
             )
-
             return {
                 "user_id": user.id,
                 "username": user.username,
-                "status": "待审批",
-                "approval_id": instance.id,
+                "status": "正常",
                 "customer_id": customer.id,
             }
 
