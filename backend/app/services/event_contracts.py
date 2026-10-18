@@ -9,6 +9,7 @@ class EventType(str, Enum):
     PSYCH_ALERT_CREATED = "psych_alert.created"
     COMPLAINT_RESOLVED = "complaint.resolved"
     LEAD_TRANSFERRED = "lead.transferred"
+    APPROVAL_APPROVED = "approval.approved"
 
 
 EVENT_CONTRACTS: dict[str, dict] = {
@@ -53,5 +54,11 @@ EVENT_CONTRACTS: dict[str, dict] = {
         "consumers": ["M3"],
         "fields": ["lead_id", "customer_fields"],
         "description": "客服识别高意向，CRM 新增线索",
+    },
+    EventType.APPROVAL_APPROVED: {
+        "source": "M0",
+        "consumers": ["M1", "M3", "M4"],
+        "fields": ["instance_id", "biz_type", "biz_id", "approver_id"],
+        "description": "审批通过，各业务模块按 biz_type 执行后置处理",
     },
 }

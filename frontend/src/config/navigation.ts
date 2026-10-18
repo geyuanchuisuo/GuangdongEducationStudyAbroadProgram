@@ -29,6 +29,7 @@ export const navigation: Record<Role, NavItem[]> = {
   EMPLOYEE: [
     { key: 'home', label: '工作台', icon: 'House', section: 'home' },
     { key: 'customers', label: '客户经营', icon: 'UserFilled', section: 'customers' },
+    { key: 'assessment', label: '客户研判', icon: 'Search', section: 'assessment-tool' },
     { key: 'convert', label: '学生业务综管', icon: 'Finished', section: 'convert' },
     { key: 'reports', label: '日报管理', icon: 'EditPen', section: 'reports' },
     { key: 'scores', label: '成绩录入', icon: 'DataLine', section: 'scores' },
@@ -42,6 +43,7 @@ export const navigation: Record<Role, NavItem[]> = {
     { key: 'org', label: '组织架构', icon: 'OfficeBuilding', section: 'org' },
     { key: 'approvals', label: '流程审批', icon: 'Finished', section: 'approvals' },
     { key: 'customers', label: '全部客户', icon: 'UserFilled', section: 'customers' },
+    { key: 'assessment', label: '客户研判', icon: 'Search', section: 'assessment-tool' },
     { key: 'employees', label: '员工管理', icon: 'User', section: 'employees' },
     { key: 'permissions', label: '权限配置', icon: 'Lock', section: 'permissions' },
     { key: 'logs', label: '消息与日志', icon: 'Bell', section: 'logs' },

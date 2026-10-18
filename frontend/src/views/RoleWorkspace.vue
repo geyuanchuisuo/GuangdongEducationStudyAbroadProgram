@@ -656,7 +656,7 @@ function revealPhone() {
       <div class="stat-grid"><StatCard label="待办事项" :value="String((reminders.counts && reminders.counts.academic_ddl) || 3)" note="学业与服务提醒" tone="coral" /><StatCard label="本周课程" value="5" note="下节课程：德语写作" tone="purple" /><StatCard label="申请进度" value="签证办理" note="材料递交中" tone="lime" /><StatCard label="服务状态" value="良好" note="最近更新：今天" tone="amber" /></div>
       <div class="two-column">
         <section class="surface panel"><SectionTitle title="近期课程与 DDL" /><div v-for="(item, index) in studentTodos" :key="item.title" class="task-row"><b>0{{ index + 1 }}</b><div><strong>{{ item.title }}</strong><small>{{ item.due }}</small></div><el-tag :type="item.tone === 'coral' ? 'danger' : item.tone === 'amber' ? 'warning' : 'primary'">{{ item.due }}</el-tag></div></section>
-        <section class="surface panel"><SectionTitle title="留学申请进度" /><el-steps direction="vertical" :active="4"><el-step title="材料审核" description="学历公证与语言证明已通过" /><el-step title="申请提交" description="目标院校申请已完成" /><el-step title="收到 Offer" description="护理方向 · 条件录取" /><el-step title="签证办理" description="材料递交中" /><el-step title="行前准备" /><el-step title="已入学" /></el-steps></section>
+        <section class="surface panel student-progress-panel"><SectionTitle title="留学申请进度" /><el-steps class="student-progress-steps" direction="vertical" :active="4" size="small" :space="58"><el-step title="材料审核" description="学历公证与语言证明已通过" /><el-step title="申请提交" description="目标院校申请已完成" /><el-step title="收到 Offer" description="护理方向 · 条件录取" /><el-step title="签证办理" description="材料递交中" /><el-step title="行前准备" /><el-step title="已入学" /></el-steps></section>
       </div>
     </template>
 
@@ -1216,4 +1216,19 @@ function revealPhone() {
   .manager-dashboard-grid { grid-template-columns: 1fr; }
   .performance-row { grid-template-columns: 1fr; }
 }
+
+.student-progress-panel { min-width: 0; overflow: hidden; }
+.student-progress-panel .student-progress-steps { width: 100%; padding: 2px 0 6px; }
+.student-progress-panel .student-progress-steps .el-step { min-height: 58px; }
+.student-progress-panel .student-progress-steps .el-step__head { width: 24px; height: 24px; line-height: 24px; }
+.student-progress-panel .student-progress-steps .el-step__icon { width: 24px; height: 24px; line-height: 23px; font-size: 12px; }
+.student-progress-panel .student-progress-steps .el-step__line { left: 11px; top: 24px; bottom: 0; height: auto; background: var(--line); }
+.student-progress-panel .student-progress-steps .el-step__main { min-height: 58px; padding-bottom: 6px; }
+.student-progress-panel .student-progress-steps .el-step__title { margin-top: 1px; font-size: 14px; line-height: 22px; color: var(--ink-deep); }
+.student-progress-panel .student-progress-steps .el-step__description { margin-top: 0; padding-right: 0; font-size: 12px; line-height: 18px; color: var(--muted); }
+@media (max-width: 760px) {
+  .student-progress-panel .student-progress-steps .el-step,
+  .student-progress-panel .student-progress-steps .el-step__main { min-height: 54px; }
+}
+
 </style>

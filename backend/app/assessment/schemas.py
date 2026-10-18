@@ -11,7 +11,7 @@ SourceType = Literal["text", "dialogue", "registration", "file_text", "batch"]
 class AssessmentRequest(BaseModel):
     """单条研判请求；文件解析由统一上传层完成后传入 ``content``。"""
 
-    content: str = Field(..., min_length=1, description="原始文本或已解析的文件文本")
+    content: str = Field(default="", description="原始文本或已解析的文件文本；注册信息渠道可为空")
     source_type: SourceType = "text"
     registration: dict[str, Any] | None = Field(
         default=None,
@@ -22,6 +22,8 @@ class AssessmentRequest(BaseModel):
     def registration_requires_data(self) -> "AssessmentRequest":
         if self.source_type == "registration" and not self.registration:
             raise ValueError("注册信息渠道必须提供 registration 字段")
+        if self.source_type != "registration" and not self.content.strip():
+            raise ValueError("非注册信息渠道必须提供非空 content")
         return self
 
 

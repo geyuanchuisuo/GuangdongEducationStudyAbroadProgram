@@ -48,6 +48,8 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    // 允许内网穿透域名访问（localtunnel 每次 URL 会变，放行整个 .loca.lt 子域）
+    allowedHosts: ['.loca.lt'],
     proxy,
   },
   preview: {

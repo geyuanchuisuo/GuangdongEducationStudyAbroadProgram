@@ -6,6 +6,28 @@ from typing import Any
 
 PHONE_RE = re.compile(r"(?<!\d)(1[3-9]\d{9})(?!\d)")
 
+_ROLE_SPLIT_RE = re.compile(r"(客服|客户|用户|顾客|家长|学生|访客)\s*[：:]")
+
+
+def _customer_side_text(text: str) -> str:
+    """对话记录中仅保留客户侧发言，避免客服话术污染字段提取；无角色标记时返回原文。"""
+    if not _ROLE_SPLIT_RE.search(text):
+        return text
+    parts = _ROLE_SPLIT_RE.split(text)
+    # split 结果：[前置内容, 角色1, 发言1, 角色2, 发言2, ...]
+    customer_parts: list[str] = []
+    for i in range(1, len(parts) - 1, 2):
+        role, segment = parts[i], parts[i + 1]
+        if role != "客服":
+            customer_parts.append(segment)
+    if not customer_parts:
+        return text
+    # 角色标记之前的前置内容可能含客户信息（如“客户信息：”引子），保守并入
+    merged = "。".join(
+        seg.strip() for seg in [parts[0], *customer_parts] if seg and seg.strip()
+    )
+    return merged or text
+
 
 @dataclass
 class CustomerFacts:
@@ -62,9 +84,11 @@ def _extract_education(text: str) -> str | None:
     return None
 
 
-def extract_facts(content: str, registration: dict[str, Any] | None = None) -> CustomerFacts:
-    """提取明确字段；注册渠道完全以结构化字段优先，不对空选填字段推测。"""
+def extract_facts(content: str, registration: dict[str, Any] | None = None, dialogue: bool = False) -> CustomerFacts:
+    """提取明确字段；注册渠道完全以结构化字段优先，不对空选填字段推测；对话渠道仅提取客户侧发言。"""
     text = content.strip()
+    if dialogue:
+        text = _customer_side_text(text)
     facts = CustomerFacts(raw=text)
     data = registration or {}
 
@@ -109,13 +133,13 @@ def extract_facts(content: str, registration: dict[str, Any] | None = None) -> C
         facts.set("economy", economy_match.group(0) if economy_match else None)
     facts.set("needs", _field_value(text, ("职业需求", "需求", "升学需求", "就业需求", "移民需求")))
     if not facts.needs:
-        need_match = re.search(r"(?:想|希望|打算)[^。；;\n]{0,30}(?:升学|就业|工作|移民|学历|收入)", text)
+        need_match = re.search(r"(?:想|希望|打算)[^。；;\n，,？?]{0,30}(?:升学|就业|工作|移民|学历|收入)", text)
         facts.set("needs", need_match.group(0) if need_match else None)
     # 常见录入形式为“意向：新加坡留学”；将“意向”作为显式字段标签，
     # 避免仅因未出现“想/希望”等动词而遗漏已明确给出的国家和留学计划。
     facts.set("study_intent", _field_value(text, ("留学意愿", "意向国家", "留学方向", "意向")))
     if not facts.study_intent:
-        intent_match = re.search(r"(?:想|希望|打算|考虑|不考虑|拒绝)[^。；;\n]{0,30}(?:留学|出国|新加坡|德国)", text)
+        intent_match = re.search(r"(?:想|希望|打算|考虑|不考虑|拒绝)[^。；;\n，,？?]{0,30}(?:留学|出国|新加坡|德国)", text)
         facts.set("study_intent", intent_match.group(0) if intent_match else None)
     facts.set("german_ability", _field_value(text, ("德语能力", "德语基础", "德语")))
     if not facts.german_ability:

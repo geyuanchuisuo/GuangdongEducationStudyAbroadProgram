@@ -23,6 +23,7 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: true },
     children: [
       { path: '', name: 'RoleWorkspace', component: () => import('../views/RoleWorkspace.vue') },
+      { path: 'assessment-tool', name: 'AssessmentTool', component: () => import('../views/AssessmentTool.vue') },
     ],
   },
   { path: '/:pathMatch(.*)*', name: 'NotFound', component: () => import('../views/NotFound.vue') },

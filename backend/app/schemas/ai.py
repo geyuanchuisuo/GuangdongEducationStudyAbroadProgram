@@ -15,6 +15,7 @@ class ChatResponse(BaseModel):
     conversation_id: str
     intent: str | None = None
     recommendations: list[dict] | None = None
+    card_data: Any | None = None
 
 
 class CsFaqOut(BaseModel):

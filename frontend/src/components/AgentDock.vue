@@ -14,7 +14,7 @@ watch(() => props.autoOpen, (value) => {
 }, { immediate: true })
 const input = ref('')
 const sessionId = ref('new')
-const messages = ref<Array<{ role: 'user' | 'agent'; text: string; recs?: AnyRec[] }>>([])
+const messages = ref<Array<{ role: 'user' | 'agent'; text: string; recs?: AnyRec[]; faq?: any; register?: any }>>([])
 // v6.10.3：客服窗（public 类型）首次打开时拉取后端开场白并插入消息流；
 // 仅 public 分支启用，student/employee/manager 窗口行为不变
 watch(open, async (value) => {
@@ -56,6 +56,8 @@ async function send(text = input.value) {
   try {
     let reply = ''
     let recs: AnyRec[] | undefined
+    let faq: any = undefined
+    let register: any = undefined
     if (props.type === 'student') {
       const result: any = await platformApi.student.agentChat({ message: value, session_id: sessionId.value })
       sessionId.value = result?.session_id || sessionId.value
@@ -73,9 +75,12 @@ async function send(text = input.value) {
       sessionId.value = result?.conversation_id || sessionId.value
       reply = result?.answer || reply
       recs = result?.recommendations || undefined
+      const card: any = result?.card_data
+      faq = card?.faq || undefined
+      register = card?.register || undefined
     }
     if (!reply) reply = '当前助手服务未返回内容，请稍后重试。'
-    messages.value.push({ role: 'agent', text: reply, recs })
+    messages.value.push({ role: 'agent', text: reply, recs, faq, register })
   } catch {
     messages.value.push({ role: 'agent', text: '当前助手服务暂不可用，请稍后重试。' })
   }
@@ -101,6 +106,20 @@ async function send(text = input.value) {
                 <el-tag size="small" :type="rec.type === 'event' ? 'warning' : 'success'" effect="plain">{{ rec.type === 'event' ? '活动' : '课程' }}</el-tag>
                 <span>{{ rec.name || rec.project }}</span>
               </button>
+            </div>
+            <div v-if="item.faq" class="faq-card">
+              <div class="faq-tag">常见问题</div>
+              <div class="faq-q">{{ item.faq.question }}</div>
+              <div class="faq-a">{{ item.faq.answer }}</div>
+            </div>
+            <div v-if="item.register" class="register-card" :class="item.register.status">
+              <div class="reg-title">
+                <el-tag size="small" :type="item.register.status === 'success' ? 'success' : item.register.status === 'need_login' ? 'warning' : item.register.status === 'incomplete' ? 'info' : 'danger'">
+                  {{ item.register.status === 'success' ? '报名成功' : item.register.status === 'need_login' ? '需登录' : item.register.status === 'incomplete' ? '信息不全' : '报名失败' }}
+                </el-tag>
+              </div>
+              <div class="reg-msg">{{ item.register.message }}</div>
+              <el-button v-if="item.register.status === 'need_login'" size="small" type="primary" @click="router.push('/login')">去登录</el-button>
             </div>
           </div>
         </div>
@@ -149,6 +168,17 @@ header small { display: block; margin-top: 4px; color: #cfcdf1; }
   font-size: 13px; cursor: pointer; text-align: left; color: inherit;
 }
 .rec-card:hover { border-color: #5a50b8; }
+.faq-card { margin-top: 10px; padding: 10px 12px; background: #f0f9eb; border: 1px solid #e1f3d8; border-radius: 10px; }
+.faq-tag { display: inline-block; font-size: 11px; color: #67c23a; font-weight: 600; margin-bottom: 4px; }
+.faq-q { font-weight: 600; font-size: 13px; margin-bottom: 4px; }
+.faq-a { font-size: 13px; color: #606266; line-height: 1.6; }
+.register-card { margin-top: 10px; padding: 10px 12px; border-radius: 10px; border: 1px solid; }
+.register-card.success { background: #f0f9eb; border-color: #e1f3d8; }
+.register-card.need_login { background: #fdf6ec; border-color: #faecd8; }
+.register-card.incomplete { background: #f4f4f5; border-color: #e9e9eb; }
+.register-card.failed, .register-card.error { background: #fef0f0; border-color: #fde2e2; }
+.reg-title { margin-bottom: 6px; }
+.reg-msg { font-size: 13px; color: #606266; line-height: 1.6; }
 .quick { display: flex; gap: 8px; padding: 10px 14px; overflow-x: auto; }
 .composer { display: flex; gap: 8px; padding: 12px 14px 16px; border-top: 1px solid #eeeef4; }
 .fade-enter-active, .fade-leave-active { transition: opacity .2s, transform .2s; }
