@@ -214,10 +214,21 @@ workflow:
     - data:
         isInIteration: false
         sourceType: question-classifier
-        targetType: llm
-      id: e_cls_llm_6
+        targetType: knowledge-retrieval
+      id: e_cls6_kr6
       source: cls
       sourceHandle: '6'
+      target: kr_6
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        sourceType: knowledge-retrieval
+        targetType: llm
+      id: e_kr6_llm6
+      source: kr_6
+      sourceHandle: source
       target: llm_6
       targetHandle: target
       type: custom
@@ -1129,8 +1140,10 @@ workflow:
       width: 241
     - data:
         context:
-          enabled: false
-          variable_selector: []
+          enabled: true
+          variable_selector:
+          - kr_6
+          - result
         desc: ''
         memory:
           query_prompt_template: '{{#sys.query#}}'
@@ -1257,6 +1270,7 @@ workflow:
 
             【知识库资料】
 
+            {{#kr_6.result#}}
 
 
             请基于以上资料回答访客；资料中没有的信息不要编造，按红线规则引导人工。'
@@ -1459,6 +1473,33 @@ workflow:
       positionAbsolute:
         x: 800
         y: 760
+      type: custom
+      width: 241
+    - data:
+        dataset_ids:
+        - f70f86af-e78c-4985-9bab-379fb50fc541
+        desc: ''
+        multiple_retrieval_config:
+          reranking_enable: false
+          reranking_mode: reranking_model
+          reranking_model: null
+          top_k: 4
+          weights: null
+        query_variable_selector:
+        - sys
+        - query
+        retrieval_mode: multiple
+        selected: false
+        title: 知识检索-faq
+        type: knowledge-retrieval
+      height: 89
+      id: kr_6
+      position:
+        x: 500.0
+        y: 600
+      positionAbsolute:
+        x: 500.0
+        y: 600
       type: custom
       width: 241
     viewport:
