@@ -6,19 +6,33 @@ import { register } from '../api/auth'
 
 const router = useRouter()
 const loading = ref(false)
-const form = ref({ real_name: '', gender: '', age: '', phone: '', education: '', career: '', german: '', password: '', confirm: '', code: '' })
+// v6.10.0：表单对齐 v6.9.11/v6.9.13 注册契约——提交 phone/wechat/age/education 四个画像字段；
+// 性别/职业/德语能力后端注册契约暂无对应字段，待契约扩展后再上（避免收集后丢弃）
+const form = ref({ real_name: '', age: '', phone: '', wechat: '', education: '', password: '', confirm: '' })
 
 async function submit() {
   const f = form.value
-  if (!f.real_name || !f.gender || !f.age || !f.phone || !f.education || !f.password) {
+  if (!f.real_name || !f.age || !f.phone || !f.education || !f.password) {
     ElMessage.warning('请填写所有必填项')
     return
   }
+  const age = Number(f.age)
+  if (!Number.isInteger(age) || age < 1 || age > 120) { ElMessage.warning('请输入有效年龄（1-120）'); return }
   if (f.password !== f.confirm) { ElMessage.warning('两次密码输入不一致'); return }
   loading.value = true
   try {
-    await register({ username: f.phone, password: f.password, real_name: f.real_name, user_type: 'PROSPECT', contact_info: f.phone })
-    ElMessage.success('注册成功，账号状态为待开通')
+    await register({
+      username: f.phone,
+      password: f.password,
+      real_name: f.real_name,
+      user_type: 'PROSPECT',
+      contact_info: f.phone,
+      phone: f.phone,
+      wechat: f.wechat || undefined,
+      age,
+      education: f.education,
+    })
+    ElMessage.success('注册成功，请等待管理员审批通过后再登录')
     router.push('/login')
   } catch {
     ElMessage.error('注册失败，请稍后重试')
@@ -28,19 +42,16 @@ async function submit() {
 
 <template>
   <div class="register-shell">
-    <section class="register-intro"><span class="badge">30秒注册</span><h1>开启专属<br />留学规划</h1><p>注册后账号进入待开通状态，由员工审核后开放完整服务。</p><ul><li>课程与项目预约</li><li>活动报名</li><li>咨询进度查询</li></ul></section>
+    <section class="register-intro"><span class="badge">30秒注册</span><h1>开启专属<br />留学规划</h1><p>注册后账号进入待审批状态，由管理层审批通过后即可登录。</p><ul><li>课程与项目预约</li><li>活动报名</li><li>咨询进度查询</li></ul></section>
     <main class="register-panel">
-      <div class="register-card"><h2>创建账号</h2><p class="muted">必填 5 项基础资料 · 账号密码必填 · 选填 2 项</p>
+      <div class="register-card"><h2>创建账号</h2><p class="muted">必填 5 项基础资料 · 选填 1 项（微信号）· 提交后待管理员审批</p>
         <el-form label-position="top" @submit.prevent="submit">
           <div class="form-grid">
             <el-form-item label="姓名" required><el-input v-model="form.real_name" /></el-form-item>
-            <el-form-item label="性别" required><el-select v-model="form.gender" style="width:100%"><el-option label="男" value="男" /><el-option label="女" value="女" /></el-select></el-form-item>
-            <el-form-item label="年龄" required><el-input v-model="form.age" /></el-form-item>
-            <el-form-item label="手机号" required><el-input v-model="form.phone" /></el-form-item>
+            <el-form-item label="年龄" required><el-input v-model="form.age" placeholder="如：18" /></el-form-item>
+            <el-form-item label="手机号" required><el-input v-model="form.phone" placeholder="注册后作为登录账号" /></el-form-item>
+            <el-form-item label="微信号（选填）"><el-input v-model="form.wechat" /></el-form-item>
             <el-form-item label="最高学历" required><el-select v-model="form.education" style="width:100%"><el-option v-for="item in ['初中及以下','高中/中专','大专','本科','硕士','博士']" :key="item" :label="item" :value="item" /></el-select></el-form-item>
-
-            <el-form-item label="职业 / 专业需求（选填）"><el-input v-model="form.career" /></el-form-item>
-            <el-form-item label="德语能力（选填）"><el-select v-model="form.german" style="width:100%"><el-option v-for="item in ['零基础','A1-A2','B1-B2','C1及以上']" :key="item" :label="item" :value="item" /></el-select></el-form-item>
             <el-form-item label="设置密码" required><el-input v-model="form.password" type="password" show-password /></el-form-item>
             <el-form-item label="确认密码" required><el-input v-model="form.confirm" type="password" show-password /></el-form-item>
           </div>

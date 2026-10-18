@@ -5,9 +5,23 @@ from app.core.exceptions import NotFoundError
 from app.core.response import success_response
 from app.database import get_db
 from app.repositories.customer_service_repo import CustomerServiceRepository
+from app.repositories.course_repo import CourseRepository
 from app.schemas.ai import CsFaqOut, CsMessageOut
+from app.services.course_service import CourseService
 
 router = APIRouter(prefix="/cs", tags=["公开客服"])
+
+
+@router.get("/courses", summary="公开课程列表（课程/项目浏览，无需登录）")
+async def list_public_courses(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(10, ge=1, le=100),
+    category: str | None = Query(None, description="分类筛选"),
+    db: AsyncSession = Depends(get_db),
+):
+    # v6.10.0（v6.9.0 遗留补齐）：复用 M2 课程服务，公开命名空间输出
+    service = CourseService(CourseRepository(db))
+    return success_response(data=await service.list_courses(page, page_size, category))
 
 
 @router.get("/faq", summary="公开 FAQ 列表（常见问题自助解答，无需登录）")

@@ -29,6 +29,31 @@ WECHAT_RE = re.compile(r"(?:微信号|微信|vx|weixin|wechat)\s*[:：]?\s*([a-z
 INTENT_RE = re.compile(r"\[intent:([^\]]+)\]")
 RECOMMEND_MARKER = "[RECOMMEND]"
 SLOTS_MARKER = "[SLOTS]"
+# reasoning 模型思考块（<think>...</think>，含 <!--dify-deepseek-reasoning--> 注释），解析标记前先剥离
+THINK_RE = re.compile(r"<think>.*?</think>\s*|<!--[^>]*reasoning[^>]*-->", re.DOTALL | re.IGNORECASE)
+
+# 本地信息提取兜底：当 Dify 未输出 [SLOTS] 时，从用户消息提取常见画像字段
+# 每条规则按优先级排列，命中即停；值需通过 _normalize_slot_value 清洗
+LOCAL_EXTRACT_PATTERNS: dict[str, list[re.Pattern[str]]] = {
+    "name": [
+        re.compile(r"(?:我叫|我是|名字是|姓名是?)\s*([一-龥]{2,4})"),
+        re.compile(r"([一-龥]{2,4})(?:同学|您好|你好)"),
+    ],
+    "age": [
+        re.compile(r"(?:今年|年龄|岁)\s*(\d{1,2})\s*岁?"),
+        re.compile(r"(\d{1,2})\s*岁"),
+    ],
+    "education": [
+        re.compile(r"(?:学历|在读|年级)\s*[:：]?\s*(初中|高中|高一|高二|高三|本科|大专|硕士|博士|大学)"),
+        re.compile(r"(高一|高二|高三|初三|初二|初一|大一|大二|大三|大四|研一|研二|研三)"),
+    ],
+    "gender": [
+        re.compile(r"(?:性别|我是)\s*[:：]?\s*(男|女)"),
+    ],
+    "study_intent": [
+        re.compile(r"(?:想去|意向|目标国家|留学国家)\s*[:：]?\s*(新加坡|德国|美国|英国|澳大利亚|加拿大|日本|韩国|香港|澳门)"),
+    ],
+}
 
 # 客服对话槽位 → 客户画像字段白名单（与 customer 表列对齐；phone/wechat 单独处理）
 PROFILE_SLOT_FIELDS = (
@@ -99,6 +124,8 @@ class AiService:
             raise BusinessError(code=50001, message=f"客服 Agent 服务不可用：{type(exc).__name__}")
 
         answer = dify_resp.get("answer") or ""
+        # 剥离 reasoning 模型的 <think> 思考块，防止污染标记解析与前端展示
+        answer = THINK_RE.sub("", answer).strip()
         intent = dify_resp.get("intent")
         if dify_resp.get("conversation_id"):
             session.dify_conversation_id = dify_resp["conversation_id"]
@@ -114,6 +141,8 @@ class AiService:
 
         # 信息采集：[SLOTS]{json} 槽位剥离 → 留档 + 转线索/信息更新
         answer, slots = self._extract_slots(answer)
+        # AI 信息提取兜底：Dify 未输出 [SLOTS] 时，从用户消息本地提取补充
+        slots = self._local_extract_merge(slots, request.message)
 
         # 阶段3：高意向转线索——从用户消息/槽位提取手机号建档（携带画像字段，回填 session.customer_id）
         converted = False
@@ -282,6 +311,43 @@ class AiService:
             except (TypeError, ValueError):
                 slots.pop("age")
         return before.strip(), slots
+
+    @classmethod
+    def _local_extract_merge(cls, slots: dict, message: str) -> dict:
+        """本地信息提取兜底：Dify 未输出 [SLOTS] 或缺字段时，从用户消息补充。
+
+        规则：已有关键字段（phone/wechat/name/age/education/gender/study_intent）不覆盖，
+        仅补充缺失项；提取值经 _normalize_slot_value 清洗。
+        """
+        if not message:
+            return slots
+        merged = dict(slots)
+        for field, patterns in LOCAL_EXTRACT_PATTERNS.items():
+            if field in merged and merged[field] not in (None, ""):
+                continue
+            for pattern in patterns:
+                match = pattern.search(message)
+                if match:
+                    value = cls._normalize_slot_value(field, match.group(1))
+                    if value is not None:
+                        merged[field] = value
+                    break
+        return merged
+
+    @staticmethod
+    def _normalize_slot_value(field: str, raw: str) -> Any:
+        """清洗本地提取的字段值，与 _extract_slots 的清洗规则对齐。"""
+        text = raw.strip()
+        if not text:
+            return None
+        if field == "age":
+            try:
+                return int(text)
+            except ValueError:
+                return None
+        if field == "gender":
+            return text if text in ("男", "女") else None
+        return text
 
     @staticmethod
     def _extract_wechat(text: str) -> str | None:
