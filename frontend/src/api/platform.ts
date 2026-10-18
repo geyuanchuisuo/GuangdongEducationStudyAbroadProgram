@@ -51,6 +51,7 @@ export const platformApi = {
     revealPhone: (userId: number) => toData(request.post('/employee/org/members/' + userId + '/reveal-phone')),
     listScores: (params: AnyRecord = {}) => toData(request.get('/employee/scores', { params: query(params) })),
     createScore: (data: AnyRecord) => toData(request.post('/employee/scores', data)),
+    updateScore: (id: number, data: AnyRecord) => toData(request.put('/employee/scores/' + id, data)),
     createConvertApply: (data: AnyRecord) => toData(request.post('/employee/convert-applies', data)),
     listAdminServices: (params: AnyRecord = {}) => toData(request.get('/employee/admin-services', { params: query(params) })),
     reviewAdminService: (id: number, data: AnyRecord) => toData(request.post('/employee/admin-services/' + id + '/review', data)),

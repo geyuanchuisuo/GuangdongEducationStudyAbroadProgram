@@ -1,10 +1,12 @@
-﻿﻿# AGENTS.md - 项目接手指南
+# AGENTS.md - 项目接手指南
 
 > 给下一个接手这个项目的人/AI 的完整指南
 
 ---
 
 ## 零、快速定位（打开项目先看这里）
+
+> v6.9.3（2026-10-18）：前端成绩/日报问题修复、构建分包、preview /api 代理已验证；Dify 与后端遗留问题见运行日志 LOG-033。
 
 **当前进度**：Phase 0 公共地基已完成（v6.0.1），Phase 1 模块并行开发中；M3 员工模块全部交付（v6.5.0 收官）；v6.6.0 需求对齐差异全部落地；v6.7.0~v6.7.2 管理层端三项+需求核对 52/52；master 已合并 longtrying（62d4cff）与 longtrying_stu（a23fc49，第三次合并）全部工作；**M4 学生模块一期全部交付（v6.8.0 第一批 7 子模块 + v6.8.1 第二批 学生助手Agent/提醒聚合，11 paths / 13 endpoints）；v6.8.2 Docker 环境搭建 + M3/M4 数据库端到端验证通过（E2E 69/69，修复 7 项缺陷）；v6.8.3 指令解析本地兜底 + 提醒聚合缺陷修复（E2E 71/71 幂等全过）；v6.8.4 文件存储改本地磁盘后端（docker compose 移除 MinIO，零额外镜像三容器直跑）+ DIFY_BASE_URL 根因修正；v6.8.5 引入 M5 智能报告 7 paths 与前端界面，M3 dashboard 与《一期指标口径表V1》统一名称+新增差异字段（verify_all 25/25 + M5 测试 32/32 + 对齐 14/14）；v6.8.6 AI 全链路打通：Dify 绑定 mimo-v2.6-flash（api.xiaomimimo.com），3 个 Agent 应用创建并回填 app key，真实 AI 链路 6/6 验证通过，环境缺口全部关闭**；**anhoa 分支 v6.8.0：M1 客户模块 + M2 客服 Agent 一期补齐（客户 8 研判字段/6 态流转/pending_lead 待补全线索/客服 Agent 4 出口），2026-10-17 两次合并 origin/master 并线（v6.8.0 被两条分支并行使用，路由 81→99）**；**v6.8.8 P1 运行时缺陷修复：ai_service.py 恢复 M3/M4 依赖的 AgentType/AIService/ai_service（anhoa 合并重写所致，函数内延迟导入绕过静态检查），客服 AiService 与通用 AIService 双服务共存，容器内真实 Dify 调用成功（verify_all 27/27 + pytest 64/64）**；**v6.9.0 远端访问方案（longtrying_test 分支）：docker-compose 增加 nginx 统一 80 入口 + ngrok 内网穿透脚本 + 一键构建启动脚本 + 完整使用指南（REMOTE_ACCESS.md），本地执行 `.\scripts\build-and-serve.ps1` + `.\scripts\start-ngrok.ps1` 即可获得公网 URL**；**v6.9.1 远端访问实测修正：nginx 端口 80→8080（本机 80 被 Dify 占用），新增 localtunnel 免注册方案，公网实测通过（https://wide-cameras-pay.loca.lt 前端 200/API 正常）**；**v6.9.2 master 快进合并 longtrying_test（b84acf3..4c27071，13 文件 +406/-14，无冲突，verify_all 27/27），远端访问能力并入主干**
 **数据库**：31张表（customer 加 8 研判画像列、cs_intent_log.user_id 放宽可空、AiReport 表加 version/data_source_status/error_message 3 列），99条路由路径（98 API + 1 health；employee 42 paths，student 11 paths/13 endpoints，reports 7 paths，crm/ai/courses/events 15 paths），MVC分层结构就绪；**Docker 环境：edu-mysql/edu-redis/edu-backend 全部健康，`docker compose up -d` 三容器零额外镜像直跑（文件存储默认本地磁盘 backend_storage 卷，不再依赖 MinIO）**
@@ -778,3 +780,16 @@ chore: 构建
 - Logged-in public header now keeps My Center and adds Logout.
 - My Center now routes to the current user role instead of always opening PROSPECT.
 - Frontend production build passed after the fix.
+
+
+---
+
+## v6.9.3 前端问题修复（2026-10-18）
+
+- **已修复**：删除 RoleWorkspace.vue 重复的成绩录入分支；统一成绩页面中文文案；补充成绩录入/编辑的 0-100 校验和错误提示；补全日报日期、内容校验及提交后刷新；清理行尾空格。
+- **已修复**：vite.config.ts 拆分 Element Plus、Vue、通用 vendor 构建包，并为 vite preview 增加 /api 代理，预览登录接口验证通过。
+- **测试结果**：前端生产构建通过（1719 modules，构建包拆分后无超大包警告）；preview 登录接口 200；此前成绩创建/重复拦截/修改接口冒烟 200/40901/200。
+- **未修改**：backend、数据库配置、Dify 配置及接口实现均未改动。
+- **仍需后端/基础设施处理**：三个 Dify Agent 未接通；员工助手 fallback 的 logger 未定义；客服 Dify URL 缺少 /v1；数据库端口 3306/59000 文档不一致。
+
+> Git 推送状态（v6.9.3）：本地分支 `codex/frontend-v6.9.3` 已提交；远端认证失败，待补凭据后推送。
