@@ -6,6 +6,8 @@
 
 ## 零、快速定位（打开项目先看这里）
 
+> v6.11.17（2026-10-19，ZNBG/M5）：**production 投诉域静默清零缺陷修复**——`report_data_source.py` 漏 import `ComplaintReportInput`（v6.11.0 引入），调用处 NameError 被 v6.9.6 逐行容错当脏行静默吞掉、报告仍 completed → production 任意含工单周期投诉指标恒 0（本库 105 行全跳过；mock 不受影响）；补 import + 防回退用例后实测 orders_total 0→9 / new_count 6 / analyzed_count 8；回归 compileall + pytest 158/158 + Docker E2E 81/81 + production 冒烟 7/7；详见更新记录 v6.11.17 与 LOG-074（ZNBG）。
+
 > v6.11.16（2026-10-19）：Dify 1.16 首启脚本修正到 `/console/api/*` 并使用 cookie/CSRF 登录，补入智能报告 app key 映射；Agnes 模型配置仅保存在忽略的 `dify/docker/.env`。Dify API/Postgres/Redis/Sandbox 健康且管理员已创建，但 OpenAI 兼容插件和 DSL 依赖需访问 Marketplace；当前本机及容器均收到 403，dify-init 停在供应商配置，app keys 尚未生成。详见更新记录 v6.11.16、LOG-073。
 
 > v6.11.15（2026-10-19）：Dify 首启阻塞修复——根 `.env.example` 启用默认 PostgreSQL/Weaviate profiles；Dify Redis 使用独立服务名；backend 只读挂载 `dify_app_keys`；init_permissions 首启生成 sandbox 配置和依赖清单；Dify 示例移除可选空值并统一控制台 8081。本地 `.env` 保留但不跟踪。当前模型三项未配置，dify-init 尚未完成。详见更新记录 v6.11.15 与 LOG-073。
@@ -928,6 +930,8 @@ chore: 构建
 > v6.11.3 规则覆盖（qianduan 线，2026-10-18）：访客 PROSPECT 注册免审批，注册即"正常"并可立即登录；详见更新记录。
 
 > v6.11.4（qianduan 线）：学生端留学申请进度布局紧凑化，内容不变；npm build 通过。
+
+**最后更新**：2026-10-19（**v6.11.17 M5 production 投诉域静默清零缺陷修复（ZNBG）**：`report_data_source.py` 补 `ComplaintReportInput` 导入（v6.11.0 投诉域改写遗漏；局部注解不求值掩盖至调用处 NameError，被 v6.9.6 逐行容错静默吞掉、报告仍 completed，production 任意含工单周期投诉指标恒 0）+ 新增防回退用例（test_report_data_source 9/9）；实测含工单周期 orders_total 0→9 / new_count 6 / analyzed_count 8；同轮回归 compileall + verify_all 29/29 + pytest 158/158 + Docker E2E 81/81 + production 冒烟 7/7 + npm build；另含同日 v6.11.15/v6.11.16 Dify 一体化部署修复与 Dify 1.16 初始化兼容修复（用户交付，见 LOG-073）；详见更新记录 v6.11.17 与 LOG-074（ZNBG））
 
 **最后更新**：2026-10-19（**v6.11.14 第十一次同步 origin/master→master_ZNBG（ZNBG）**：合并 `ff20368..027874d`——上游 v6.11.12 **M0 config.py 直连模型默认值去供应商化**（`DIFY_MODEL_BASE_URL`/`DIFY_MODEL_NAME` mimo→全空，经用户批准）+ `.env.example`/`dify/docker/.env` 模板同步 + dify-init DSL `your-model-name` 占位符注入（导入时替换为客户模型名，解决 Chatflow LLM 节点改不到模型的固有问题）+ 删「模型 key 为空即 fail」强阻塞 + 5 个 dify/apps yml 去绑定；M5 零影响（报告 AI 走 REPORT Agent 不依赖直连降级）；行为变化：模型三件套未配置的机器直连降级跳过、走本地话术兜底（本机 .env 已配则无感）；冲突 9 处（3 yml 说明注释取上游去供应商版 + 6 docs 并集线标签消歧，双方 v6.11.12 同号异义并存）；回归 compileall + verify_all 29/29 + pytest 全过 + alembic 单头；详见更新记录 v6.11.14 与 LOG-072（ZNBG））
 
