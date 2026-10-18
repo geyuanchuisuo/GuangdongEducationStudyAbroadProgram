@@ -6,6 +6,8 @@
 
 ## 零、快速定位（打开项目先看这里）
 
+> v6.11.12（2026-10-19）：**一体化 Dify 栈首次启动实测失败（exit 1）**，定位两处配置缺陷并按用户决定**暂不修复、仅记录**：**A（Dify 侧）** `dify/docker/.env` 精简模板把可选变量留成空值行（`KEY=`）→ 空串被当作"显式设为空"，Dify `api` 启动即 `ValidationError: INDEXING_MAX_SEGMENTATION_TOKENS_LENGTH unable to parse string as an integer [input_value='']`，api/worker/worker_beat/plugin_daemon/sandbox/agent_backend 全部 Restarting（应改为注释态 = 用默认值）；**B（业务侧）** `docker-compose.yml` backend 的 command 要 `. /run/dify-keys/app_keys.env`，但 `volumes` **缺 `dify_app_keys:/run/dify-keys` 挂载** → 不论 dify-init 成功与否 backend 都起不来（`sh: 1: .: cannot open …: No such file`）。业务侧仍可跑（旧拓扑 4 容器：`/health` ok、107 路由、登录与业务接口全通）；业务后端已用 `docker cp` 空 `app_keys.env` + `up -d --no-deps backend` 临时恢复，**该手段不持久（容器重建即再次失败）**。详见更新记录 v6.11.12、运行日志 LOG-070、开发路线图移交清单第 25 项。
+
 > v6.11.11（2026-10-19）：本机环境修复——① `backend/.env` 数据库密码旧值 `password`→`420821`（实测 `420821` 可连、`password` Access denied；容器内 backend 用 compose 注入串，故该错配长期被掩盖）② 运行库从未走过 alembic（`alembic_version` 为空 + `student_score` 缺 `uq_student_score_unique`，库结构停在 004）→ `alembic stamp 004_m5_drill_ticket_ai` 后 `upgrade head` **只补跑 005、保留全部数据**：`student_score` 104→97（清 7 条重复，每组留最小 id）、唯一索引已建、重复插入实测 `ERROR 1062 Duplicate entry` ③ Dify 指向切打包基线（根 `.env`=`http://dify_nginx`；`backend/.env` 宿主机开发=`http://localhost:8081`）④ 已下线的 `DIFY_REPORT_AGENT_KEY` 在 `.env` 中注释保留，避免"看着配了、实际不生效"。verify_all 29/29；详见更新记录 v6.11.11 与 LOG-069。**遗留**：`dify/docker/.env` 不存在（根 compose 的 `dify-init` 用 `env_file` 依赖它，缺文件则 `docker compose up` 报错）；`dify/docker/.env.example` 的 `EXPOSE_NGINX_PORT=80` 与 v6.11.9 声称基线 8081 不一致。
 
 > v6.11.10（2026-10-19）：同步 origin/master 文档基线并按用户逐项确认处理共用模块：移除 M0 REPORT Agent，恢复 M5 动态会话 ID，模型默认值切换至 Mimo；初始化按 DSL 应用名去重并跳过留档 DSL。保留本地强密码、app key 受限共享卷自动加载、DIFY_BASE_URL 插值与本地 .env 不入库。
