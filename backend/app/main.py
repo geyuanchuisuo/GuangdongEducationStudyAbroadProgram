@@ -10,6 +10,7 @@ from app.api.v1 import (
     auth,
     courses,
     crm,
+    cs,
     customers,
     employees,
     events,
@@ -114,6 +115,7 @@ app.include_router(courses.router, prefix=settings.API_V1_PREFIX)
 app.include_router(events.router, prefix=settings.API_V1_PREFIX)
 app.include_router(crm.router, prefix=settings.API_V1_PREFIX)
 app.include_router(ai.router, prefix=settings.API_V1_PREFIX)
+app.include_router(cs.router, prefix=settings.API_V1_PREFIX)                 # M2 公开客服（/cs/faq、/cs/sessions）
 app.include_router(assessment_save_api.router, prefix=settings.API_V1_PREFIX)
 app.include_router(assessment_engine_router, prefix=settings.API_V1_PREFIX)
 app.include_router(students.router, prefix=settings.API_V1_PREFIX)          # M4 学生模块（学生端）

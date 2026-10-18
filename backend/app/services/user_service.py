@@ -1,8 +1,13 @@
 from app.core.exceptions import BusinessError
 from app.core.security import create_access_token, hash_password, verify_password
+from app.models.customer import Customer
+from app.models.system import ApprovalInstance
 from app.models.user import User
 from app.repositories.user_repo import UserRepository
 from app.schemas.user import LoginRequest, LoginResponse, RegisterRequest
+from app.services.approval_engine import approval_engine
+from app.services.event_bus import event_bus
+from app.services.event_contracts import EventType
 
 
 class UserService:
@@ -16,6 +21,10 @@ class UserService:
 
         if not verify_password(request.password, user.password_hash):
             raise BusinessError(code=40001, message="用户名或密码错误")
+
+        if user.status == "待审批":
+            # v6.10.0：待审批与禁用区分提示（错误码表 40006 账号待开通）
+            raise BusinessError(code=40006, message="账号待开通，请等待管理员审批")
 
         if user.status != "正常":
             raise BusinessError(code=40003, message="账号已被禁用")
@@ -43,9 +52,111 @@ class UserService:
             user_type=request.user_type,
             contact_info=request.contact_info,
         )
-        created = await self.repo.create(user)
 
+        # PROSPECT 注册走审批门：customer 主表 + 审批实例（biz_type=prospect_register）
+        if request.user_type == "PROSPECT":
+            # v6.10.0：先查可用审批人，避免建完用户/客户后因「无可用审批人」失败留孤儿
+            from sqlalchemy import select
+            manager_result = await self.repo.db.execute(
+                select(User.id).where(User.user_type == "MANAGER", User.status == "正常").limit(1)
+            )
+            manager_id = manager_result.scalar_one_or_none()
+            if not manager_id:
+                raise BusinessError(code=50001, message="无可用审批人，请联系管理员")
+
+            # v6.10.0：user + customer 同一事务提交（原实现分两次提交，中途失败留孤儿）
+            user.status = "待审批"
+            self.repo.db.add(user)
+            await self.repo.db.flush()  # 先取 user.id 供 customer.sys_user_id 关联
+            customer = Customer(
+                phone=request.phone,
+                wechat=request.wechat,
+                name=request.real_name,
+                age=request.age,
+                education=request.education,
+                source_channel="WEBSITE_REGISTER",
+                status="NEW",
+                phone_status="normal",
+                sys_user_id=user.id,
+            )
+            self.repo.db.add(customer)
+            await self.repo.db.commit()
+            await self.repo.db.refresh(user)
+            await self.repo.db.refresh(customer)
+
+            # 创建审批实例（M0 审批引擎自带事务）
+            instance = await approval_engine.create(
+                biz_type="prospect_register",
+                initiator_id=user.id,
+                approver_id=manager_id,
+                biz_id=customer.id,
+                title=f"客户注册审批：{request.real_name}",
+            )
+
+            return {
+                "user_id": user.id,
+                "username": user.username,
+                "status": "待审批",
+                "approval_id": instance.id,
+                "customer_id": customer.id,
+            }
+
+        # STUDENT/EMPLOYEE 直接注册（原逻辑）
+        created = await self.repo.create(user)
         return {"user_id": created.id, "username": created.username}
+
+    async def approve_prospect(self, approval_id: int, approver_id: int, action: str, comment: str | None = None) -> dict:
+        """PROSPECT 注册审批（MANAGER）：通过 → 用户状态正常 + customer 发事件；驳回 → 用户禁用。"""
+        instance = await approval_engine.get_by_id(approval_id)
+        if not instance:
+            raise BusinessError(code=40401, message="审批单不存在")
+        if instance.biz_type != "prospect_register":
+            raise BusinessError(code=40002, message="非客户注册审批单")
+        if instance.status != "pending":
+            raise BusinessError(code=40901, message=f"审批单已处理，当前状态: {instance.status}")
+
+        # 校验审批人权限（v6.10.0：改用请求会话，不再绕过 DI 直连全局引擎）
+        approver = await self.repo.get_by_id(approver_id)
+        if not approver or approver.user_type != "MANAGER":
+            raise BusinessError(code=40301, message="无权限审批")
+
+        if action == "approve":
+            await approval_engine.approve(approval_id, approver_id, comment)
+            # 激活用户
+            user = await self.repo.get_by_id(instance.initiator_id)
+            if user:
+                user.status = "正常"
+                await self.repo.db.commit()
+
+            # 发 customer.registered 事件
+            if instance.biz_id:
+                from sqlalchemy import select as _select
+                from app.models.customer import Customer
+                result = await self.repo.db.execute(_select(Customer).where(Customer.id == instance.biz_id))
+                customer = result.scalar_one_or_none()
+                if customer:
+                    await event_bus.publish(
+                        EventType.CUSTOMER_REGISTERED,
+                        "M1",
+                        {
+                            "customer_id": customer.id,
+                            "phone": customer.phone,
+                            "name": customer.name or "未知客户",
+                        },
+                    )
+            return {"status": "approved", "message": "审批通过，客户已激活"}
+
+        elif action == "reject":
+            await approval_engine.reject(approval_id, approver_id, comment)
+            # 禁用用户
+            user = await self.repo.get_by_id(instance.initiator_id)
+            if user:
+                user.status = "禁用"
+                await self.repo.db.commit()
+            return {"status": "rejected", "message": "审批驳回，账号已禁用"}
+
+        else:
+            raise BusinessError(code=40002, message="action 必须是 approve 或 reject")
 
     async def get_me(self, user: User) -> dict:
         return {

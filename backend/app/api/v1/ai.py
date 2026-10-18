@@ -15,8 +15,9 @@ router = APIRouter(prefix="/ai", tags=["智能客服"])
 
 def _get_service(db: AsyncSession = Depends(get_db)) -> AiService:
     repo = CustomerServiceRepository(db)
-    crm_service = CrmService(CrmRepository(db), CustomerRepository(db))
-    return AiService(repo, crm_service=crm_service)
+    customer_repo = CustomerRepository(db)
+    crm_service = CrmService(CrmRepository(db), customer_repo)
+    return AiService(repo, crm_service=crm_service, customer_repo=customer_repo)
 
 
 @router.post("/customer-service/chat")

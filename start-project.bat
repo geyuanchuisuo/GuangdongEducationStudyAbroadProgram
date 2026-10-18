@@ -42,7 +42,7 @@ uv pip install reportlab
 if errorlevel 1 goto :error
 
 echo [4/6] Starting backend on port 8000...
-start "Yuejiao Backend" cmd /k "set DATABASE_URL=mysql+aiomysql://root:123456@localhost:3306/GuangdongEducationStudyAbroadProgram&& .venv\Scripts\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 8000"
+start "Yuejiao Backend" cmd /k "set DATABASE_URL=mysql+aiomysql://root:420821@localhost:59000/GuangdongEducationStudyAbroadProgram&& .venv\Scripts\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 8000"
 timeout /t 8 /nobreak >nul
 
 echo [5/6] Creating four test accounts...

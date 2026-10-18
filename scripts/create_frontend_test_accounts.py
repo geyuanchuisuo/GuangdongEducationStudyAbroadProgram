@@ -28,9 +28,9 @@ def wait_for_api():
 def create_accounts():
     conn = pymysql.connect(
         host='localhost',
-        port=3306,
+        port=59000,
         user='root',
-        password='123456',
+        password='420821',
         database='GuangdongEducationStudyAbroadProgram',
         charset='utf8mb4',
     )

@@ -6,7 +6,7 @@ from app.core.response import success_response
 from app.database import get_db
 from app.models.user import User
 from app.repositories.report_repo import ReportRepository
-from app.schemas.report import ReportGenerateRequest, ReportOut
+from app.schemas.report import ReportGenerateRequest, ReportListOut, ReportOut
 from app.services.report_service import ReportService
 
 router = APIRouter(prefix="/reports", tags=["智能报告"])
@@ -25,8 +25,9 @@ async def list_reports(
     service: ReportService = Depends(_get_service),
 ):
     items, total = await service.list_reports(report_type, page, page_size)
+    # M5-12.3 列表瘦身：不回传完整 report_content（详情接口单独取）
     return success_response(data={
-        "items": [ReportOut.model_validate(r) for r in items],
+        "items": [ReportListOut.model_validate(r) for r in items],
         "total": total,
         "page": page,
         "page_size": page_size,

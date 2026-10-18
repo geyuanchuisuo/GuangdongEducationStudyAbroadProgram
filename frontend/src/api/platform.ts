@@ -1,5 +1,5 @@
 import request from '../utils/request'
-import { customers, events, faqs, notifications, policies, projects, reports } from '../data/mock'
+import { customers, events, faqs, notifications, policies, projects } from '../data/mock'
 
 type AnyRecord = Record<string, any>
 
@@ -11,7 +11,9 @@ async function toData<T>(promise: Promise<any>): Promise<T> {
 async function fallback<T>(task: () => Promise<any>, data: T): Promise<T> {
   try {
     return await toData<T>(task())
-  } catch {
+  } catch (error) {
+    // M5-05.7：静默回落必须显式提示——控制台可追溯，避免 mock 数据被误当真实接口数据
+    console.warn('[platformApi] 接口不可用，回落到本地演示数据：', error)
     return data
   }
 }
@@ -20,10 +22,69 @@ function query(params: AnyRecord = {}) {
   return Object.fromEntries(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== ''))
 }
 
+function eventDateLabel(value: any): string {
+  const d = new Date(value)
+  if (!value || isNaN(d.getTime())) return '—'
+  return d.getMonth() + 1 + '月' + d.getDate() + '日'
+}
+
 export const platformApi = {
-  projects: () => fallback(() => request.get('/cs/courses'), projects),
-  events: () => fallback(() => request.get('/cs/events'), events),
-  faqs: () => fallback(() => request.get('/cs/faq'), faqs),
+  // v6.10.0：课程列表切真实 GET /cs/courses（原指向恒 404 降级 mock）；
+  // 映射页面展示形状（tag/status、fee/tuition_fee、highlights 表无对应列置空），降级 mock 不加 demo 标记（课程无报名态）
+  projects: async (): Promise<Array<AnyRecord>> => {
+    try {
+      const data: any = await toData(request.get('/cs/courses', { params: { page_size: 100 } }))
+      if (data?.items?.length) {
+        return data.items.map((i: AnyRecord) => ({
+          id: i.id,
+          title: i.project_name,
+          category: i.category || '国际留学',
+          tag: i.status || '热招',
+          summary: i.description || '—',
+          audience: i.target_audience || '—',
+          duration: i.duration || '—',
+          fee: i.tuition_fee != null && i.tuition_fee !== '' ? '¥' + i.tuition_fee : '费用面议',
+          highlights: [] as string[],
+        }))
+      }
+    } catch (error) {
+      // M5-05.7：静默回落必须显式提示——控制台可追溯，避免 mock 数据被误当真实接口数据
+      console.warn('[platformApi] 接口不可用，回落到本地演示数据：', error)
+    }
+    return projects
+  },
+  // v6.9.8 ②-A：活动列表切真实 GET /events（原指向未实装的 /cs/events 恒 404 降级 mock）；
+  // 映射页面展示形状并保留真实 id/status（报名与禁用判断依赖）；降级 mock 追加 demo 标记供页面禁用报名
+  events: async (): Promise<Array<AnyRecord>> => {
+    try {
+      const data: any = await toData(request.get('/events', { params: { page_size: 100 } }))
+      if (data?.items?.length) {
+        return data.items.map((i: AnyRecord) => ({
+          id: i.id,
+          date: eventDateLabel(i.start_time),
+          title: i.event_name,
+          format: [i.event_type, i.location].filter(Boolean).join(' · ') || '—',
+          speaker: '—', // event_lecture 表无主讲人列（②-A 既定决策：显示"—"，不动表结构）
+          joined: i.current_participants ?? 0,
+          capacity: i.max_participants ?? 0,
+          status: i.status,
+        }))
+      }
+    } catch (error) {
+      // M5-05.7：静默回落必须显式提示——控制台可追溯，避免 mock 数据被误当真实接口数据
+      console.warn('[platformApi] 接口不可用，回落到本地演示数据：', error)
+    }
+    return events.map((e: AnyRecord) => ({ ...e, demo: true }))
+  },
+  eventRegister: (id: number) => toData(request.post('/events/' + id + '/register')),
+  faqs: async (): Promise<Array<{ q: string; a: string }>> => {
+    try {
+      const data: any = await toData(request.get('/cs/faq', { params: { page_size: 100 } }))
+      if (data?.items?.length) return data.items.map((i: AnyRecord) => ({ q: i.question, a: i.answer }))
+    } catch { /* 后端未就绪时降级 mock */ }
+    return faqs
+  },
+  csChat: (data: AnyRecord) => toData(request.post('/ai/customer-service/chat', data)),
   policies: () => Promise.resolve(policies),
   notifications: (params: AnyRecord = {}) => fallback(() => request.get('/notifications', { params: query(params) }), notifications),
   notificationsUnread: () => toData(request.get('/notifications/unread-count')),
@@ -94,8 +155,9 @@ export const platformApi = {
     my: () => toData(request.get('/approvals/my')),
     get: (id: number) => toData(request.get('/approvals/' + id)),
   },
-  reports: (params: AnyRecord = {}) => fallback(() => request.get('/reports', { params: query(params) }), reports),
-  report: {
+  // M5 智能报告（M5-05.6/05.7）：报告组不做静默 mock 回落——失败直接抛出由页面四态呈现
+  reports: {
+    list: (params: AnyRecord = {}) => toData(request.get('/reports', { params: query(params) })),
     generate: (data: AnyRecord) => toData(request.post('/reports/generate', data)),
     get: (id: number) => toData(request.get('/reports/' + id)),
     customers: (id: number) => toData(request.get('/reports/' + id + '/customers')),

@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     DIFY_MODEL_BASE_URL: str = "https://apihub.agnes-ai.com/v1"
     DIFY_MODEL_NAME: str = "agnes-2.5-flash"
 
+    # M5 智能报告数据来源开关（M5-02.3）：mock=模拟数据（默认）；production=真实业务表取数
+    REPORT_DATA_SOURCE: str = "mock"
+
     # 文件存储后端：local=本地磁盘（默认，一期单机 Docker 零外部依赖）/ s3=MinIO 等 S3 兼容存储（二期生产可选）
     STORAGE_BACKEND: str = "local"
     STORAGE_LOCAL_DIR: str = "./storage_data"

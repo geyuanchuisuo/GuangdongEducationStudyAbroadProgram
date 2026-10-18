@@ -7,13 +7,15 @@ import {
   Download,
   Edit,
   Plus,
+  Refresh,
   Search,
   UserFilled,
 } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import StatCard from '../components/StatCard.vue'
 import SectionTitle from '../components/SectionTitle.vue'
-import { customers, events, notifications, projects, reports, studentTodos } from '../data/mock'
+import { customers, events, notifications, projects, studentTodos } from '../data/mock'
+import { REPORT_TYPES, typeName } from '../config/reports'
 import { platformApi } from '../api/platform'
 
 const route = useRoute()
@@ -23,8 +25,7 @@ const section = computed(() => String(route.params.section || 'home'))
 const keyword = ref('')
 const customerDialog = ref(false)
 const leaveDialog = ref(false)
-const reportTab = ref('CA')
-const psych成绩 = ref(72)
+const psychScore = ref(72)
 const customerForm = reactive({ name: '', phone: '', gender: '', age: '', education: '', project: '新加坡本硕', note: '' })
 const leaveForm = reactive({ type: '事假', start: '', end: '', reason: '' })
 const ticketForm = reactive({ title: '', detail: '', formal: false })
@@ -33,13 +34,11 @@ const convertForm = reactive({ customerId: 1, project: '新加坡国际本硕升
 const submittedConversionIds = new Set<number>()
 const activeCustomer = ref<any>(null)
 const customerRows = ref<any[]>(customers)
-const reportRows = ref<any[]>(reports)
 const notificationRows = ref<any[]>(notifications)
 const reminders = ref<any>({})
 const approvalRows = ref<any[]>([])
 const studentProfile = ref<any>({})
 const studentTickets = ref<any[]>([])
-const studentProgress = ref<any[]>([])
 const lifeFaqRows = ref<any[]>([])
 const moreServiceRows = ref<any[]>([])
 const scoreForm = reactive({ studentId: 2, semester: String(), courseName: String(), score: 0 })
@@ -114,10 +113,24 @@ async function editScore(row: any) {
   }
 }
 
-function openReport(row: any) {
+function openDailyReport(row: any) {
   activeReport.value = row
   reportDialog.value = true
 }
+
+// ── M5 智能报告状态（M5-05.1~05.9） ──────────────────────────
+const reportFilterType = ref('')
+const reportPage = ref(1)
+const reportPageSize = 10
+const reportTotal = ref(0)
+const reportList = ref<any[]>([])
+const reportLoading = ref(false)
+const reportError = ref('')
+const reportGenerating = ref('')
+const selectedReport = ref<any>(null)
+const detailLoading = ref(false)
+const drill = ref<Record<string, any[]>>({ customers: [], psychCases: [], specialCases: [] })
+const drillLoading = ref('')
 
 function itemsOf(value: any): any[] {
   if (Array.isArray(value)) return value
@@ -127,15 +140,23 @@ function itemsOf(value: any): any[] {
 onMounted(async () => {
   try {
     const requests: Promise<any>[] = [platformApi.notifications()]
+    // M5-05.9：员工端不再请求 /reports（该组接口仅 MANAGER/ADMIN，员工调用必 403）
     if (role.value === 'EMPLOYEE' || role.value === 'MANAGER') {
-      requests.push(platformApi.employeeCustomers(), platformApi.reports(), platformApi.employeeReminders())
+      requests.push(platformApi.employeeCustomers(), platformApi.employeeReminders())
+    }
+    if (role.value === 'MANAGER') {
+      requests.push(platformApi.reports.list({ page: 1, page_size: reportPageSize }))
     }
     const results = await Promise.all(requests)
     notificationRows.value = itemsOf(results[0])
     if (results.length > 1) {
       customerRows.value = itemsOf(results[1])
-      reportRows.value = itemsOf(results[2])
-      reminders.value = results[3] || {}
+      reminders.value = results[2] || {}
+      if (role.value === 'MANAGER') {
+        const page: any = results[3] || {}
+        reportList.value = page.items || []
+        reportTotal.value = page.total || 0
+      }
     }
   } catch {
     // Keep the initial test set when a module endpoint is not available.
@@ -145,6 +166,114 @@ onMounted(async () => {
     await loadDailyReports()
   }
 })
+
+// ── M5 智能报告：列表 / 生成 / 详情 / 下钻 / 导出（M5-05.1~05.8） ──────────
+async function loadReports() {
+  reportLoading.value = true
+  reportError.value = ''
+  try {
+    const page: any = await platformApi.reports.list({
+      report_type: reportFilterType.value || undefined,
+      page: reportPage.value,
+      page_size: reportPageSize,
+    })
+    reportList.value = page?.items || []
+    reportTotal.value = page?.total || 0
+  } catch (error: any) {
+    const message = String(error?.message || '')
+    if (message.includes('无权限')) reportError.value = '无权限查看智能报告（仅 MANAGER/ADMIN）'
+    else if (message.includes('不存在')) reportError.value = '报告接口未开放'
+    else reportError.value = message || '报告列表加载失败，请稍后重试'
+    reportList.value = []
+    reportTotal.value = 0
+  } finally {
+    reportLoading.value = false
+  }
+}
+
+function generateReport(type: string) {
+  confirmWrite('确认生成「' + typeName(type) + '」吗？重复生成同类型同周期会保留历史版本。', async () => {
+    reportGenerating.value = type
+    try {
+      await platformApi.reports.generate({ report_type: type })
+      notifySuccess('报告已生成')
+      reportPage.value = 1
+      await loadReports()
+    } catch (error: any) {
+      // 拦截器已提示业务错误；这里补状态呈现
+      reportError.value = String(error?.message || '生成失败，请稍后重试')
+    } finally {
+      reportGenerating.value = ''
+    }
+  })
+}
+
+async function openReport(row: any) {
+  detailLoading.value = true
+  try {
+    selectedReport.value = await platformApi.reports.get(row.id)
+    drill.value = { customers: [], psychCases: [], specialCases: [] }
+  } catch (error: any) {
+    ElMessage.error(String(error?.message || '报告详情加载失败'))
+  } finally {
+    detailLoading.value = false
+  }
+}
+
+function backToReportList() {
+  selectedReport.value = null
+}
+
+async function loadDrill(kind: 'customers' | 'psychCases' | 'specialCases') {
+  if (!selectedReport.value) return
+  drillLoading.value = kind
+  try {
+    const data: any = await platformApi.reports[kind](selectedReport.value.id)
+    drill.value[kind] = itemsOf(data)
+  } catch (error: any) {
+    drill.value[kind] = []
+    ElMessage.warning(String(error?.message || '下钻数据不可用'))
+  } finally {
+    drillLoading.value = ''
+  }
+}
+
+async function downloadReportPdf() {
+  if (!selectedReport.value) return
+  try {
+    const blob: any = await platformApi.reports.download(selectedReport.value.id)
+    const url = URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }))
+    const link = document.createElement('a')
+    link.href = url
+    link.download = 'report_' + selectedReport.value.id + '.pdf'
+    link.click()
+    URL.revokeObjectURL(url)
+  } catch (error: any) {
+    ElMessage.error(String(error?.message || '导出失败：报告可能无内容'))
+  }
+}
+
+/** AI 文字来源文案（M5-10.6 差异字段 ai_source：model / mock / unavailable） */
+function aiSourceText(content: any): string {
+  if (!content || content.ai_status !== 'available') return '不可用，仅展示确定性指标'
+  if (content.ai_source === 'model') return '可用（共用模型网关）'
+  if (content.ai_source === 'mock') return '可用（模拟数据）'
+  return '可用'
+}
+
+/** 展开层 metrics 为可渲染的键值行（一层嵌套展平） */
+function metricRows(metrics: any): { key: string; value: any }[] {
+  if (!metrics || typeof metrics !== 'object') return []
+  const rows: { key: string; value: any }[] = []
+  for (const [key, value] of Object.entries(metrics)) {
+    if (value !== null && typeof value === 'object') {
+      for (const [k2, v2] of Object.entries(value as any)) rows.push({ key: key + ' · ' + k2, value: v2 })
+    } else {
+      rows.push({ key, value })
+    }
+  }
+  return rows
+}
 function notifySuccess(message: string) {
   ElMessage['success'](message)
 }
@@ -338,7 +467,7 @@ async function submitTicket() {
 async function startPsychChat() {
   try {
     const result: any = await platformApi.student.psychChat({ message: '我想聊聊最近的心情', session_id: 'new' })
-    if (typeof result?.emotion_score === 'number') psych成绩.value = result.emotion_score
+    if (typeof result?.emotion_score === 'number') psychScore.value = result.emotion_score
     notifySuccess('情绪对话已开始')
   } catch {
     notifyInfo('心理关怀接口尚未就绪')
@@ -383,7 +512,7 @@ function revealPhone() {
     </template>
 
     <template v-else-if="role === 'STUDENT' && section === 'psych'">
-      <section class="psych-hero surface"><div><span class="badge">AI 对话式评估 · 一期</span><h2>今日心理状态</h2><p>服务性综合状态评分，不构成医疗诊断。</p></div><div class="score-ring"><strong>{{ psych成绩 }}</strong><span>/ 100</span><small>平静偏积极</small></div></section>
+      <section class="psych-hero surface"><div><span class="badge">AI 对话式评估 · 一期</span><h2>今日心理状态</h2><p>服务性综合状态评分，不构成医疗诊断。</p></div><div class="score-ring"><strong>{{ psychScore }}</strong><span>/ 100</span><small>平静偏积极</small></div></section>
       <div class="two-column"><section class="surface panel"><SectionTitle title="情绪趋势" desc="近7日综合状态变化" /><div class="line-chart"><div class="chart-y"><span>100</span><span>75</span><span>50</span><span>25</span></div><div class="chart-area"><svg viewBox="0 0 600 220" preserveAspectRatio="none"><polyline points="0,88 100,104 200,126 300,150 400,136 500,118 600,70" fill="none" stroke="#5a50b8" stroke-width="8" stroke-linecap="round" /></svg></div></div></section><section class="surface panel"><SectionTitle title="服务边界" /><ul class="boundary"><li>不提供医疗级心理建议或诊断</li><li>不承诺退费、转学等重大决定</li><li>遇到严重问题，引导联系专业心理咨询师</li><li>识别到高风险会即时通知负责员工</li></ul><el-button type="primary" round @click="startPsychChat">开始一次情绪对话</el-button><p v-if="studentProfile.latest_emotion_tag" class="muted">最近标签：{{ studentProfile.latest_emotion_tag }}</p></section></div>
     </template>
 
@@ -459,7 +588,7 @@ function revealPhone() {
 <el-form-item label="日报内容"> <el-input v-model="reportForm.content" type="textarea" :rows="10" /> </el-form-item>
 <el-button type="primary" @click="submitReport">确认提交</el-button> </el-form> </section>
 <section class="surface panel"> <SectionTitle title="日报记录" />
-<div v-for="item in dailyReportRows" :key="item.id" class="task-row"> <b>✓</b> <div> <strong>{{ item.report_date }}</strong> <small>{{ item.status }}</small> </div> <el-button text @click="openReport(item)">查看</el-button> </div>
+<div v-for="item in dailyReportRows" :key="item.id" class="task-row"> <b>✓</b> <div> <strong>{{ item.report_date }}</strong> <small>{{ item.status }}</small> </div> <el-button text @click="openDailyReport(item)">查看</el-button> </div>
 <el-empty v-if="!dailyReportRows.length" description="暂无日报" />
 </section> </div>
 <el-drawer v-model="reportDialog" title="日报详情" size="min(620px, 94vw)"> <template #default>
@@ -541,15 +670,124 @@ function revealPhone() {
     </template>
 
     <template v-else-if="role === 'MANAGER' && section === 'reports'">
-      <p class="report-desc muted">五类报告严格按已定义数据口径展示，所有图表支持明细下钻。</p>
-      <div class="report-tabs"><button v-for="item in reportRows" :key="item.code" :class="{ active: reportTab === item.code }" @click="reportTab = item.code"><b>{{ item.code }}</b><span>{{ item.name }}</span></button></div>
-      <section class="surface report-board">
-        <div class="report-summary"><div><small>报告周期</small><strong>2026年10月</strong></div><div><small>数据范围</small><strong>{{ reportTab === 'PW' ? '学生心理数据 · 聚合口径' : '全平台 · 当前周期' }}</strong></div><el-button :icon="Download" @click="exportCsv('智能汇总-' + reportTab)">导出数据</el-button></div>
-        <div class="chart-grid">
-          <div class="chart-card"><h3>{{ reportRows.find((item: any) => item.code === reportTab || item.report_type === reportTab)?.name }}</h3><div class="bar-chart"><div v-for="(height, index) in [36,58,44,76,62,88,70]" :key="index"><i :style="{ height: height + '%' }"></i><span>周{{ index + 1 }}</span></div></div></div>
-          <div class="chart-card"><h3>关键结论</h3><ul><li>数据按周期展示，保留同比和环比信息。</li><li>个体明细仅对授权角色开放。</li><li>问题和建议可转为跟进事项，记录负责部门和状态。</li></ul></div>
+      <!-- M5-05.1~05.9：报告列表 → 详情 → 下钻 → 导出 真实接口闭环 -->
+      <template v-if="!selectedReport">
+        <div class="toolbar surface">
+          <el-select v-model="reportFilterType" clearable placeholder="全部报告类型" style="width:220px" @change="reportPage = 1; loadReports()">
+            <el-option v-for="t in REPORT_TYPES" :key="t.type" :label="t.name" :value="t.type" />
+          </el-select>
+          <el-button :icon="Refresh" @click="loadReports()">刷新</el-button>
         </div>
-      </section>
+        <el-alert v-if="reportError" :title="reportError" type="warning" show-icon :closable="false" />
+        <section class="surface table-card">
+          <el-skeleton v-if="reportLoading" :rows="5" animated style="padding:16px" />
+          <el-empty v-else-if="!reportError && reportList.length === 0" description="暂无报告——在下方选择类型手动生成" />
+          <template v-else>
+            <el-table :data="reportList" @row-click="openReport">
+              <el-table-column label="报告" min-width="220">
+                <template #default="{ row }">
+                  <b>{{ row.report_title || typeName(row.report_type) }}</b>
+                  <el-tag v-if="row.data_source_status === 'mock'" size="small" type="warning" style="margin-left:8px">演示数据</el-tag>
+                  <el-tag v-else size="small" type="success" style="margin-left:8px">正式数据</el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="周期" width="200">
+                <template #default="{ row }">{{ String(row.time_range_start || '').slice(0, 10) }} ~ {{ String(row.time_range_end || '').slice(0, 10) }}</template>
+              </el-table-column>
+              <el-table-column label="状态" width="110">
+                <template #default="{ row }">
+                  <el-tag :type="row.status === 'completed' ? 'success' : row.status === 'failed' ? 'danger' : 'warning'">{{ row.status }}</el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column prop="version" label="版本" width="80" />
+              <el-table-column label="生成时间" width="170">
+                <template #default="{ row }">{{ String(row.created_at || '').slice(0, 19).replace('T', ' ') }}</template>
+              </el-table-column>
+              <el-table-column label="操作" width="90">
+                <template #default="{ row }"><el-button text type="primary" @click.stop="openReport(row)">详情</el-button></template>
+              </el-table-column>
+            </el-table>
+            <el-pagination v-model:current-page="reportPage" :page-size="reportPageSize" :total="reportTotal" layout="prev, pager, next, total" @current-change="loadReports" style="margin:14px 0 4px; justify-content:flex-end" />
+          </template>
+        </section>
+        <section class="surface panel" style="margin-top:20px">
+          <SectionTitle title="手动生成报告" desc="一期为手动生成，无自动调度；重复生成同类型同周期保留历史版本。" />
+          <div class="report-gen-grid">
+            <button v-for="t in REPORT_TYPES" :key="t.type" class="report-gen-card" :disabled="reportGenerating !== ''" @click="generateReport(t.type)">
+              <b>{{ t.code }}</b><strong>{{ t.name }}</strong><small>{{ t.period }}</small>
+              <el-tag v-if="reportGenerating === t.type" size="small" type="info">生成中…</el-tag>
+            </button>
+          </div>
+        </section>
+      </template>
+
+      <template v-else>
+        <div class="toolbar surface" style="align-items:center">
+          <el-button @click="backToReportList">← 返回列表</el-button>
+          <b style="font-size:16px">{{ selectedReport.report_title || typeName(selectedReport.report_type) }}</b>
+          <el-tag v-if="selectedReport.data_source_status === 'mock'" type="warning">演示数据</el-tag>
+          <el-tag v-else type="success">正式数据</el-tag>
+          <el-tag :type="selectedReport.status === 'completed' ? 'success' : selectedReport.status === 'failed' ? 'danger' : 'warning'">{{ selectedReport.status }}</el-tag>
+          <el-tag type="info">V{{ selectedReport.version }}</el-tag>
+          <el-button style="margin-left:auto" :icon="Download" type="primary" @click="downloadReportPdf">导出 PDF</el-button>
+          <el-button :disabled="reportGenerating !== ''" @click="generateReport(selectedReport.report_type)">
+            {{ reportGenerating === selectedReport.report_type ? '重新生成中…' : '重新生成' }}
+          </el-button>
+        </div>
+        <el-skeleton v-if="detailLoading" :rows="6" animated style="padding:16px" class="surface" />
+        <template v-else>
+          <section class="surface panel">
+            <div class="report-meta">
+              <span>周期：{{ String(selectedReport.time_range_start || '').slice(0, 10) }} ~ {{ String(selectedReport.time_range_end || '').slice(0, 10) }}</span>
+              <span>AI 分析：{{ aiSourceText(selectedReport.report_content) }}</span>
+            </div>
+            <p v-if="selectedReport.report_content?.summary" class="report-summary-text">{{ selectedReport.report_content.summary }}</p>
+            <p v-if="selectedReport.report_content?.analysis" class="report-summary-text">{{ selectedReport.report_content.analysis }}</p>
+            <ul v-if="selectedReport.report_content?.suggestions?.length" class="report-suggestions">
+              <li v-for="(s, i) in selectedReport.report_content.suggestions" :key="i">{{ s.content }}<small v-if="s.department || s.owner">（{{ s.department || '待指定部门' }} · {{ s.owner || '待指定负责人' }}）</small></li>
+            </ul>
+          </section>
+
+          <section class="surface table-card" style="margin-top:20px">
+            <SectionTitle title="核心指标" />
+            <el-table :data="metricRows(selectedReport.report_content?.metrics)" size="small">
+              <el-table-column prop="key" label="指标" min-width="220" />
+              <el-table-column prop="value" label="数值" width="160" />
+            </el-table>
+            <p class="muted" style="padding:12px 4px 4px; line-height:1.8">{{ selectedReport.report_content?.data_notes }}</p>
+          </section>
+
+          <section class="surface panel" style="margin-top:20px">
+            <SectionTitle title="明细下钻" desc="下钻与所选报告同源：正式数据读真实业务表，演示数据读模拟数据；个体信息按角色权限过滤。" />
+            <div style="display:flex; gap:10px; margin-bottom:14px">
+              <el-button v-if="selectedReport.report_type === 'customer_analysis'" :loading="drillLoading === 'customers'" @click="loadDrill('customers')">客户明细</el-button>
+              <el-button v-if="selectedReport.report_type === 'psych_weekly'" :loading="drillLoading === 'psychCases'" @click="loadDrill('psychCases')">心理个案</el-button>
+              <el-button v-if="selectedReport.report_type === 'complaint_weekly'" :loading="drillLoading === 'specialCases'" @click="loadDrill('specialCases')">投诉特别案例</el-button>
+            </div>
+            <el-table v-if="drill.customers.length" :data="drill.customers" size="small">
+              <el-table-column prop="name" label="客户" width="120" />
+              <el-table-column prop="phone" label="手机号（脱敏）" width="140" />
+              <el-table-column prop="status" label="期末状态" width="110" />
+              <el-table-column prop="source_channel" label="来源" width="150" />
+              <el-table-column prop="sg_conclusion" label="新加坡画像" width="110" />
+              <el-table-column prop="de_conclusion" label="德国画像" width="110" />
+            </el-table>
+            <el-table v-if="drill.psychCases.length" :data="drill.psychCases" size="small">
+              <el-table-column prop="student_id" label="学生ID" width="100" />
+              <el-table-column prop="risk_level" label="风险等级" width="100" />
+              <el-table-column prop="emotion_tag" label="情绪标签" width="120" />
+              <el-table-column prop="responsible_employee_id" label="负责员工ID" width="120" />
+            </el-table>
+            <el-table v-if="drill.specialCases.length" :data="drill.specialCases" size="small">
+              <el-table-column prop="ticket_id" label="工单号" width="120" />
+              <el-table-column prop="owner_id" label="负责人ID" width="120" />
+              <el-table-column prop="progress" label="处理进度" />
+            </el-table>
+            <el-empty v-if="selectedReport.report_type === 'customer_analysis' && drill.customers.length === 0 && drillLoading !== 'customers'"
+                      description="点击「客户明细」加载下钻数据" :image-size="60" />
+          </section>
+        </template>
+      </template>
     </template>
 
     <template v-else-if="role === 'MANAGER' && section === 'customers'">
@@ -644,18 +882,6 @@ function revealPhone() {
       </div>
     </template>
 
-    <template v-else-if="role === 'MANAGER' && section === 'health'">
-      <SectionTitle title="学生信息健康周报" desc="展示整体心理态势、风险人数和周变化；个体信息仅对授权角色开放。" />
-      <div class="stat-grid"><StatCard label="整体状态" value="平稳" note="综合口径" tone="lime" /><StatCard label="风险人数" value="2" note="需要重点跟进" tone="coral" /><StatCard label="周变化" value="-8%" note="较上周风险人数下降" tone="purple" /><StatCard label="节点提醒" value="考试周" note="已标注在趋势图中" tone="amber" /></div>
-      <div class="two-column"><section class="surface panel"><SectionTitle title="整体情绪趋势" /><div class="bar-chart"><div v-for="(height,index) in [62,68,54,73,66,78,72]" :key="index"><i :style="{ height: height + '%' }"></i><span>周{{ index + 1 }}</span></div></div><p v-if="studentProgress.length" class="muted">已加载 {{ studentProgress.length }} 条申请进度记录。</p></section><section class="surface panel"><SectionTitle title="风险个案" /><div v-for="item in ['学生 A · 连续 3 日低于阈值','学生 B · 考试压力集中','学生 C · 睡眠与情绪波动']" :key="item" class="task-row"><b>!</b><div><strong>{{ item }}</strong><small>按职责权限查看详细反馈</small></div><el-button text type="primary">查看</el-button></div></section></div>
-    </template>
-
-    <template v-else-if="role === 'MANAGER' && section === 'complaints'">
-      <SectionTitle title="投诉处理周报" desc="仅统计正式投诉，不包含普通咨询和建议。" />
-      <div class="stat-grid"><StatCard label="本周投诉量" value="3" note="较上周 -25%" tone="coral" /><StatCard label="处理率" value="100%" note="已闭环" tone="lime" /><StatCard label="平均首次响应" value="4.2h" note="目标 24 小时内" tone="purple" /><StatCard label="超过 7 天未解决" value="0" note="长期未解决" tone="amber" /></div>
-      <section class="surface panel"><SectionTitle title="投诉趋势与处理情况" /><div class="chart-grid"><div class="chart-card"><h3>投诉量趋势</h3><div class="bar-chart"><div v-for="(height,index) in [28,46,36,62,48,38,32]" :key="index"><i :style="{ height: height + '%' }"></i><span>周{{ index + 1 }}</span></div></div></div><div class="chart-card"><h3>处理口径</h3><ul><li>处理时效按提交到首次响应计算。</li><li>超过 7 天未解决标记为长期未解决。</li><li>无满意度反馈标记为未评价。</li><li>特别案例须经负责人复核后展示。</li></ul></div></div></section>
-    </template>
-
     <template v-else>
       <section class="surface profile-card"><SectionTitle title="模块详情" /><p class="muted">该页面已按当前角色和模块建立完整结构。后续接入对应接口时，将替换数据来源和操作处理。</p><el-button type="primary" @click="router.push('/app/' + role.toLowerCase() + '/home')">返回工作台</el-button></section>
     </template>
@@ -707,6 +933,17 @@ function revealPhone() {
 .title-actions { display: flex; gap: 8px; }
 .approval-filters { margin-bottom: 18px; }
 .approval-top { display: flex; align-items: center; gap: 8px; }
+.report-gen-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; }
+.report-gen-card { display: flex; flex-direction: column; align-items: flex-start; gap: 7px; padding: 18px; border: 1px solid var(--line); border-radius: 13px; background: #fff; cursor: pointer; text-align: left; }
+.report-gen-card:disabled { opacity: .55; cursor: not-allowed; }
+.report-gen-card b { color: var(--violet); font-size: 18px; }
+.report-gen-card strong { color: var(--ink-deep); font-size: 14px; }
+.report-gen-card small { color: var(--muted); }
+.report-meta { display: flex; gap: 22px; color: var(--muted); font-size: 13px; margin-bottom: 12px; }
+.report-summary-text { margin: 8px 0; line-height: 1.9; }
+.report-suggestions { padding-left: 20px; line-height: 2; }
+.report-suggestions small { color: var(--muted); }
+@media (max-width: 1050px) { .report-gen-grid { grid-template-columns: repeat(2, 1fr); } }
 </style>
 
 

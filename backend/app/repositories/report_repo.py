@@ -1,5 +1,6 @@
 """M5 智能报告模块 — 报告仓储。"""
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.crm import AiReport
@@ -10,8 +11,19 @@ class ReportRepository:
         self.db = db
 
     async def create(self, report: AiReport) -> AiReport:
+        """落库报告；版本号唯一约束冲突时（M5-06.4）重取版本号重试一次。"""
         self.db.add(report)
-        await self.db.commit()
+        try:
+            await self.db.commit()
+        except IntegrityError:
+            # 并发下同 (type, start, end, version) 撞唯一约束 uq_ai_report_version
+            await self.db.rollback()
+            report.id = None
+            report.version = await self.next_version(
+                report.report_type, report.time_range_start, report.time_range_end
+            )
+            self.db.add(report)
+            await self.db.commit()
         await self.db.refresh(report)
         return report
 

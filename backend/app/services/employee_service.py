@@ -13,6 +13,7 @@ from app.repositories.employee_repo import (
     TodoRepository,
 )
 from app.services.approval_engine import ApprovalBizType, ApprovalStatus, approval_engine
+from app.utils.logger import logger  # 合并修复：model 回落分支引用了 logger，此前未导入会 NameError→50001
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 

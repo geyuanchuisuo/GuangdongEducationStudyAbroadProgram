@@ -5,6 +5,7 @@
 因此 PDF 天然脱敏。下载前由接口层校验 MANAGER/ADMIN 权限。
 """
 from io import BytesIO
+from xml.sax.saxutils import escape
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -41,8 +42,11 @@ def _src_label(v: str) -> str:
     return "正式" if v == "production" else "模拟"
 
 
-def _ai_label(v: str) -> str:
-    return "可用" if v == "available" else "不可用"
+def _ai_label(v: str, source: str = "") -> str:
+    """AI 文字来源标注（M5-10.6 差异字段 ai_source）。"""
+    if v != "available":
+        return "不可用"
+    return {"model": "可用（共用模型网关）", "mock": "可用（模拟数据）"}.get(source, "可用")
 
 
 def _make_table(data: list[list], col_widths: list[float]) -> Table:
@@ -89,7 +93,28 @@ def _metric_tables(report_type: str, m: dict) -> list[tuple[str, Table]]:
             ("项目画像", _make_table(profile_rows, [80, 60, 60, 60])),
         ]
 
-    if report_type in ("daily_report_summary", "weekly_report_summary"):
+    if report_type == "daily_report_summary":
+        # M5-07.1 日报拆分：仅期间合计与每日明细，无全周人次、无部门汇总
+        days = m["days"]
+        total = {
+            "should_submit": sum(d["should_submit"] for d in days),
+            "submitted": sum(d["submitted"] for d in days),
+            "missing": sum(d["missing"] for d in days),
+        }
+        period_rows = [
+            ["期间合计人次", "应提交", "已提交", "未提交"],
+            ["数量", total["should_submit"], total["submitted"], total["missing"]],
+        ]
+        day_rows = [["日期", "应提交", "已提交", "未提交"]]
+        for d in days:
+            day_rows.append([d["date"], d["should_submit"], d["submitted"], d["missing"]])
+        w4 = [90, 70, 70, 70]
+        return [
+            ("期间合计", _make_table(period_rows, w4)),
+            ("每日提交明细", _make_table(day_rows, w4)),
+        ]
+
+    if report_type == "weekly_report_summary":
         total = m["week_total"]
         week_rows = [
             ["全周人次", "应提交", "已提交", "未提交"],
@@ -156,41 +181,43 @@ def generate_report_pdf(content: dict) -> bytes:
     story = []
 
     h = content.get("header", {})
-    story.append(Paragraph(h.get("report_name", "智能报告"), st["title"]))
+    # M5-08.5：所有进入 Paragraph 的文本（含 AI 生成的文字）必须 XML 转义，
+    # 否则含 &/< 的文案会导致 reportlab 解析异常
+    story.append(Paragraph(escape(h.get("report_name", "智能报告")), st["title"]))
     period = f"{h.get('period_start', '')[:10]} ~ {h.get('period_end', '')[:10]}"
     meta = (
-        f"周期：{period}　|　版本：V{h.get('version', 1)}　|　"
-        f"生成时间：{h.get('generated_at', '')[:19]}　|　"
+        f"周期：{escape(period)}　|　版本：V{int(h.get('version', 1))}　|　"
+        f"生成时间：{escape(h.get('generated_at', '')[:19])}　|　"
         f"数据来源：{_src_label(h.get('data_source_status', 'mock'))}　|　"
-        f"AI：{_ai_label(content.get('ai_status', 'unavailable'))}"
+        f"AI：{_ai_label(content.get('ai_status', 'unavailable'), content.get('ai_source', ''))}"
     )
     story.append(Paragraph(meta, st["meta"]))
     story.append(Spacer(1, 8))
 
     if content.get("summary"):
         story.append(Paragraph("本期摘要", st["h2"]))
-        story.append(Paragraph(content["summary"], st["body"]))
+        story.append(Paragraph(escape(str(content["summary"])), st["body"]))
 
     story.append(Paragraph("核心指标", st["h2"]))
     for title, table in _metric_tables(h.get("report_type", ""), content.get("metrics", {})):
-        story.append(Paragraph(title, st["h2"]))
+        story.append(Paragraph(escape(title), st["h2"]))
         story.append(table)
 
     if content.get("trend"):
         story.append(Paragraph("趋势与对比", st["h2"]))
-        story.append(Paragraph(content["trend"], st["body"]))
+        story.append(Paragraph(escape(str(content["trend"])), st["body"]))
 
     if content.get("analysis"):
         story.append(Paragraph("业务分析", st["h2"]))
-        story.append(Paragraph(content["analysis"], st["body"]))
+        story.append(Paragraph(escape(str(content["analysis"])), st["body"]))
 
     if content.get("suggestions"):
         story.append(Paragraph("建议事项", st["h2"]))
         for s in content["suggestions"]:
-            story.append(Paragraph(f"• {s.get('content', '')}", st["body"]))
+            story.append(Paragraph(f"• {escape(str(s.get('content', '')))}", st["body"]))
 
     story.append(Paragraph("数据与口径说明", st["h2"]))
-    story.append(Paragraph(content.get("data_notes", ""), st["body"]))
+    story.append(Paragraph(escape(content.get("data_notes", "")), st["body"]))
 
     story.append(Spacer(1, 10))
     story.append(Paragraph("本报告为脱敏汇总，不含个人敏感信息。", st["meta"]))

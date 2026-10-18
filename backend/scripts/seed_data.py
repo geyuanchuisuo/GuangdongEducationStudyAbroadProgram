@@ -1,7 +1,17 @@
 """
 种子数据脚本 — 生成演示数据
-每类表 >= 100 条（部分关联表按实际业务量生成）
-用法: python -m scripts.seed_data
+每类表 >= 50 条（部分关联表按实际业务量生成）
+
+特性：
+- 幂等可重跑：drop_all + create_all，每次执行重建全库
+- 可复现：random.seed(42) 固定随机序列，同一份代码生成完全相同的数据
+- 固定测试账号：4 个核心角色（PROSPECT/STUDENT/EMPLOYEE/MANAGER）使用固定手机号作 username，
+  密码统一 Test@123456，其他分支合并后可直接用这些账号登录测试
+- 全部用户密码统一为 Test@123456
+
+用法:
+  容器内: docker exec edu-backend python -m scripts.seed_data
+  本地:   cd backend && .venv/Scripts/python -m scripts.seed_data
 """
 import asyncio
 import random
@@ -28,6 +38,21 @@ from app.models.student import (
 from app.models.system import ApprovalInstance, ApprovalTask, SysEvent, SysNotification, SysOperationLog
 from app.models.user import User
 from app.core.security import hash_password
+
+# 固定随机种子，保证同一份代码生成完全相同的数据（可复现、可对比）
+random.seed(42)
+
+# 统一测试密码（所有账号均使用此密码，便于跨分支/跨环境登录）
+TEST_PASSWORD = "Test@123456"
+
+# 4 个核心角色固定账号（手机号即 username），与 docs/测试账号.md 及 scripts/create_frontend_test_accounts.py 对齐
+CORE_ACCOUNTS = [
+    # (username, user_type, real_name, employee_role, department)
+    ("13810000001", "PROSPECT", "意向客户_张敏", None, None),
+    ("13810000002", "STUDENT", "留学生_李娜", None, None),
+    ("13810000003", "EMPLOYEE", "员工_王强", "普通员工", "咨询部"),
+    ("13810000004", "MANAGER", "管理层_赵总", "管理层", "总裁办"),
+]
 
 NAMES = [
     "张伟", "王芳", "李娜", "刘洋", "陈杰", "杨秀英", "黄勇", "赵敏", "周杰", "吴丽",
@@ -57,18 +82,36 @@ async def seed():
         await conn.run_sync(Base.metadata.create_all)
 
     async with async_session_factory() as session:
-        # ── Users ──
+        # ── Users（120 个，前 4 个为固定核心账号，密码统一 Test@123456） ──
         users = []
-        user_types = ["ADMIN", "MANAGER", "EMPLOYEE", "EMPLOYEE", "EMPLOYEE", "STUDENT", "STUDENT", "PROSPECT"]
-        for i in range(120):
-            ut = user_types[i % len(user_types)]
+        # 1. 核心角色账号（固定 username=手机号，密码统一）
+        for username, ut, name, role, dept in CORE_ACCOUNTS:
+            u = User(
+                username=username,
+                password_hash=hash_password(TEST_PASSWORD),
+                real_name=name,
+                user_type=ut,
+                phone=username,
+                employee_role=role,
+                department=dept,
+                status="正常",
+            )
+            session.add(u)
+            users.append(u)
+
+        # 2. 其余用户：username 固定 user000~user115，密码统一 Test@123456
+        other_user_types = ["ADMIN", "MANAGER", "EMPLOYEE", "EMPLOYEE", "EMPLOYEE",
+                            "STUDENT", "STUDENT", "PROSPECT"]
+        for i in range(116):
+            ut = other_user_types[i % len(other_user_types)]
             name = NAMES[i % len(NAMES)]
             u = User(
                 username=f"user{i:03d}",
-                password_hash=hash_password("123456"),
+                password_hash=hash_password(TEST_PASSWORD),
                 real_name=name,
                 user_type=ut,
-                phone=f"138{random.randint(10000000, 99999999)}" if i < 60 else None,
+                # 手机号固定段，避免冲突且可预测
+                phone=f"139{i:08d}"[:11],
                 employee_role="普通员工" if ut == "EMPLOYEE" else ("管理层" if ut == "MANAGER" else ("管理员" if ut == "ADMIN" else None)),
                 department=random.choice(DEPARTMENTS) if ut in ("EMPLOYEE", "MANAGER", "ADMIN") else None,
                 status="正常",
@@ -317,7 +360,7 @@ async def seed():
                 status=random.choice(["in_progress", "completed", "waiting"]),
             ))
 
-        # ── M5: Reports ──
+        # ── M5: Reports（20 条，version 递增确保 uq_ai_report_version 唯一约束不冲突） ──
         for i in range(20):
             session.add(AiReport(
                 report_type=random.choice(["daily", "weekly", "monthly", "psych", "business"]),
@@ -326,6 +369,7 @@ async def seed():
                 generated_by=random.choice(manager_ids),
                 time_range_start=datetime.now() - timedelta(days=random.randint(1, 30)),
                 time_range_end=datetime.now(),
+                version=i + 1,
             ))
 
         # ── M0: System ──
@@ -389,7 +433,17 @@ async def seed():
 
         await session.commit()
 
-    print("种子数据生成完成！")
+    print("=" * 60)
+    print("种子数据生成完成！（random.seed(42)，可复现）")
+    print("=" * 60)
+    print(f"  统一测试密码: {TEST_PASSWORD}")
+    print(f"  核心账号（username=手机号）:")
+    print(f"    PROSPECT  13810000001  意向客户")
+    print(f"    STUDENT   13810000002  留学生")
+    print(f"    EMPLOYEE  13810000003  员工")
+    print(f"    MANAGER   13810000004  管理层")
+    print(f"  其他账号: user000~user115（密码同上）")
+    print("-" * 60)
     print(f"  用户: 120 (ADMIN/MANAGER/EMPLOYEE/STUDENT/PROSPECT)")
     print(f"  客户主表: 120, 待补全线索: 15")
     print(f"  CRM线索: 110, 研判: 150, 跟进: 120")
@@ -400,6 +454,7 @@ async def seed():
     print(f"  学业: 100, 申请进度: 100")
     print(f"  报告: 20")
     print(f"  系统事件: 100, 审批实例: 100, 审批任务: 100, 通知: 100, 操作日志: 100")
+    print("=" * 60)
 
 
 if __name__ == "__main__":
