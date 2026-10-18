@@ -842,3 +842,6 @@ chore: 构建
 > 合并验证（2026-10-18）：云端最新 master 已并入本地 master；四个本地后端 WIP 按用户要求放弃，后端以云端为准；verify_all 29/29 + pytest 143/143 + npm build 通过。
 
 > 文档索引补充：`docs/前端无法解决问题清单.md`（前端无法根治问题、后端解决方案、验收标准）。
+
+
+**最后更新**：2026-10-18（v6.10.3 第九次同步 origin/master→longtrying_test：M2 解耦（cs_agent_service）+ M5 一期改造 + Dify Chatflow；合并前 ai_service 保留验证通过，compileall + verify_all 29/29 + pytest 146/146；LOG-059）
