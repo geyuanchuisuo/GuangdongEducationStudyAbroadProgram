@@ -6,6 +6,8 @@ from sqlalchemy import select
 from app.core.exceptions import BusinessError
 from app.database import async_session_factory
 from app.models.system import ApprovalInstance, ApprovalTask
+from app.services.event_bus import event_bus
+from app.services.event_contracts import EventType
 
 
 class ApprovalBizType(str, Enum):
@@ -108,6 +110,21 @@ class ApprovalEngine:
 
             await session.commit()
             await session.refresh(instance)
+
+            # 审批通过后发布事件，各业务模块按 biz_type 执行后置处理（如客户转留学生）
+            if status == ApprovalStatus.APPROVED:
+                await event_bus.publish(
+                    EventType.APPROVAL_APPROVED,
+                    source_module="M0",
+                    payload={
+                        "instance_id": instance.id,
+                        "biz_type": instance.biz_type,
+                        "biz_id": instance.biz_id,
+                        "approver_id": approver_id,
+                        "comment": comment,
+                    },
+                )
+
             return instance
 
     async def get_by_id(self, instance_id: int) -> ApprovalInstance | None:

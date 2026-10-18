@@ -18,12 +18,16 @@ import httpx
 from app.config import settings
 from app.core.exceptions import BusinessError
 from app.models.customer import PendingLead
+from app.models.user import User
 from app.repositories.customer_repo import CustomerRepository
 from app.repositories.customer_service_repo import CustomerServiceRepository
+from app.repositories.event_repo import EventRepository
+from app.repositories.user_repo import UserRepository
 from app.schemas.ai import ChatRequest, ChatResponse
 from app.schemas.crm import CrmLeadCreate
 from app.services.crm_service import CrmService
 from app.services.dify_client import DifyClient
+from app.services.event_service import EventService
 
 logger = logging.getLogger(__name__)
 
@@ -40,8 +44,18 @@ WECHAT_RE = re.compile(r"(?:微信号|微信|vx|weixin|wechat)\s*[:：]?\s*([a-z
 INTENT_RE = re.compile(r"\[intent:([^\]]+)\]")
 RECOMMEND_MARKER = "[RECOMMEND]"
 SLOTS_MARKER = "[SLOTS]"
+# P7/P8 对话内报名契约：[REGISTER]{"event_id": 2, "contact_name": "张三", "contact_phone": "13800138000"}
+REGISTER_MARKER = "[REGISTER]"
 # reasoning 模型思考块（<think>...</think>，含 <!--dify-deepseek-reasoning--> 注释），解析标记前先剥离
 THINK_RE = re.compile(r"<think>.*?</think>\s*|<!--[^>]*reasoning[^>]*-->", re.DOTALL | re.IGNORECASE)
+
+# P12 敏感信息后置过滤：银行账号（16-19 位连续数字）、身份证号（18 位含末位 X）
+BANK_CARD_RE = re.compile(r"(?<!\d)(\d{16,19})(?!\d)")
+ID_CARD_RE = re.compile(r"(?<!\d)(\d{17}[\dXx])(?!\d)")
+SENSITIVE_REPLACEMENT = "具体缴费/身份信息请联系顾问获取"
+
+# P5 FAQ 前置匹配：用户消息命中关键词即秒回 FAQ 原文（不进 Dify，保证与原文一致）
+FAQ_KEYWORD_MIN_MATCH = 2  # 至少命中 N 个关键词才算命中
 
 # 本地信息提取兜底：当 Dify 未输出 [SLOTS] 时，从用户消息提取常见画像字段
 # 每条规则按优先级排列，命中即停；值需通过 _normalize_slot_value 清洗
@@ -104,11 +118,15 @@ class AiService:
         dify: DifyClient | None = None,
         crm_service: CrmService | None = None,
         customer_repo: CustomerRepository | None = None,
+        event_service: EventService | None = None,
+        user_repo: UserRepository | None = None,
     ):
         self.repo = repo
         self.dify = dify or DifyClient()
         self.crm_service = crm_service
         self.customer_repo = customer_repo
+        self.event_service = event_service
+        self.user_repo = user_repo
 
     async def chat(self, request: ChatRequest) -> ChatResponse:
         if not settings.DIFY_CUSTOMER_AGENT_KEY:
@@ -116,11 +134,29 @@ class AiService:
 
         session = await self._get_or_create_session(request)
 
+        # P5 FAQ 前置匹配：命中即秒回 FAQ 原文（不经 Dify，保证与甲方原文一致且响应更快）
+        faq_hit = await self._match_faq(request.message)
+        if faq_hit:
+            await self.repo.add_message(session.id, role="user", content=request.message)
+            faq_card = {
+                "faq": {
+                    "faq_id": faq_hit.id,
+                    "category": faq_hit.category,
+                    "question": faq_hit.question,
+                    "answer": faq_hit.answer,
+                }
+            }
+            await self.repo.add_message(
+                session.id, role="assistant", content=faq_hit.answer, intent="faq", card_data=faq_card
+            )
+            return ChatResponse(
+                answer=faq_hit.answer, conversation_id=str(session.id), intent="faq", card_data=faq_card
+            )
+
         # 阶段2：多轮上限——超过上限归档旧会话并开启新会话
         user_turns = await self.repo.count_messages(session.id, role="user")
         if user_turns >= self.MAX_TURNS:
-            session.status = "archived"
-            await self.repo.update_session(session)
+            await self._archive_with_summary(session)
             session = await self.repo.create_session(request.user_id)
 
         await self.repo.add_message(session.id, role="user", content=request.message)
@@ -154,6 +190,11 @@ class AiService:
         answer, slots = self._extract_slots(answer)
         # AI 信息提取兜底：Dify 未输出 [SLOTS] 时，从用户消息本地提取补充
         slots = self._local_extract_merge(slots, request.message)
+
+        # P7/P8 对话内报名：[REGISTER]{"event_id", "contact_name", "contact_phone"} → 调报名逻辑
+        answer, register_card = await self._extract_and_register(answer, session, request.message)
+        if register_card:
+            card_data = register_card
 
         # 阶段3：高意向转线索——从用户消息/槽位提取手机号建档（携带画像字段，回填 session.customer_id）
         converted = False
@@ -219,6 +260,9 @@ class AiService:
                 converted=converted or pending_created,
             )
 
+        # P12 敏感信息后置过滤：银行账号/身份证号替换为统一话术（兜底 P0 红线，防知识库原文外泄）
+        answer = self._filter_sensitive(answer)
+
         await self.repo.add_message(
             session.id, role="assistant", content=answer, intent=intent, slots=slots or None, card_data=card_data
         )
@@ -227,6 +271,7 @@ class AiService:
             conversation_id=str(session.id),
             intent=intent,
             recommendations=recommendations,
+            card_data=card_data,
         )
 
     async def _get_or_create_session(self, request: ChatRequest):
@@ -395,3 +440,139 @@ class AiService:
             if value not in (None, ""):
                 kwargs[field] = value.strip() if isinstance(value, str) else value
         return kwargs
+
+    # ── P5 FAQ 前置匹配 ──────────────────────────────────────────
+    async def _match_faq(self, message: str):
+        """用户消息与 FAQ 做关键词 + 字符级相似度匹配，命中即返回 FAQ 原文。"""
+        if not message or len(message.strip()) < 2:
+            return None
+        faqs, _ = await self.repo.list_faqs(page=1, page_size=200)
+        msg = self._strip_punct(message.strip())
+        msg_chars = set(msg)
+        if not msg_chars:
+            return None
+        best, best_score = None, 0
+        for faq in faqs:
+            keywords = [k.strip() for k in (faq.keywords or "").split(",") if k.strip()]
+            score = sum(1 for k in keywords if k and k in message)
+            # question 去标点后与用户消息做字符级 Jaccard 相似度
+            q_chars = set(self._strip_punct(faq.question or ""))
+            if q_chars:
+                jaccard = len(msg_chars & q_chars) / len(msg_chars | q_chars)
+                if jaccard >= 0.5:
+                    score += 2 + int(jaccard * 3)
+            if score > best_score:
+                best_score, best = score, faq
+        if best and best_score >= FAQ_KEYWORD_MIN_MATCH:
+            return best
+        return None
+
+    @staticmethod
+    def _strip_punct(text: str) -> str:
+        return re.sub(r"[？?。！!，,；;：:、\s「」『』\"'()（）]", "", text)
+
+    # ── P7/P8 对话内报名 ────────────────────────────────────────
+    @staticmethod
+    def _extract_register(answer: str) -> tuple[str, dict | None]:
+        idx = answer.find(REGISTER_MARKER)
+        if idx == -1:
+            return answer, None
+        before = answer[:idx]
+        json_part = answer[idx + len(REGISTER_MARKER) :].strip()
+        try:
+            parsed = json.loads(json_part)
+            if isinstance(parsed, dict):
+                return before.strip(), parsed
+        except (json.JSONDecodeError, TypeError):
+            pass
+        return before.strip(), None
+
+    async def _extract_and_register(self, answer: str, session, user_message: str) -> tuple[str, dict | None]:
+        answer, register_data = self._extract_register(answer)
+        if not register_data:
+            return answer, None
+        event_id = self._to_int(register_data.get("event_id"))
+        contact_name = self._normalize_str(register_data.get("contact_name"))
+        contact_phone = self._normalize_phone(register_data.get("contact_phone")) or self._extract_phone(user_message)
+        if not event_id or not contact_phone:
+            return answer, {"register": {"status": "incomplete", "message": "请补充活动编号和联系电话"}}
+
+        # event_registration.user_id NOT NULL：匿名访客无法直接报名，引导先登录
+        if not session.user_id:
+            return answer, {"register": {"status": "need_login", "message": "报名需先登录，请先注册/登录后再试"}}
+
+        if not self.event_service or not self.user_repo:
+            return answer, {"register": {"status": "error", "message": "报名服务暂不可用"}}
+
+        user = await self.user_repo.get_by_id(session.user_id)
+        if not user:
+            return answer, {"register": {"status": "error", "message": "用户信息异常，请重新登录"}}
+
+        try:
+            result = await self.event_service.register(event_id, user)
+            return answer, {
+                "register": {
+                    "status": "success",
+                    "event_id": event_id,
+                    "contact_name": contact_name or user.real_name,
+                    "contact_phone": contact_phone,
+                    "registration_id": result.get("id"),
+                    "message": f"报名成功！已为「{contact_name or user.real_name}」登记，联系电话 {contact_phone}",
+                }
+            }
+        except BusinessError as e:
+            return answer, {"register": {"status": "failed", "message": e.message or "报名失败"}}
+        except Exception:
+            logger.exception("客服对话内报名失败")
+            return answer, {"register": {"status": "error", "message": "报名失败，请稍后重试"}}
+
+    # ── P12 敏感信息后置过滤 ────────────────────────────────────
+    @staticmethod
+    def _filter_sensitive(text: str) -> str:
+        if not text:
+            return text
+        text = BANK_CARD_RE.sub(SENSITIVE_REPLACEMENT, text)
+        text = ID_CARD_RE.sub(SENSITIVE_REPLACEMENT, text)
+        return text
+
+    # ── P11 会话摘要与标签 ──────────────────────────────────────
+    async def _archive_with_summary(self, session) -> None:
+        """归档会话：生成摘要 + 标签后落库 intent_summary / tags_json，再标 archived。"""
+        try:
+            messages = await self.repo.list_messages(session.id)
+            if messages:
+                transcript = "\n".join(f"{m.role}: {m.content[:200]}" for m in messages[-20:])
+                summary_prompt = (
+                    "请用不超过80字概括以下客服对话的用户核心诉求与最终结论，"
+                    "并输出3个以内的标签。格式：{\"summary\":\"...\",\"tags\":[\"...\"]}\n\n"
+                    f"对话：\n{transcript}"
+                )
+                dify_resp = await self.dify.chat(
+                    query=summary_prompt,
+                    user=f"summary-{session.id}",
+                    conversation_id=None,
+                )
+                raw = THINK_RE.sub("", dify_resp.get("answer") or "").strip()
+                summary, tags = self._parse_summary(raw)
+                session.intent_summary = summary
+                session.tags_json = tags
+        except Exception:
+            logger.exception("客服会话摘要生成失败")
+        session.status = "archived"
+        await self.repo.update_session(session)
+
+    @staticmethod
+    def _parse_summary(raw: str) -> tuple[str | None, list | None]:
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, dict):
+                summary = str(parsed.get("summary") or "").strip()[:500] or None
+                tags = parsed.get("tags")
+                if isinstance(tags, list):
+                    tags = [str(t) for t in tags[:10]]
+                return summary, tags
+        except (json.JSONDecodeError, TypeError):
+            pass
+        # 兜底：非 JSON 时取首行作为摘要
+        first_line = raw.splitlines()[0].strip()[:500] if raw else None
+        return first_line, None
