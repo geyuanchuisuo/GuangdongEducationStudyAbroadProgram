@@ -760,9 +760,9 @@ chore: 构建
 
 ---
 
-**最后更新**：2026-10-18（**v6.11.0~v6.11.2**：M5 一期需求对齐改造（画像四类/期末状态不可得/部分生成/下钻快照/投诉 AI 表/报告专用 Agent/前端闭环）+ Dify「智能报告」改 Chatflow 接入（发布后 `blocking` 200、JSON 契约 PASS、DSL 已导出）；回归 pytest **146/146**、verify_all **29/29**、compileall、`npm run build`、Docker E2E **80/80**、production 16/16、迁移 004 上下往返通过；剩余唯一阻塞交 M0（4 行补丁）；已提交推送 `master_ZNBG`，未合并 master）
+**最后更新**：2026-10-18（v6.11.3 M3 成绩三件套：新增 PUT /employee/scores/{id} 修改接口（不存在→40401）+ student_score 唯一约束 uq_student_score_unique（重复→40901，semester 归一空串）+ 成绩口径统一 0-100 + 迁移 005 清理存量 4 条重复 + E2E 幂等适配；HTTP 冒烟 7/7 + pytest 154/154 + E2E 两轮；同轮完成前端联通诊断（LOG-062）：双 MySQL 环境下 .env 3306→59000 已修、Dify 响应 13~30s 属环境性能）
 
-**最后更新**：2026-10-18（**v6.10.3 第七次同步 origin/master 732d43f（ZNBG，fast-forward 零冲突）**：①先按硬性规则 5 上报公共模块 8 类——M0 AI 网关 `ai_service.py` +243（M2 客服槽位采集/本地提取/微信号清洗/推荐落库）、M0 认证 `user_service.py` +113（PROSPECT 注册审批门 `status=待审批` + 登录 40006）、`auth.py`/`schemas/user.py`、迁移 `001/002` 共**8 处 FK BigInteger→Integer**、`seed_data.py` 重写（`drop_all+create_all` + `random.seed(42)` + 固定核心账号 + 密码统一 `Test@123456`）、`verify_all.py` 增 M2 公开客服断言、`models/customer_service.py`+`__init__`/`dify_client.py`/`api/v1/ai.py`+`schemas/ai.py`、`platform.ts`/`AgentDock.vue`——经用户同意后合并 ②按用户授权更新 `tests/e2e_m3m4_test.py` 账号为 `13810000004/13810000003/13810000002` + `Test@123456` ③**空库迁移链验收通过**（临时库 `alembic upgrade head` 001→002→003：32 表/44 外键/8 处 FK 列均 `int`；`downgrade base` 亦通；验后删库）④回归 compileall + verify_all **29/29**（103 路径 = 102 API + 1 health）+ pytest **143/143** + `npm run build` + Docker E2E **80/80** + **M5 mock 5/5** + **M5 production 10/10**（中文『跟进中』经 M1 接口写入后归一入统 122 条全入 0 跳过、客户下钻 122 条真实数据、PDF、未来周期仍 40002、complaint_weekly 设计拒绝）⑤**销账**：清单第 2 项（002 迁移 FK）与 v6.9.3 记录的 seed 撞键 P2 均由上游修复并经本轮验证；**M5 切 production 仅余 M3 迟报口径 + M4 投诉 9 字段**；详见更新记录 v6.10.3 与 LOG-054）  
+**最后更新**：2026-10-18（v6.11.3 M3 成绩三件套：新增 PUT /employee/scores/{id} 修改接口（不存在→40401）+ student_score 唯一约束 uq_student_score_unique（重复→40901，semester 归一空串）+ 成绩口径统一 0-100 + 迁移 005 清理存量 4 条重复 + E2E 幂等适配；HTTP 冒烟 7/7 + pytest 154/154 + E2E 两轮；同轮完成前端联通诊断（LOG-062）：双 MySQL 环境下 .env 3306→59000 已修、Dify 响应 13~30s 属环境性能）
 
 **上一版记录（v6.10.2）**：2026-10-18（**v6.10.2 第八次同步 origin/master→longtrying_test**：并入 M1/M2 全量（v6.9.8~v6.10.1：PROSPECT 审批门 + 客服Agent阶段B + 五项补齐）与 v6.9.7 迁移链修复，39 文件 +1793/-140；公共模块 7 项变更（ai_service 纯新增/user auth 审批门/dify_client URL/迁移链 FK/main.cs 路由+CsRecommendLog 31→32 表/verify_all 32表断言/schemas+wechat）按规则先上报后合并获用户同意；**重点验证 ai_service.py 的 AgentType/AIService/ai_service 全保留**（v6.8.8 教训落地为标准检查动作）；回归 compileall + verify_all **29/29** + pytest **143/143** + 容器重启导入冒烟 **32 表** + /docs 200 + 新路由 /api/v1/cs/faq 200；运行日志编号双线并行（anhoa LOG-044~053 / longtrying_test LOG-044~046）后缀标注区分，勿重编号他人条目；详见更新记录 v6.10.2 与 LOG-046（longtrying_test））  
 
@@ -866,4 +866,4 @@ chore: 构建
 > 文档索引补充：`docs/前端无法解决问题清单.md`（前端无法根治问题、后端解决方案、验收标准）。
 
 
-**最后更新**：2026-10-18（v6.10.4 DIFY_BASE_URL 环境特异配置修复：compose 改回 host.docker.internal，容器内 socket 连通 + /health 200，LOG-059 教训销账；v6.10.3 第九次同步 origin/master→longtrying_test：M2 解耦 + M5 一期改造 + Dify Chatflow，verify_all 29/29 + pytest 146/146）
+**最后更新**：2026-10-18（v6.11.3 M3 成绩三件套：新增 PUT /employee/scores/{id} 修改接口（不存在→40401）+ student_score 唯一约束 uq_student_score_unique（重复→40901，semester 归一空串）+ 成绩口径统一 0-100 + 迁移 005 清理存量 4 条重复 + E2E 幂等适配；HTTP 冒烟 7/7 + pytest 154/154 + E2E 两轮；同轮完成前端联通诊断（LOG-062）：双 MySQL 环境下 .env 3306→59000 已修、Dify 响应 13~30s 属环境性能）

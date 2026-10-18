@@ -316,10 +316,21 @@ check("M3 新增跟进记录", ok, str(bj)[:160])
 ok, bj = call(client, "GET", "/employee/crm/follow-ups", emp_tok)
 check("M3 跟进记录列表", ok, str(bj)[:160])
 
-# 成绩录入
+# 成绩录入（v6.11.3 唯一约束后，幂等重跑需先清掉本用例的历史成绩，避免 40901）
+import asyncio as _aio, aiomysql as _aiomysql
+async def _clean_score():
+    conn = await _aiomysql.connect(host="mysql", port=3306, user="root", password="420821", db="GuangdongEducationStudyAbroadProgram")
+    cur = await conn.cursor()
+    await cur.execute("DELETE FROM student_score WHERE course_name=%s AND student_id=%s", ("E2E德语基础", sid))
+    await conn.commit(); conn.close()
+_aio.run(_clean_score())
 ok, bj = call(client, "POST", "/employee/scores", emp_tok, body={
     "student_id": sid, "course_name": "E2E德语基础", "score": 88.5, "semester": "2026秋季"})
 check("M3 成绩录入", ok, str(bj)[:160])
+# v6.11.3 唯一约束：同学生+课程+学期重复录入 → 40901
+ok, bj = call(client, "POST", "/employee/scores", emp_tok, body={
+    "student_id": sid, "course_name": "E2E德语基础", "score": 90, "semester": "2026秋季"})
+check("M3 成绩重复录入→40901", bj.get("code") == 40901, str(bj)[:160])
 
 # 学生行政服务审批（审批 Section 2 学生的请假单）
 ok, bj = call(client, "GET", "/employee/admin-services", emp_tok, params={"status": "待审批", "page": 1, "page_size": 100})

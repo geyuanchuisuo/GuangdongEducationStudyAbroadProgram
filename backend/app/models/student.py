@@ -1,4 +1,5 @@
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, JSON, Numeric, String, Text, func
+from sqlalchemy import UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
@@ -62,6 +63,10 @@ class StudentFeedbackTicket(Base):
 
 class StudentScore(Base):
     __tablename__ = "student_score"
+    # 成绩唯一约束：同一学生 + 课程 + 学期仅一条（semester 一律存空串而非 NULL，确保 MySQL 唯一索引生效）
+    __table_args__ = (
+        UniqueConstraint("student_id", "course_name", "semester", name="uq_student_score_unique"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     student_id: Mapped[int] = mapped_column(Integer, ForeignKey("sys_user.id"), nullable=False, index=True)
