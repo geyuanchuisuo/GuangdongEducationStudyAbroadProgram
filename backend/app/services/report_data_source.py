@@ -23,6 +23,7 @@ from app.models.employee import EmployeeDailyReport
 from app.models.student import StudentFeedbackTicket, StudentPsychAlert, StudentPsychProfile
 from app.models.user import User
 from app.schemas.report import (
+    ComplaintReportInput,
     CustomerReportInput,
     EmployeeDailyReportInput,
     EmployeeInput,

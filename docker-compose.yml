@@ -1,6 +1,7 @@
 # 一体化部署：项目核心服务 + Dify（AI 平台）
-# Dify 配置见 dify/docker/.env，模型 API Key / 管理员凭据在该文件配置
-# 启动后 dify-init 自动完成：创建管理员 → 添加模型供应商 → 导入应用 → 绑定模型 → 输出 app key
+# 先复制根目录 .env.example 为 .env，再复制 dify/docker/.env.example 为 dify/docker/.env。
+# 根 .env 启用 Dify 默认 PostgreSQL/Weaviate profile；Dify 凭据在子目录 .env 配置。
+# 启动后 dify-init 自动完成：创建管理员 → 添加模型供应商 → 导入应用 → 绑定模型 → 写入 app key 共享卷
 include:
   - path: dify/docker/docker-compose.yaml
 
@@ -49,7 +50,8 @@ services:
       STORAGE_BACKEND: local
       STORAGE_LOCAL_DIR: /app/storage_data
       # Dify 已纳入一体化部署，通过 service 名 dify_nginx 访问（Dify 控制台端口 8081）
-      DIFY_BASE_URL: http://dify_nginx
+      # 支持项目根 .env 覆盖；默认值用于同 compose 网络内的一体化部署。
+      DIFY_BASE_URL: ${DIFY_BASE_URL:-http://dify_nginx}
     ports:
       - "8000:8000"
     depends_on:
@@ -66,9 +68,13 @@ services:
       - backend_venv:/app/.venv
       # 本地上传文件持久化（容器重建不丢）
       - backend_storage:/app/storage_data
-    command: /app/.venv/bin/uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+      # 与 dify-init 共享 Agent keys；backend 只读加载
+      - dify_app_keys:/run/dify-keys:ro
+    command: >-
+      sh -c 'set -a && . /run/dify-keys/app_keys.env && set +a &&
+      exec /app/.venv/bin/uvicorn app.main:app --reload --host 0.0.0.0 --port 8000'
 
-  # Dify 一键初始化：创建管理员 → 配模型供应商 → 导入应用 → 绑模型 → 输出 app key
+  # Dify 一键初始化：创建管理员 → 配模型供应商 → 导入应用 → 绑模型 → 写入 app key 共享卷
   # 长期挂载场景：必须成功，否则 backend 不启动
   dify-init:
     build:
@@ -82,10 +88,10 @@ services:
       # dify-init 专用变量（不依赖客户配置）
       DIFY_API_URL: http://api:5001
       DIFY_APPS_DIR: /apps
-      DIFY_APP_KEYS_FILE: /output/app_keys.txt
+      DIFY_APP_KEYS_FILE: /shared/app_keys.env
     volumes:
       - ./dify/apps:/apps:ro
-      - ./dify/docker:/output
+      - dify_app_keys:/shared
     depends_on:
       api:
         condition: service_healthy
@@ -109,3 +115,4 @@ volumes:
   redis_data:
   backend_venv:
   backend_storage:
+  dify_app_keys:

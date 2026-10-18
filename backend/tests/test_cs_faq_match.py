@@ -1,8 +1,13 @@
 """P5 FAQ 前置匹配（_match_faq）：命中即秒回原文，不经 Dify。
 
 覆盖：精确问法命中与短路、去标点容错、keywords 改写召回、
-未命中落 Dify、多候选最优选择（v6.11.3 回归资产）。
+未命中落 Dify、多候选最优选择（v6.11.3 回归资产）、
+种子答案敏感信息守卫（v6.10.7 缴费账号口径拍板）。
 """
+import json
+import re
+from pathlib import Path
+
 import pytest_asyncio
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -170,3 +175,15 @@ async def test_match_faq_best_score_selection(faq_env):
     assert resp.intent == "faq"
     assert resp.answer == german.answer
     assert resp.card_data["faq"]["faq_id"] == german.id
+
+
+def test_seed_answers_contain_no_bank_account():
+    """v6.10.7 业务拍板：缴费账号统一「引导联系顾问」，种子答案不得含银行账号（防回退守卫）。"""
+    seed = json.loads((Path(__file__).parents[1] / "scripts" / "cs_faq_seed.json").read_text(encoding="utf-8"))
+    for row in seed:
+        assert "9550889900011455492" not in row["answer"], row["question"]
+        assert not re.search(r"(?<!\d)\d{16,19}(?!\d)", row["answer"]), row["question"]
+
+    pay_rows = [r for r in seed if "缴费账号" in r["question"]]
+    assert pay_rows, "缴费账号条目缺失"
+    assert "联系顾问" in pay_rows[0]["answer"] and "对公转账" in pay_rows[0]["answer"]

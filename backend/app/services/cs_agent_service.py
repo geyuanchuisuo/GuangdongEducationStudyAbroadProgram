@@ -57,6 +57,32 @@ SENSITIVE_REPLACEMENT = "具体缴费/身份信息请联系顾问获取"
 # P5 FAQ 前置匹配：用户消息命中关键词即秒回 FAQ 原文（不进 Dify，保证与原文一致）
 FAQ_KEYWORD_MIN_MATCH = 2  # 至少命中 N 个关键词才算命中
 
+# 意图码归一（v6.10.6）：Dify 分支码 / seed 演示遗留码 → 后端契约 9 码（接口契约v1.md §客服，共用基准）
+# 未识别码原样保留不吞数据；契约码原样透传；VM 分类器侧码表改造留作与 longtrying_test 线协调项
+INTENT_ALIASES = {
+    # VM Chatflow 分支码（7 分支 LLM prompt 自带码表）
+    "business": "program_consult",
+    "policy": "policy_qa",
+    "event_signup": "event_query",
+    # seed 演示数据遗留码（seed_data.py 旧词汇）
+    "course_inquiry": "program_consult",
+    "price_consult": "program_consult",
+    "study_abroad_consult": "program_consult",
+    "event_registration": "event_query",
+    "general_chat": "chitchat",
+}
+CONTRACT_INTENTS = {
+    "program_consult",
+    "course_recommend",
+    "policy_qa",
+    "company_info",
+    "event_query",
+    "faq",
+    "chitchat",
+    "lead_capture",
+    "transfer_human",
+}
+
 # 本地信息提取兜底：当 Dify 未输出 [SLOTS] 时，从用户消息提取常见画像字段
 # 每条规则按优先级排列，命中即停；值需通过 _normalize_slot_value 清洗
 LOCAL_EXTRACT_PATTERNS: dict[str, list[re.Pattern[str]]] = {
@@ -178,9 +204,10 @@ class AiService:
             session.dify_conversation_id = dify_resp["conversation_id"]
             await self.repo.update_session(session)
 
-        # 阶段1：意图标记剥离（优先 [intent:xxx]，其次 dify intent 字段）
+        # 阶段1：意图标记剥离（优先 [intent:xxx]，其次 dify intent 字段）→ 归一到契约 9 码
         answer, intent_marker = self._extract_intent(answer)
         intent = intent_marker or intent
+        intent = self.normalize_intent(intent)
 
         # 阶段4：推荐标记剥离 → card_data + recommendations
         answer, recommendations = self._extract_recommendations(answer)
@@ -246,6 +273,10 @@ class AiService:
                         await self.customer_repo.update(customer, profile_updates)
                 except Exception:
                     logger.exception("客服会话客户画像更新失败")
+
+        # 留资语义归位：转线索/待补全线索成功即 lead_capture（契约码，v6.10.6）
+        if converted or pending_created:
+            intent = "lead_capture"
 
         # 阶段4：推荐落库（在建档之后执行，customer_id 关联更准确）
         for rec in recommendations or []:
@@ -319,6 +350,20 @@ class AiService:
     def _extract_phone(text: str) -> str | None:
         match = PHONE_RE.search(text)
         return match.group(0) if match else None
+
+    @staticmethod
+    def normalize_intent(intent: str | None) -> str | None:
+        """意图码归一：Dify 分支码 / seed 遗留码 → 契约 9 码；契约码透传；未识别码原样保留。"""
+        if not intent:
+            return intent
+        key = intent.strip()
+        if key in CONTRACT_INTENTS:
+            return key
+        mapped = INTENT_ALIASES.get(key)
+        if mapped:
+            return mapped
+        logger.debug("未识别的意图码，原样保留：%s", key)
+        return key
 
     @staticmethod
     def _extract_intent(answer: str) -> tuple[str, str | None]:

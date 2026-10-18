@@ -6,6 +6,28 @@
 
 ## 零、快速定位（打开项目先看这里）
 
+> v6.11.17（2026-10-19，ZNBG/M5）：**production 投诉域静默清零缺陷修复**——`report_data_source.py` 漏 import `ComplaintReportInput`（v6.11.0 引入），调用处 NameError 被 v6.9.6 逐行容错当脏行静默吞掉、报告仍 completed → production 任意含工单周期投诉指标恒 0（本库 105 行全跳过；mock 不受影响）；补 import + 防回退用例后实测 orders_total 0→9 / new_count 6 / analyzed_count 8；回归 compileall + pytest 158/158 + Docker E2E 81/81 + production 冒烟 7/7；详见更新记录 v6.11.17 与 LOG-074（ZNBG）。
+>
+> v6.11.18（2026-10-19，anhoa）：**第十五次同步 origin/master**——M0 公共模块 10 项变更（Dify 共享卷/迁移006/种子补齐/投诉域修复等）经用户批准并入，解 8 冲突；无 M1/M2 业务逻辑变更；回归 compileall + verify_all 29/29 + pytest 164/164 + 前端 build ✅；详见更新记录「merge 第十五次同步」与 LOG-069。
+
+> v6.11.16（2026-10-19）：Dify 1.16 首启脚本修正到 `/console/api/*` 并使用 cookie/CSRF 登录，补入智能报告 app key 映射；Agnes 模型配置仅保存在忽略的 `dify/docker/.env`。Dify API/Postgres/Redis/Sandbox 健康且管理员已创建，但 OpenAI 兼容插件和 DSL 依赖需访问 Marketplace；当前本机及容器均收到 403，dify-init 停在供应商配置，app keys 尚未生成。详见更新记录 v6.11.16、LOG-073。
+
+> v6.11.15（2026-10-19）：Dify 首启阻塞修复——根 `.env.example` 启用默认 PostgreSQL/Weaviate profiles；Dify Redis 使用独立服务名；backend 只读挂载 `dify_app_keys`；init_permissions 首启生成 sandbox 配置和依赖清单；Dify 示例移除可选空值并统一控制台 8081。本地 `.env` 保留但不跟踪。当前模型三项未配置，dify-init 尚未完成。详见更新记录 v6.11.15 与 LOG-073。
+
+> v6.11.13（2026-10-19，ZNBG）：第十次同步 origin/master→master_ZNBG——**M5 阻塞 B5 销账**：上游 M0 4 行补丁（DIFY_REPORT_AGENT_KEY + AgentType.REPORT/映射，经用户批准）并入；M5 配套 session 改 "new"（动态串必被 Dify 拒）；生效差一步：backend/.env 回填报告 key；详见更新记录 v6.11.13 与 LOG-071（ZNBG）。
+
+> v6.11.13（2026-10-19，anhoa）：**Dify 1.16 环境实跑+dify_init.py 重写**——一体化 Dify 在本机首次实跑完整初始化链路（插件安装→模型凭据→4 应用导入/创建/发布→key 回填），dify_init.py 按 1.16 实测 Console API 重写（CSRF/base64、插件制供应商、工作流 publish、agent-chat DSL 改 create+model-config、草稿工作流 hash 补丁重绑模型），E2E 客服对话真实 AI 回复通过；pytest 163/163、verify_all 29/29、build ✅。
+
+> v6.11.12（2026-10-19）：**一体化 Dify 栈首次启动实测失败（exit 1）**，定位两处配置缺陷并按用户决定**暂不修复、仅记录**：**A（Dify 侧）** `dify/docker/.env` 精简模板把可选变量留成空值行（`KEY=`）→ 空串被当作"显式设为空"，Dify `api` 启动即 `ValidationError: INDEXING_MAX_SEGMENTATION_TOKENS_LENGTH unable to parse string as an integer [input_value='']`，api/worker/worker_beat/plugin_daemon/sandbox/agent_backend 全部 Restarting（应改为注释态 = 用默认值）；**B（业务侧）** `docker-compose.yml` backend 的 command 要 `. /run/dify-keys/app_keys.env`，但 `volumes` **缺 `dify_app_keys:/run/dify-keys` 挂载** → 不论 dify-init 成功与否 backend 都起不来（`sh: 1: .: cannot open …: No such file`）。业务侧仍可跑（旧拓扑 4 容器：`/health` ok、107 路由、登录与业务接口全通）；业务后端已用 `docker cp` 空 `app_keys.env` + `up -d --no-deps backend` 临时恢复，**该手段不持久（容器重建即再次失败）**。详见更新记录 v6.11.12、运行日志 LOG-070、开发路线图移交清单第 25 项。
+
+> v6.11.11（2026-10-19）：本机环境修复——① `backend/.env` 数据库密码旧值 `password`→`420821`（实测 `420821` 可连、`password` Access denied；容器内 backend 用 compose 注入串，故该错配长期被掩盖）② 运行库从未走过 alembic（`alembic_version` 为空 + `student_score` 缺 `uq_student_score_unique`，库结构停在 004）→ `alembic stamp 004_m5_drill_ticket_ai` 后 `upgrade head` **只补跑 005、保留全部数据**：`student_score` 104→97（清 7 条重复，每组留最小 id）、唯一索引已建、重复插入实测 `ERROR 1062 Duplicate entry` ③ Dify 指向切打包基线（根 `.env`=`http://dify_nginx`；`backend/.env` 宿主机开发=`http://localhost:8081`）④ 已下线的 `DIFY_REPORT_AGENT_KEY` 在 `.env` 中注释保留，避免"看着配了、实际不生效"。verify_all 29/29；详见更新记录 v6.11.11 与 LOG-069。**遗留**：`dify/docker/.env` 不存在（根 compose 的 `dify-init` 用 `env_file` 依赖它，缺文件则 `docker compose up` 报错）；`dify/docker/.env.example` 的 `EXPOSE_NGINX_PORT=80` 与 v6.11.9 声称基线 8081 不一致。
+
+> v6.11.10（2026-10-19）：同步 origin/master 文档基线并按用户逐项确认处理共用模块：移除 M0 REPORT Agent，恢复 M5 动态会话 ID，模型默认值切换至 Mimo；初始化按 DSL 应用名去重并跳过留档 DSL。保留本地强密码、app key 受限共享卷自动加载、DIFY_BASE_URL 插值与本地 .env 不入库。
+
+> v6.10.7（2026-10-19，anhoa/M2）：缴费账号口径拍板（用户确认）——两路统一「引导联系顾问」不暴露账号（Chatflow 速查表 v6.10.5 起已是此措辞，本次对齐 P5 数据源 cs_faq 第 25 条 + 守卫测试），pytest 163/163；v6.10.6 意图码契约漂移修复（后端 normalize_intent 单点归一到契约 9 码 + converted→lead_capture + seed 换契约码，销 LOG-057 遗留第 3 项）；详见更新记录 v6.10.7/v6.10.6 与运行日志 LOG-066/LOG-067。
+
+> v6.11.5（2026-10-18）：第九次同步 origin/master→master_ZNBG——PROSPECT 注册免审批并入（M0 user_service.py，经用户批准；注册即"正常"立即可登录）+ 学生申请进度布局紧凑化 + REMOTE_ACCESS 补全；pytest 全过 + verify_all 29/29 + npm build；详见更新记录 v6.11.5。；**v6.11.6（ZNBG，2026-10-18）补齐 M0：`config.py` 加 `DIFY_REPORT_AGENT_KEY`、`ai_service.py` 加 `AgentType.REPORT` + `_AGENT_KEY_MAP` 映射（共用模块，经用户授权）；同时修掉 M5 一个隐蔽缺陷——报告 AI 传假 session 被网关当 `conversation_id` 发给 Dify，Dify 要求 UUID → 400 被静默吞掉回落 mock，改成 `"new"` 后实测 `ai_source=dify`；pytest 152/152、verify_all 29/29**
+
 > v6.10.5（2026-10-18，anhoa/M2）：客服 FAQ 两入口无回答修复——Chatflow 内嵌 37 条 FAQ 速查表 + 种子 upsert/问法迁移；VM 在线应用（2f92093f 七分支 + 143c1127 导入版）已发布落地实测通过；**同日第十一次同步 origin/master（d4aa045：注册免审批反转 + M3 成绩三件套，公共模块 2 项经用户批准）**，合并后 pytest 157/157；详见更新记录 merge 条目、v6.10.5 条目与运行日志 LOG-057/LOG-063。
 
 **当前进度**：Phase 0 公共地基已完成（v6.0.1），Phase 1 模块并行开发中；M3 员工模块全部交付（v6.5.0 收官）；v6.6.0 需求对齐差异全部落地；v6.7.0~v6.7.2 管理层端三项+需求核对 52/52；master 已合并 longtrying（62d4cff）与 longtrying_stu（a23fc49，第三次合并）全部工作；**M4 学生模块一期全部交付（v6.8.0 第一批 7 子模块 + v6.8.1 第二批 学生助手Agent/提醒聚合，11 paths / 13 endpoints）；v6.8.2 Docker 环境搭建 + M3/M4 数据库端到端验证通过（E2E 69/69，修复 7 项缺陷）；v6.8.3 指令解析本地兜底 + 提醒聚合缺陷修复（E2E 71/71 幂等全过）；v6.8.4 文件存储改本地磁盘后端（docker compose 移除 MinIO，零额外镜像三容器直跑）+ DIFY_BASE_URL 根因修正；v6.8.5 引入 M5 智能报告 7 paths 与前端界面，M3 dashboard 与《一期指标口径表V1》统一名称+新增差异字段（verify_all 25/25 + M5 测试 32/32 + 对齐 14/14）；v6.8.6 AI 全链路打通：Dify 绑定 mimo-v2.6-flash（api.xiaomimimo.com），3 个 Agent 应用创建并回填 app key，真实 AI 链路 6/6 验证通过，环境缺口全部关闭**；**anhoa 分支 v6.8.0：M1 客户模块 + M2 客服 Agent 一期补齐（客户 8 研判字段/6 态流转/pending_lead 待补全线索/客服 Agent 4 出口），2026-10-17 两次合并 origin/master 并线（v6.8.0 被两条分支并行使用，路由 81→99）**；**v6.9.0（anhoa 分支）：M2 客服 Agent 二期补齐——cs_recommend_log 推荐落库新表 / [SLOTS] 槽位采集与画像更新 / 仅微信号→pending_lead / 公开 /cs/faq + /cs/sessions 接口 / FAQ 种子 37 条 / 前端客服窗接线（pytest 70/70 + verify_all 29/29；Dify 侧输出契约配置待 Docker，未配置时标记解析自动跳过）**；**v6.8.8 P1 运行时缺陷修复：ai_service.py 恢复 M3/M4 依赖的 AgentType/AIService/ai_service（anhoa 合并重写所致，函数内延迟导入绕过静态检查），客服 AiService 与通用 AIService 双服务共存，容器内真实 Dify 调用成功（verify_all 27/27 + pytest 64/64）**；**v6.9.0 远端访问方案（longtrying_test 分支）：docker-compose 增加 nginx 统一 80 入口 + ngrok 内网穿透脚本 + 一键构建启动脚本 + 完整使用指南（REMOTE_ACCESS.md），本地执行 `.\scripts\build-and-serve.ps1` + `.\scripts\start-ngrok.ps1` 即可获得公网 URL**；**v6.9.1 远端访问实测修正：nginx 端口 80→8080（本机 80 被 Dify 占用），新增 localtunnel 免注册方案，公网实测通过（https://wide-cameras-pay.loca.lt 前端 200/API 正常）**；**v6.9.2 master 快进合并 longtrying_test（b84acf3..4c27071，13 文件 +406/-14，无冲突，verify_all 27/27），远端访问能力并入主干；**M5 智能报告 v6.9.0（ZNBG 分支线，与 master v6.9.0 远端访问同名异义）：批次 A~E 连续交付——口径健壮性 11 项 + 真实数据适配器骨架（REPORT_DATA_SOURCE 开关/三态质量标注）+ 前端报告闭环（列表/详情/生成/下钻/真实 PDF）+ 测试资产（全仓 pytest 113/113、verify_all 27/27、npm build 通过）**；**v6.9.5 第六次同步 origin/master（4d6547c，作者 geyuan）：先按硬性规则 5 上报公共模块（config 加 DIFY_MODEL_API_KEY/BASE_URL/NAME、新增 model_ai_service.py 共用模型网关被 M3/M4/M5 三处调用、compose/.env.example/启动脚本凭据、PublicLayout 公共导航），经用户同意后合并；按用户决定①数据库凭据保留 420821+59000（回退 master 的 123456+3306）②恢复 views/manager/Index.vue ③不引入 master 的 health/complaints 静态占位模板（无路由、与智能汇总口径重复）；M5 侧统一走共用网关并新增差异字段 `ai_source`（model/mock/unavailable，PDF 与前端文案同源标注，替代「可用（模拟）」）；修 master 自带缺陷 employee_service.py 缺 logger 导入（/employee/agent/chat 与 /employee/guide/ask 两处 50001）+ 解冲突引入的 TS6133；27/27 + 113/113 + build + E2E 80/80**；**v6.9.8（anhoa，2026-10-18）M2 阶段B Dify VM 侧落地：192.168.184.128:8080 重建「粤教客服Agent」（deepseek-flash 临时代替共用网关，用户决定后续再调），pre_prompt 4336 字符注入三标记契约（[intent:]/[RECOMMEND]/[SLOTS]），4 知识库 7 文档 economy+全文检索兜底（siliconflow embedding 402、本机 ollama 跨网段不可达），dify_client /v1 前缀修复；7 场景端到端全过 + RAG 命中 16 条 + verify_all 29/29**；**v6.9.9（anhoa，2026-10-18）M2 阶段B-B4/B5 Chatflow 重建：advanced-chat 应用 2f92093f，B5 问题分类器 7 类节点编排（确定性 intent 前置），B4 检索工具改知识库兜底（课程活动库 f892116a，VM→宿主机网络不通）；后端 THINK_RE 剥离 reasoning 思考块，.env 换 chatflow key；7 场景端到端全过 + THINK 无泄漏 + pytest 129/130**；**v6.9.10（anhoa，2026-10-18）M1 AI 信息提取兜底：客服对话本地规则提取画像字段——LOCAL_EXTRACT_PATTERNS 5 组正则（name/age/education/gender/study_intent），_local_extract_merge 补缺不覆盖，_normalize_slot_value 清洗对齐；Dify 未输出 [SLOTS] 时自动补充，pytest 129/130 + 本地提取单元测试 5/5**；**v6.9.11（anhoa，2026-10-18）M1 客户注册/登录 PROSPECT 审批门：RegisterRequest 扩展 PROSPECT+phone/wechat/age/education 选填；UserService.register 注册即审批——用户 status=待审批→customer 主表创建（sys_user_id 关联）→审批实例 biz_type=prospect_register 自动分配 MANAGER；approve→用户激活+customer.registered 事件，reject→用户禁用；POST /auth/prospect/approve 审批接口，pytest 129/130**（⚠ 2026-10-18 实测发现 schema 漏改——PROSPECT 注册入口 422，**已由 v6.9.13 补齐**：pattern 扩 `^(STUDENT|EMPLOYEE|PROSPECT)$` + phone/wechat/age/education 选填，端到端实测 6/6 通过；遗留已由 v6.10.0 清）**；**v6.10.0（anhoa，2026-10-18）M1/M2 五项补齐：审批人 JWT+MANAGER 校验（40301）、注册事务原子化（孤儿缺陷消除）、登录待审批 40006、新增 GET /cs/courses 公开课程（路由 103 paths）、前端注册/课程页接线、活动枚举归一——活动报名闭环全通；测试资产 +15（注册审批门/本地提取入库/test_ai 环境隔离），pytest 143/143 + verify_all 29/29**；**v6.10.3（ZNBG，2026-10-18）第七次同步 origin/master 732d43f（fast-forward 零冲突）：公共模块 8 类经用户同意后并入（M0 AI 网关 ai_service.py +243（客服槽位采集/本地提取/推荐落库）、M0 认证 user_service.py +113（PROSPECT 注册审批门 status=待审批 + 40006）、auth.py/schemas/user.py、迁移 001/002 共 8 处 FK BigInteger→Integer、seed_data.py 重写为 drop_all+seed(42)+固定账号、verify_all.py 增 M2 公开客服断言、models/customer_service.py+__init__、dify_client.py、api/v1/ai.py+schemas/ai.py、platform.ts/AgentDock.vue）；按用户授权把 tests/e2e_m3m4_test.py 账号更新为 13810000004/3/2 + Test@123456；空库迁移链验收通过（临时库 upgrade head 001→002→003：32 表/44 外键/8 处 FK 列 int，downgrade base 亦通，验后删库）；回归 compileall + verify_all 29/29（103 路径）+ pytest 143/143 + npm build + Docker E2E 80/80 + M5 mock 5/5 + M5 production 10/10（中文『跟进中』归一后 122 条全入 0 跳过、下钻同源 122 条真实数据、未来周期仍 40002）；销账：清单第 2 项（002 FK）与 seed 撞键 P2**；**v6.10.3（anhoa，2026-10-18；与 ZNBG 线 v6.10.3 复用，沿 v6.8.0 先例按线标签消歧）M2 解耦+开场白闭环：cs_agent_service.py 独立（ai_service.py 回归纯 M0 通用网关，M3/M4 延迟导入零改动，v6.8.8 类事故根除）、GET /cs/greeting+AgentDock 开窗欢迎语（路由 103→104，仅 public 分支）、Dify Chatflow yml v2 实时数据注入（HTTP×2 每轮拉 /courses+/events 含 id，根治 [RECOMMEND] 缺原料）；第九次同步 origin/master 732d43f ff 零冲突（seed_data 幂等+统一密码 Test@123456+4 固定账号）；pytest 143/143 + verify_all 29/29 + build + 浏览器实测全过**；**v6.10.4（anhoa，2026-10-18）M1 客户转留学生审批通过后身份转换（方案A）：M0 审批引擎审批通过后发布 approval.approved 事件，M1 客户模块订阅并处理 biz_type=convert 分支——user.user_type PROSPECT→STUDENT + customer.status→ENROLLED + 发布 customer.converted_to_student 事件；新增 services/customer_event_handlers.py、tests/e2e_convert_test.py；pytest 146/146 + verify_all 29/29 + e2e 12/12；未推送**；**v6.11.0（ZNBG，2026-10-18）M5 一期需求对齐改造（只改 M5 文件）：①画像四类独立（符合/部分符合/不符合/信息不足）+ 分母只计有研判客户 ②期末状态不可得（不用当前值冒充）③数据源失败改部分生成 ④下钻快照化（新表 ai_report_drill + 迁移 004）⑤投诉 AI 独立表 ticket_ai_analysis + 类型来源 + 待分析只计总量 + 特别案例一期 AI 判定 ⑥AI 改报告专用 Agent（未登记即不可用、不回落 mock）⑦前端周期选择/历史版本/月度对比/状态徽标/完整详情 ⑧新增 /reports/versions，下钻带 note ⑨保留归一与容错作防御 ⑩新增 docs/M5_上游接口契约.md；**v6.11.1/v6.11.2（ZNBG）Dify「智能报告」接入**：`DIFY_BASE_URL` 指向 `http://192.168.184.128`（.env + compose）；改用同名 Chatflow（advanced-chat，id 2598b21f…）并发布后 **blocking 实测 200、JSON 契约 PASS**；导出 DSL 至 dify/apps/；M5 加固 think 剥离（pytest 146/146）；剩余阻塞交 M0（config.py 加 DIFY_REPORT_AGENT_KEY、ai_service.py 加 AgentType.REPORT 与映射）；M2/M3/M4 Agent 未接入（key 仍占位）**；**v6.10.4（anhoa，2026-10-18）M1 客户转留学生身份转换（方案 A 事件总线）：M0 审批引擎发布 approval.approved（经用户同意）+ M1 订阅执行 PROSPECT→STUDENT/customer→ENROLLED，e2e 12/12 + pytest 146/146**；**v6.10.5（anhoa，2026-10-18）M2 客服 FAQ 应答修复：实测「公司简称是什么？」两入口（Dify 控制台/后端 chat）均无回答——Chatflow DSL 无知识检索节点而红线 1 要求以【知识库内容】为准恒落兜底、cs_faq 表依赖独立种子（seed_data.py 重建库会清空）；修复=dify/workflows/粤教客服Agent_chatflow.yml 升 v3（LLM system prompt 内嵌 37 条 FAQ 速查表逐字同源 cs_faq_seed.json + 红线 1 权威来源新增【FAQ 速查表】+ FAQ few-shot；契约/图结构/选择器零改动）+ cs_faq_seed.json 问法规范化（公司简称什么?→公司简称是什么？）+2 条 keywords + seed_cs_faq.py 升级按 question upsert+QUESTION_RENAMES 原位改名（重建库后必须补跑）+ 新增 tests/test_cs_faq_match.py 5 项（_match_faq 首次有覆盖）；pytest 151/151 + verify_all 29/29 + 接口实测 P5 命中 card_data.faq；**Dify 侧已落地（方案 B，控制台 API）**：`2f92093f`「粤教客服Agent-Chatflow」（backend key 所指）7 意图分支 prompt 全注入速查表（4302→9244 字符/支）并发布，实测「公司简称是什么？」答 简称"粤教服务"、"德国项目有哪些优势?"命中第 29 条、后端改写问法走 Dify 路径含粤教服务；`143c1127` 导入测试版顺带修复 kr 节点 `dataset_ids=[]` 空绑（绑 FAQ 库 01cd187d）+ 同套补丁已发布；改前备份 `dify/workflows/_vm_backup_v6.10.5/`**；**v6.11.3~v6.11.9（longtrying_test 线，2026-10-18/19）：v6.11.3 M3 成绩三件套（PUT /employee/scores/{id} + uq_student_score_unique 40901 + 口径 0-100 + 迁移 005）+ v6.11.4 REMOTE_ACCESS localtunnel 方案一 + v6.11.5 dify/apps 三 Agent DSL + v6.11.6 Dify 一体化打包（dify/docker/，dify_nginx/8081，客户拉代码即起）+ v6.11.7 DIFY_* 配置对齐（当时默认 mimo-v2.6-flash；v6.11.12 起模型默认值全空、不绑定任何特定模型）+ Dify部署与调用指南 + v6.11.8 dify-init 一键初始化（客户 dify/docker/.env 填模型 Key 全自动配供应商/导入 5 应用/绑模型/导出 app key，init 失败 backend 不启动）+ 合并 master 10 项公共模块（注册免审批=客户模块二期、approval.approved 事件总线 PROSPECT→STUDENT 自动转换、客服 FAQ 修复、CRM 画像、测评工具、前端 6 文件，pytest 157/157）+ v6.11.9 全文档 Dify 配置信息同步（现行基线 DIFY_BASE_URL 本机 8081/容器内 dify_nginx）**
@@ -23,8 +45,7 @@
 5. ✅ ~~ZNBG 分支本地提交未推送~~ **已推送**（v6.9.3 起本分支已同步远端；git 凭据本机已恢复，`git ls-remote` 免交互即通）
 6. ✅ ~~两条 P1（v6.9.3 实测发现，M5，阻断切 production）~~ **v6.9.6 已修复**：a) 缺省周期改用 `default_completed_week(now)`=上一完整自然周 `[上周一00:00, 本周一00:00)`（原为 `week_range(now)` 恒落未来 → 必 40002）b) `normalize_customer_status()` 复用 M1 词表 `STATUS_CN_TO_EN` 做中英归一 + `fetch_customers` 逐行容错（脏行跳过并写入口径说明，不再拖垮 5 类报告）。**仍留 P2（他模块）**：`seed_data.py` ai_report 段秒级 DATETIME 随机碰撞（2 跑 1 败，共用脚本需确认）、前端 `RoleWorkspace.vue` 部分区块仍为静态演示值（管理层看板 183/21.4%/689/3.2%、学生首屏「李同学」与登录账号不符，作者 ge yuan，属 M3 看板区块）
 7. ✅ ~~M5 报告 AI 只用模拟~~ **v6.9.5 已统一到共用网关**：`ReportAIService` 内部走 `model_ai_service`（共用模块名称），失败回落 mock；报告内容新增差异字段 `ai_source`（model/mock/unavailable）并与 `ai_status` 并存，PDF 头部/前端详情按来源标注；契约 §7 已同步。**v6.9.6 补**：三处下钻改为与报告**同源**（`_drilldown_dataset` 按 `data_source_status` 分流），前端「明细下钻」说明同步。**待办**：`DIFY_MODEL_API_KEY` 需在 `backend/.env` 配置后才可验证真实模型链路（当前自动回落 mock，不影响测试）；M3 `employee_service.py` 的 logger 导入为合并期最小修复，待 M3 负责人复审
-
-**数据库**：32张表（v6.9.0 新增 cs_recommend_log 推荐日志表；customer 加 8 研判画像列、cs_intent_log.user_id 放宽可空、AiReport 表加 version/data_source_status/error_message 3 列），104条路由路径（103 API + 1 health，v6.9.11 增 /auth/prospect/approve、v6.10.0 增 /cs/courses、v6.10.3 增 /cs/greeting；employee 42 paths，student 11 paths/13 endpoints，reports 7 paths，crm/ai/cs/courses/events 19 paths），MVC分层结构就绪；**Docker 环境：edu-mysql/edu-redis/edu-backend 全部健康，`docker compose up -d` 三容器零额外镜像直跑（文件存储默认本地磁盘 backend_storage 卷，不再依赖 MinIO）**；**数据库凭据固定 `root:420821@localhost:59000`（库 GuangdongEducationStudyAbroadProgram）**  
+**数据库**：34张表（含 M5 ai_report_drill、ticket_ai_analysis 等），107条路由路径（106 API + 1 health；含 M1 /crm/assessments/file），MVC分层结构就绪；Docker 数据库、Redis、后端服务按 compose 配置运行；数据库凭据见本机环境配置。
 **测试账号（v6.10.0 起规范）**：核心角色固定 `username=手机号`——`13810000001` PROSPECT / `13810000002` STUDENT / `13810000003` EMPLOYEE / `13810000004` MANAGER，**密码统一 `Test@123456`**；其余 `user000~user115` 同密码（角色按 `i % 8` 确定：0=ADMIN、1=MANAGER、2~4=EMPLOYEE、5~6=STUDENT、7=PROSPECT）。`scripts/seed_data.py` 会 `drop_all+create_all` 重建全库（`random.seed(42)` 可复现），重跑前注意数据留存；Docker E2E 已按此规范更新账号常量
 **主基线文档**：`promts/lon/提示词整合测试_demo/docs/基础架构方案_五人并行开发.md`（v1.2.0，28项决策）
 
@@ -34,7 +55,7 @@
 3. `promts/lon/提示词整合测试_demo/docs/基础架构方案_五人并行开发.md` — **主基线，权重最高**
 4. `docs/开发路线图.md` — 当前进度、下一步任务
 5. `docs/接口契约v1.md` — API接口契约（v2.11.3，M3 成绩三件套 + v2.9.9 注册免审批反转/Dify 配置基线）
-6. `docs/更新记录.md` — 最近变更（v6.11.9 全文档配置同步 + v6.11.5~8 Dify 一体化/dify-init + merge master 10 项公共模块（注册免审批等）+ v6.11.3/v6.11.4）
+6. `docs/更新记录.md` — 最近变更（v6.11.13 Dify 1.16 环境实跑+dify_init.py 重写 + v6.11.9 全文档配置同步 + v6.11.5~8 Dify 一体化/dify-init + merge master 公共模块 + v6.11.3/v6.11.4）
 
 **重要规则**：
 - 主基线文档（基础架构方案）权重 > 其他参考文档（共用基座方案、公共框架等）
@@ -165,12 +186,12 @@ GuangdongEducationStudyAbroadProgram/
 - PROSPECT/STUDENT/EMPLOYEE：固定权限集
 - MANAGER：基础权限 + `sys_user.permissions` JSON 字段中定义的额外权限（由系统管理员逐人配置）
 - 系统管理员账号：仅测试用，不参与业务流程
-- 意向客户注册后状态为"待开通"，需员工审核开通
+- 意向客户自助注册即时生效（v6.11.5 起规则覆盖：注册即"正常"并可立即登录，原「待开通审批门」已移除——经用户批准并入 qianduan 线变更；`/auth/prospect/approve` 接口保留兼容历史审批实例）
 - 员工审批学生流程（单层审批）；留学生转化需经理审批
 - 员工数据隔离：普通员工只能看到自己名下的客户
 - 二期拆分为3个独立角色：人事（HR，不可看客户/经营）、经理（MANAGER_DIRECTOR，只看下属+自己客户）、总裁（MANAGER_PRESIDENT，看全部）
 
-### 4.2 数据库表（32张，v6.9.0更新）
+### 4.2 数据库表（34张，v6.11.7更新）
 
 > **数据库**：MySQL 8.0+，端口59000，库名 `GuangdongEducationStudyAbroadProgram`
 > **自动建表**：应用启动时自动创建所有表，无需手动执行SQL
@@ -220,6 +241,8 @@ GuangdongEducationStudyAbroadProgram/
 **报告模块表（M5）**：
 30. **ai_report** - 智能报告表
 31. **ai_report_attachment** - 报告附件表
+32. **ai_report_drill** - 报告下钻快照表（v6.11.0）
+33. **ticket_ai_analysis** - 投诉工单 AI 分析结果表（v6.11.0）
 
 ### 4.3 API接口分组
 
@@ -496,9 +519,9 @@ npm run dev
 # http://localhost:5173
 ```
 
-### 5.3 Dify（**v6.11.8 起 dify-init 一键初始化**）
+### 5.3 Dify（**v6.11.9 起一体化部署与初始化**）
 
-Dify（1.16.0-rc1）已作为子 compose 纳入项目，随 `docker compose up -d` 一键启动，无需单独部署。**v6.11.8 新增 `dify-init` 服务**：自动完成管理员创建、模型供应商配置、应用导入、模型绑定、app key 输出，客户全程无需进入 Dify 控制台。
+Dify（1.16.0-rc1）已作为子 compose 纳入项目，随 `docker compose up -d` 启动。先将 `dify/docker/.env.example` 复制为本地 `dify/docker/.env`，再配置模型 API Key、管理员密码及 Dify 内部服务强密钥；本地 `.env` 和 app keys 均不入库。**v6.11.8 新增 `dify-init` 服务**；**v6.11.13 重写为 Dify 1.16 Console API 适配版**（base64 密码+cookie/CSRF、插件制供应商 marketplace 安装+轮询、模型凭据实时校验、advanced-chat 导入后 publish、agent-chat 创建+model-config、草稿工作流 hash 补丁重绑模型）：自动完成管理员创建/登录、模型供应商插件安装、模型凭据添加、应用导入/创建、模型绑定、app key 写入受限共享卷 `dify_app_keys` 供 backend 启动时自动加载，客户全程无需进入 Dify 控制台。
 
 > 📖 **完整配置说明、调用规则、降级机制、失败排查见 [Dify部署与调用指南.md](./docs/Dify部署与调用指南.md)**
 
@@ -510,13 +533,14 @@ Dify（1.16.0-rc1）已作为子 compose 纳入项目，随 `docker compose up -
 #   db_postgres（Dify 元数据库）/ dify_redis / weaviate（向量库）/ ssrf_proxy
 
 # 控制台入口：http://localhost:8081
-# 管理员：由 dify/docker/.env 中 DIFY_ADMIN_EMAIL / DIFY_ADMIN_PASSWORD 自动创建
-# 模型配置：dify/docker/.env 顶部 DIFY_MODEL_API_KEY / BASE_URL / NAME
+# 首次配置：Copy-Item dify/docker/.env.example dify/docker/.env，再按 docs/Dify部署与调用指南.md 设置强密钥
+# 管理员：由本机 dify/docker/.env 中 DIFY_ADMIN_EMAIL / DIFY_ADMIN_PASSWORD 自动创建
+# 模型默认值：Mimo；DIFY_MODEL_BASE_URL / DIFY_MODEL_NAME 可按需改为其他 OpenAI-compatible 模型
 ```
 
 > ⚠️ **外部模型需自行配置（不绑定任何特定模型）**：模型供应商为 OpenAI-API-compatible 通用协议，`DIFY_MODEL_API_KEY` / `DIFY_MODEL_BASE_URL` / `DIFY_MODEL_NAME` 三项**默认全空**，由客户按自己所用的服务商填写（API Key 属于客户凭据，未入库）。填好后 `docker compose up -d` 由 dify-init 自动完成全部配置。
 
-#### 5.3.1 接手者 AI 配置清单（v6.11.8 自动化版）
+#### 5.3.1 接手者 AI 配置清单（v6.11.9 自动化版）
 
 > 后端服务 + Dify + dify-init 均随 `docker compose up -d` 自动启动。dify-init 失败则 backend 不启动（长期挂载，配置必须完整）。
 
@@ -525,7 +549,7 @@ Dify（1.16.0-rc1）已作为子 compose 纳入项目，随 `docker compose up -
 | ① 填写模型配置 | 编辑 `dify/docker/.env`，填入 `DIFY_MODEL_API_KEY` / `DIFY_MODEL_BASE_URL` / `DIFY_MODEL_NAME`（三项必填，默认留空） | OpenAI-API-compatible 通用协议，key/url/模型名由客户自定义，**不绑定任何特定模型**；API Key 勿入库 |
 | ② 启动全部服务 | `docker compose up -d` | dify-init 自动（v6.11.14）：创建管理员→装模型插件→配供应商→注册自定义模型→导入 5 个 yml（占位符注入）→绑定模型→发布工作流→输出 app key |
 | ③ 查看 init 日志 | `docker compose logs -f dify-init` | 成功标志：`🎉 Dify 初始化全部完成` |
-| ④ 回填 app key | 打开 `dify/docker/app_keys.txt`，复制 4 个应用 key 到 `backend/.env` | `DIFY_CUSTOMER_AGENT_KEY` / `DIFY_EMPLOYEE_AGENT_KEY` / `DIFY_STUDENT_AGENT_KEY` / `DIFY_REPORT_AGENT_KEY`（留档版不回填） |
+| ④ 回填 app key | app key 由 dify-init 写入 `dify_app_keys` 共享卷，backend 启动时自动加载（无需手动复制） | `DIFY_CUSTOMER_AGENT_KEY` / `DIFY_EMPLOYEE_AGENT_KEY` / `DIFY_STUDENT_AGENT_KEY` / `DIFY_REPORT_AGENT_KEY`（留档版不回填） |
 | ⑤ 重启 backend | `docker compose restart backend` | 使 app key 生效 |
 | ⑥ 验证 AI | 调用任一 AI 端点，确认返回 `source: "dify"` | 如返回 `fallback` 则检查 app key 是否回填正确 |
 
@@ -566,7 +590,7 @@ docker volume inspect guangdongeducationstudyabroadprogram_backend_storage
 | `REDIS_URL` | backend/.env、docker-compose.yml | 你本机 Redis 地址 | - |
 | `SECRET_KEY` | backend/.env | 随机字符串（自行生成） | 沿用仓库示例值上线 |
 | `DIFY_BASE_URL` | backend/.env、docker-compose.yml | **本机：`http://localhost:8081`；Docker 容器内：`http://dify_nginx`**（v6.11.6 起 Dify 一体化打包，勿再用 host.docker.internal/3000/旧内网 IP） | ❌ 写成其他成员的内网 IP（如 192.168.x.x）或旧 VM 地址——你的机器上必不通 |
-| `DIFY_*_AGENT_KEY` | backend/.env（不入库，.env 已 gitignore） | dify-init 自动输出到 `dify/docker/app_keys.txt`，复制三个业务 Agent key 回填 | 直接用别人的 key（对方撤销后全体失效） |
+| `DIFY_*_AGENT_KEY` | backend/.env（不入库，.env 已 gitignore） | dify-init 自动输出到 `dify/docker/app_keys.txt`，复制四个业务 Agent key 回填 | 直接用别人的 key（对方撤销后全体失效） |
 | `DIFY_MODEL_API_KEY` / `DIFY_MODEL_BASE_URL` / `DIFY_MODEL_NAME` | dify/docker/.env（模型供应商） | 你自己的模型配置（任一 OpenAI-API-compatible 服务，key/url/模型名全部客户自定义，**三项默认全空、不绑定任何特定模型**），dify-init 自动配供应商 | 任一项填错/留空 → dify-init 失败，backend 不启动 |
 | `STORAGE_BACKEND` | backend/.env、docker-compose.yml | 一期默认 `local` | - |
 | `VITE_API_BASE_URL` | frontend/.env | 本机 `http://localhost:8000/api/v1`；生产构建用相对路径 `/api/v1`（.env.production 已配） | 指到别人的机器 |
@@ -754,7 +778,7 @@ chore: 构建
 | 开发路线图 | docs/开发路线图.md | 分期任务表（Phase 0已完成，M3 收官，M1/M2 v6.8.0 补齐，M4/M5 后端已交付，AI 已接通） |
 | 运行日志 | docs/运行日志.md | 排查记录与教训（当前 LOG-025） |
 | 测试报告 | docs/测试报告_v6.8.2_M3M4端到端.md | v6.8.2 Docker E2E 69/69 检查明细+7项缺陷+7轮迭代留档 |
-| 接口契约v2 | docs/接口契约v1.md | API接口契约（v2.9.8，32张表，103路由路径=102 API+1 health） |
+| 接口契约v2 | docs/接口契约v1.md | API接口契约（v2.11.6，34张表，107路由路径=106 API+1 health） |
 | **基础架构方案** | **promts/lon/提示词整合测试_demo/docs/基础架构方案_五人并行开发.md** | **主基线文档（v1.2.0，28项决策），所有参考文档权重低于此文件** |
 
 > **文档优先级**：基础架构方案_五人并行开发.md > 其他参考文档（共用基座方案、公共框架等）
@@ -782,7 +806,25 @@ chore: 构建
 
 ---
 
-**最后更新**：2026-10-19（**v6.11.11 M0 4 行补丁落地**（用户批准）：config.py 加 `DIFY_REPORT_AGENT_KEY` + ai_service.py 加 `AgentType.REPORT`/`_AGENT_KEY_MAP` + .env.example 占位，智能报告 AI 分析随 key 回填即生效（不填恒 unavailable），pytest 157/157，阻塞清单④销账；**v6.11.10 交付前全面配置审计**：全仓扫描修复 5 类滞留（REMOTE_ACCESS「Dify 需单独部署」误导、文档索引版本引用、当前进度行补 v6.11.3~9、Dify_接入与智能报告/M5_上游接口契约旧 VM 值标注），config.py/.env.example/compose/nginx/脚本/测试账号审计通过；遗留决策项：M0 4 行补丁（DIFY_REPORT_AGENT_KEY + AgentType.REPORT）待用户批准；v6.11.9 全文档 Dify 配置同步：AGENTS.md（§6.0/§6.1/Q2）、开发路线图、接口契约v1（v2.9.9）、项目需求文档、Dify_接入与智能报告、M5_上游接口契约、前端无法解决问题清单全部更新为现行基线（`DIFY_BASE_URL` 本机 `http://localhost:8081`/容器内 `http://dify_nginx`，废弃 host.docker.internal/3000/192.168.184.128 旧值）；v6.11.5~8：Dify 一体化打包 + dify-init 一键初始化（客户 dify/docker/.env 填模型 Key 自动配供应商/导入 5 应用/绑模型/导出 app key，见 docs/Dify部署与调用指南.md）+ 合并 master 10 项公共模块（注册免审批等，pytest 157/157）；上一版 v6.11.4 REMOTE_ACCESS.md 补 localtunnel 方案一（免注册）+ 503 掉线已知问题与排查顺序，原方案顺延二/三/四；v6.11.3 M3 成绩三件套：新增 PUT /employee/scores/{id} 修改接口（不存在→40401）+ student_score 唯一约束 uq_student_score_unique（重复→40901，semester 归一空串）+ 成绩口径统一 0-100 + 迁移 005 清理存量 4 条重复 + E2E 幂等适配；HTTP 冒烟 7/7 + pytest 154/154 + E2E 两轮；同轮完成前端联通诊断（LOG-062）：双 MySQL 环境下 .env 3306→59000 已修、Dify 响应 13~30s 属环境性能；**+ v6.11.3 规则调整：访客 PROSPECT 注册免审批立即生效**（原 anhoa 审批门由 master 侧 qianduan 线推翻，经用户批准随第十一次同步并入）；**+ 同日第十一次同步 origin/master→anhoa（e635a93..d4aa045）**：公共模块 2 项经用户批准（M0 user_service 注册免审批反转、docker-compose DIFY_BASE_URL 回 host.docker.internal）+ M3 成绩三件套；7 份文档冲突按「双方条目均保留、以共用模块命名为基准」手工解齐）
+**最后更新**：2026-10-19（**v6.11.13 第十次同步 origin/master→master_ZNBG（ZNBG）**：合并 `55c7b81..38f396d`（上游 v6.11.10 配置审计 + v6.11.11 **M0 4 行补丁落地**——config `DIFY_REPORT_AGENT_KEY` + `AgentType.REPORT`/映射，经用户批准；**M5 阻塞 B5 销账**）+ 本机线 v6.11.9~v6.11.12（Dify 一体化打包基线/文档同步/本机环境修复/首启失败记录）先行提交保护后并入；**代码冲突 2 处按上游登记解决**（config.py/dify_init.py——本地 v6.11.10 曾移除 REPORT 登记，上游 v6.11.11 经批准重新登记，以最后决策为准）+ AGENTS.md 阻塞清单④销账；**M5 配套一行修**：报告 AI 调用 session 由动态串改 `"new"`（网关 `session!="new"` 即作 conversation_id 发送，动态串必 400；v6.11.6 同因实测结论），并同步过期注释；冲突 docs 按线标签消歧（双方 v6.11.9/10/11 同号异义并存）；生效仍差一步：`backend/.env` 回填报告 key（dify-init 导出 dify/docker/app_keys.txt），未回填恒 unavailable；回归 compileall + verify_all **29/29** + pytest 全过 + alembic 单头；详见更新记录 v6.11.13 与 LOG-071（ZNBG））
+
+**上一版记录（v6.11.11，origin/master 线）**：2026-10-19（**M0 4 行补丁落地：智能报告 Agent 登记（经用户批准）**——config.py/ai_service.py/.env.example/dify_init.py 注释/调用指南 5 处，pytest **157/157**，阻塞清单④销账；不填 key 行为不变恒 unavailable）
+
+**上一版记录（v6.11.11，ZNBG 本机线，同号异义）**：2026-10-19（本机环境修复：backend/.env 密码 password→420821；运行库 alembic stamp 004 后 upgrade head 只补跑 005 保留全部数据（student_score 104→97 清 7 条重复）；Dify 指向切打包基线（根 .env=dify_nginx、backend/.env=localhost:8081）；已下线 REPORT key 注释保留；verify_all 29/29）
+
+**上一版记录（v6.11.12，ZNBG 本机线）**：2026-10-19（一体化 Dify 栈首启实测失败（exit 1）记录：A dify/docker/.env 精简模板空值行致 api ValidationError 全容器 Restarting；B compose backend command 依赖 /run/dify-keys/app_keys.env 但 volumes 缺 dify_app_keys 挂载；按用户决定**暂不修复、仅记录**；业务侧旧拓扑 4 容器可用；详见 LOG-070（ZNBG）与路线图移交清单第 25 项）
+
+**上一版记录（v6.11.10，origin/master 线，同号异义）**：2026-10-19（交付前全面配置审计：5 类滞留修复（REMOTE_ACCESS 一体化说明/文档索引版本/进度行补 v6.11.3~9/Dify_接入与智能报告旧 VM 值标注/M5 上游契约 §5.2 历史标注），纯文档）
+
+**上一版记录（v6.11.10，ZNBG 本机线，同号异义）**：2026-10-19（同步 origin/master 文档基线并按用户逐项确认处理共用模块：M0 移除 REPORT Agent 登记、M5 报告调用恢复动态 session ID、模型默认切 Mimo——**REPORT 登记已由上游 v6.11.11 经批准重新落地，本条决策被取代**）
+
+**上一版记录（v6.11.4 上游三笔：qianduan + longtrying_test）**：2026-10-18（①访客 PROSPECT 注册免审批（v6.11.3 规则覆盖：注册即"正常"并可立即登录，注册成功即发布 customer.registered 并创建 customer 主数据，pytest 144/144 + npm build + 注册 200 后立即登录 200）②学生端留学申请进度布局紧凑化（内容不变）③REMOTE_ACCESS.md 补 localtunnel 方案一与 503 已知问题（原方案顺延二/三/四））
+
+**上一版记录（v6.11.4，ZNBG 第八次同步）**：2026-10-18（**第八次同步 origin/master→master_ZNBG**：合并 `107f256..beb0b4e`（5 提交，longtrying_test 线）——M3 成绩三件套 v6.11.3（PUT /employee/scores/{id} + student_score 唯一约束 40901（semester 归一空串）+ 0-100 口径 + 迁移 005 清理 4 条存量重复）+ AGENTS.md §6.0 环境特异配置清单 + compose DIFY_BASE_URL 回通用别名；**共用文件经用户批准「插值方案」处理**：compose 改 `${DIFY_BASE_URL:-http://host.docker.internal}`（默认合规 §6.0），本机根 .env（gitignore）配 VM 地址覆盖，`docker compose config` 实测解析 `http://192.168.184.128`，M5 Docker 内真实 AI 不断、其他成员零影响；迁移链线性单头（005 down_revision=我方 004）；M0 零改动（AgentType/AIService/ai_service 不受影响）、M5 代码零被改；AGENTS.md 并集修复（恢复我方 v6.11.0~v6.11.2 条目 + 上游 v6.11.3 条目去重 3→1）；回归 compileall + verify_all **29/29** + pytest **154/154** + alembic 单头 + compose config 插值验证；npm build 未跑（前端零变更）；详见更新记录 v6.11.4 与 LOG-063（ZNBG））
+
+**上一版记录（v6.11.3，longtrying_test）**：2026-10-18（v6.11.3 M3 成绩三件套：新增 PUT /employee/scores/{id} 修改接口（不存在→40401）+ student_score 唯一约束 uq_student_score_unique（重复→40901，semester 归一空串）+ 成绩口径统一 0-100 + 迁移 005 清理存量 4 条重复 + E2E 幂等适配；HTTP 冒烟 7/7 + pytest 154/154 + E2E 两轮；同轮完成前端联通诊断（LOG-062）：双 MySQL 环境下 .env 3306→59000 已修、Dify 响应 13~30s 属环境性能）
+
+**上一版记录（v6.11.0~v6.11.2，ZNBG）**：2026-10-18（**M5 一期需求对齐改造（只改 M5 文件）**：①画像四类独立（符合/部分符合/不符合/信息不足）+ 分母只计有研判客户 ②期末状态不可得（不用当前值冒充）③数据源失败改部分生成 ④下钻快照化（新表 ai_report_drill + 迁移 004）⑤投诉 AI 独立表 ticket_ai_analysis + 类型来源 + 待分析只计总量 + 特别案例一期 AI 判定 ⑥AI 改报告专用 Agent（未登记即不可用、不回落 mock）⑦前端周期选择/历史版本/月度对比/状态徽标/完整详情 ⑧新增 /reports/versions，下钻带 note ⑨保留归一与容错作防御 ⑩新增 docs/M5_上游接口契约.md；**v6.11.1/v6.11.2 Dify「智能报告」接入**：改用同名 Chatflow（advanced-chat）发布后 blocking 实测 200、JSON 契约 PASS、DSL 已导出 dify/apps/；M5 加固 think 剥离；回归 pytest **146/146**、verify_all **29/29**、compileall、`npm run build`、Docker E2E **80/80**、production 16/16、迁移 004 上下往返通过；剩余唯一阻塞交 M0（4 行补丁：config DIFY_REPORT_AGENT_KEY + ai_service AgentType.REPORT））
 
 **上一版记录（v6.10.5 anhoa FAQ）**：2026-10-18（**v6.10.5（anhoa）客服 FAQ 应答修复**：实测「公司简称是什么？」两入口均无回答——根因①Chatflow DSL 无知识检索节点而红线 1 要求公司信息以【知识库内容】为准→恒落兜底；②cs_faq 表依赖独立种子脚本，`seed_data.py` 重建库清空后不补跑即 P5 空转；③种子问法「公司简称什么?」差异。修复：Chatflow v3 内嵌 37 条 FAQ 速查表（逐字同源 cs_faq_seed.json，导入即生效零基础设施依赖）+ 红线 1 权威来源新增【FAQ 速查表】+ FAQ few-shot；种子 upsert+`QUESTION_RENAMES` 问法迁移+keywords；新增 `tests/test_cs_faq_match.py` 5 项。回归 pytest **151/151**、verify_all **29/29**、compileall、YAML 静态检查、种子连跑两次幂等、本机接口实测 P5 命中（answer=简称"粤教服务"、card_data.faq 正确）；**Dify 侧方案 B 已落地**：VM `2f92093f`（key 所指，v6.9.9 七分支编排）7 支 prompt 全注入速查表并发布实测三问全过 + `143c1127` 导入版修 kr 空绑并发布；备份 `dify/workflows/_vm_backup_v6.10.5/`；注意速查表第 25 条缴费账号在提示词内按红线 3 改为引导顾问，P5 路径仍按原文返回、两路径口径差异待业务确认；新发现意图码契约漂移（business/policy/event_signup vs 后端 9 码）待 M2 对齐；⚠ **本条中「注册审批门失效致 40006/审批实例不再触发」的表述已随 v6.11.3 免审批规则调整成为既定方向**）
 
@@ -852,9 +894,9 @@ chore: 构建
 ## v6.9.3 merge and AI environment update - 2026-10-17
 - Merge baseline: master v6.9.2 remote access names are retained, including nginx, ngrok and localtunnel.
 - Local runtime uses MySQL 8 on localhost port 3306, database GuangdongEducationStudyAbroadProgram, user root, password 123456.
-- backend .env is ignored and contains the real Agnes model key. Never copy the key into Git or documentation.
+- backend .env is ignored and contains the real Mimo model key. Never copy the key into Git or documentation.
 - Native Dify app keys remain placeholders until the Dify workspace publishes real app keys.
-- Agnes is the common model fallback for student agent, student psych chat, employee agent, employee guide and smart report analysis. Deterministic fallback remains the final layer.
+- Mimo is the common model fallback for student agent, student psych chat, employee agent, employee guide and smart report analysis. Deterministic fallback remains the final layer.
 - A customer cannot submit more than one pending student conversion application. Duplicate submission returns business code 40901.
 - Regression result: compileall passed, verify_all 27 of 27, pytest 64 of 64, frontend build passed and live AI smoke passed.
 
@@ -891,9 +933,13 @@ chore: 构建
 
 > 文档索引补充：`docs/前端无法解决问题清单.md`（前端无法根治问题、后端解决方案、验收标准）。
 
-> v6.11.3 规则覆盖：访客 PROSPECT 注册免审批，注册即“正常”并可立即登录；详见更新记录。
+> v6.11.3 规则覆盖（qianduan 线，2026-10-18）：访客 PROSPECT 注册免审批，注册即"正常"并可立即登录；详见更新记录。
 
-> v6.11.4：学生端留学申请进度布局紧凑化，内容不变；npm build 通过。
+> v6.11.4（qianduan 线）：学生端留学申请进度布局紧凑化，内容不变；npm build 通过。
+
+**最后更新**：2026-10-19（**v6.11.17 M5 production 投诉域静默清零缺陷修复（ZNBG）**：`report_data_source.py` 补 `ComplaintReportInput` 导入（v6.11.0 投诉域改写遗漏；局部注解不求值掩盖至调用处 NameError，被 v6.9.6 逐行容错静默吞掉、报告仍 completed，production 任意含工单周期投诉指标恒 0）+ 新增防回退用例（test_report_data_source 9/9）；实测含工单周期 orders_total 0→9 / new_count 6 / analyzed_count 8；同轮回归 compileall + verify_all 29/29 + pytest 158/158 + Docker E2E 81/81 + production 冒烟 7/7 + npm build；另含同日 v6.11.15/v6.11.16 Dify 一体化部署修复与 Dify 1.16 初始化兼容修复（用户交付，见 LOG-073）；详见更新记录 v6.11.17 与 LOG-074（ZNBG））
+
+**最后更新**：2026-10-19（**v6.11.14 第十一次同步 origin/master→master_ZNBG（ZNBG）**：合并 `ff20368..027874d`——上游 v6.11.12 **M0 config.py 直连模型默认值去供应商化**（`DIFY_MODEL_BASE_URL`/`DIFY_MODEL_NAME` mimo→全空，经用户批准）+ `.env.example`/`dify/docker/.env` 模板同步 + dify-init DSL `your-model-name` 占位符注入（导入时替换为客户模型名，解决 Chatflow LLM 节点改不到模型的固有问题）+ 删「模型 key 为空即 fail」强阻塞 + 5 个 dify/apps yml 去绑定；M5 零影响（报告 AI 走 REPORT Agent 不依赖直连降级）；行为变化：模型三件套未配置的机器直连降级跳过、走本地话术兜底（本机 .env 已配则无感）；冲突 9 处（3 yml 说明注释取上游去供应商版 + 6 docs 并集线标签消歧，双方 v6.11.12 同号异义并存）；回归 compileall + verify_all 29/29 + pytest 全过 + alembic 单头；详见更新记录 v6.11.14 与 LOG-072（ZNBG））
 
 > v6.11.12：Dify 模型配置去供应商绑定——`DIFY_MODEL_API_KEY`/`DIFY_MODEL_BASE_URL`/`DIFY_MODEL_NAME` 默认值全空（OpenAI-API-compatible 通用协议，key/url/模型名全客户自定义，不绑定任何特定模型）；dify-init 三变量必填校验（缺任一项初始化失败并阻塞 backend）；dify/apps 5 个 yml 模型统一 `your-model-name` 占位符（dify-init 导入时注入客户配置模型名，Chatflow 工作流节点同源生效）；详见更新记录 v6.11.12。
 
