@@ -87,6 +87,14 @@ export const platformApi = {
   csChat: (data: AnyRecord) => toData(request.post('/ai/customer-service/chat', data)),
   // v6.10.3：客服开场白（AgentDock 打开客服窗时拉取；Dify opening_statement 不经 Service API 返回，由后端统一供文案）
   csGreeting: () => toData(request.get('/cs/greeting')),
+  // 客户研判工具页：单条研判（文本/对话/注册信息渠道）
+  assessText: (data: AnyRecord) => toData(request.post('/crm/assessments/text', data)),
+  // 客户研判工具页：文件研判（PDF/Excel/Word 等，后端 extract_text → assess_text）
+  assessFile: (file: File) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return toData(request.post('/crm/assessments/file', fd, { headers: { 'Content-Type': 'multipart/form-data' } }))
+  },
   policies: () => Promise.resolve(policies),
   notifications: (params: AnyRecord = {}) => fallback(() => request.get('/notifications', { params: query(params) }), notifications),
   notificationsUnread: () => toData(request.get('/notifications/unread-count')),

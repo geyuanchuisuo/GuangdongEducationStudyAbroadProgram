@@ -110,6 +110,12 @@ class CrmService:
         )
         created = await self.repo.create_lead(lead)
 
+        # 录入即研判：结构化字段+原文跑规则引擎落库；失败不阻断录入主流程
+        try:
+            await self._run_entry_assessment(customer, data, owner_id)
+        except Exception:
+            logger.exception("录入自动研判失败 customer_id=%s", customer.id)
+
         if created_customer:
             try:
                 await event_bus.publish(
@@ -125,6 +131,53 @@ class CrmService:
                 logger.exception("发布 customer.registered 事件失败")
 
         return {"lead": CrmLeadOut.model_validate(created).model_dump(), "created": created_customer}
+
+    async def _run_entry_assessment(self, customer: Customer, data: CrmLeadCreate, owner_id: int | None) -> None:
+        """录入客户时自动执行规则研判并落库 customer_assessment（input_source=employee_entry）。"""
+        from app.assessment.engine import CustomerAssessmentEngine
+        from app.assessment.schemas import AssessmentRequest
+
+        registration = {
+            key: value
+            for key, value in {
+                "姓名": data.name,
+                "性别": data.gender,
+                "年龄": str(data.age) if data.age is not None else None,
+                "联系方式": data.phone,
+                "学历": data.education,
+                "家庭经济状况": data.economy,
+                "职业需求": data.needs,
+                "德语能力": data.german_ability,
+            }.items()
+            if value
+        }
+        content = (data.raw_input or "").strip()
+        if content:
+            request = AssessmentRequest(content=content, source_type="text", registration=registration or None)
+        else:
+            # 无原文时按注册信息渠道处理：仅从结构化字段取值（content 允许为空）
+            request = AssessmentRequest(content="", source_type="registration", registration=registration)
+        record = CustomerAssessmentEngine().assess_one(request)
+
+        assessments = record.assessments or {}
+        sg = assessments.get("singapore") or {}
+        de = assessments.get("germany") or {}
+        assessment = CustomerAssessment(
+            customer_id=customer.id,
+            input_source="employee_entry",
+            status=record.status,
+            sg_conclusion=sg.get("conclusion"),
+            de_conclusion=de.get("conclusion"),
+            dimensions_json={"singapore": sg.get("dimensions"), "germany": de.get("dimensions")} if assessments else None,
+            matched_programs_json={"singapore": sg.get("matched_programs"), "germany": de.get("matched_programs")} if assessments else None,
+            recommended_json=record.recommended_projects,
+            missing_info_json=record.missing_info,
+            conflicts_json=record.conflicts,
+            overview=record.customer_overview,
+            follow_up_advice=record.follow_up_advice,
+            employee_id=owner_id,
+        )
+        await self.repo.create_assessment(assessment)
 
     async def get_lead(self, lead_id: int, current_user: User) -> dict:
         lead = await self._get_owned_lead(lead_id, current_user)

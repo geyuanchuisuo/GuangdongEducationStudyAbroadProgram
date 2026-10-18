@@ -33,6 +33,7 @@ from app.services.employee_event_handlers import (
     handle_customer_registered,
     handle_psych_alert_created,
 )
+from app.services.customer_event_handlers import handle_approval_approved
 from app.services.event_bus import event_bus
 from app.services.event_contracts import EventType
 from app.utils.logger import logger
@@ -48,7 +49,10 @@ async def lifespan(app: FastAPI):
     # M3 员工模块：订阅事件 → 生成员工待办
     event_bus.subscribe(EventType.CUSTOMER_REGISTERED.value, handle_customer_registered)
     event_bus.subscribe(EventType.PSYCH_ALERT_CREATED.value, handle_psych_alert_created)
+    # M1 客户模块：审批通过后置处理（convert 审批 → PROSPECT 转 STUDENT）
+    event_bus.subscribe(EventType.APPROVAL_APPROVED.value, handle_approval_approved)
     logger.info("M3 事件订阅完成：customer.registered / psych_alert.created")
+    logger.info("M1 事件订阅完成：approval.approved（客户转留学生）")
 
     yield
     await engine.dispose()

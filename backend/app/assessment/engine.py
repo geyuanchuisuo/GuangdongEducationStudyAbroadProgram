@@ -31,7 +31,7 @@ class CustomerAssessmentEngine:
     """严格按研判提示词的确定性规则执行，保留原文证据且不调用外部模型。"""
 
     def assess_one(self, request: AssessmentRequest, index: int = 1) -> AssessmentRecord:
-        facts = extract_facts(request.content, request.registration)
+        facts = extract_facts(request.content, request.registration, dialogue=request.source_type == "dialogue")
         customer = self._customer(facts)
         if not has_recognizable_customer_info(facts):
             return self._invalid(index, "invalid_input", "未提取到任何可识别的客户信息", customer)
@@ -62,7 +62,7 @@ class CustomerAssessmentEngine:
         groups: dict[str, list[tuple[int, AssessmentRequest]]] = defaultdict(list)
         no_phone: list[tuple[int, AssessmentRequest]] = []
         for index, request in enumerate(requests, start=1):
-            facts = extract_facts(request.content, request.registration)
+            facts = extract_facts(request.content, request.registration, dialogue=request.source_type == "dialogue")
             if facts.phone:
                 groups[facts.phone].append((index, request))
             else:
@@ -77,7 +77,7 @@ class CustomerAssessmentEngine:
             result = self.assess_one(merged, first_index)
             result.conflicts = conflicts
             if result.status == "valid":
-                facts = extract_facts(merged.content, merged.registration)
+                facts = extract_facts(merged.content, merged.registration, dialogue=merged.source_type == "dialogue")
                 result.follow_up_advice = self._advice(facts, result.missing_info, conflicts)
             results.append(result)
         return sorted(results, key=lambda item: item.index)
@@ -234,7 +234,7 @@ class CustomerAssessmentEngine:
 
     def _merge(self, group: list[tuple[int, AssessmentRequest]]) -> tuple[AssessmentRequest, list[str]]:
         """同号批内信息合并：拼接原文，并显式报告相互冲突字段。"""
-        facts = [extract_facts(req.content, req.registration) for _, req in group]
+        facts = [extract_facts(req.content, req.registration, dialogue=req.source_type == "dialogue") for _, req in group]
         conflicts: list[str] = []
         for attr, label in (("name", "姓名"), ("gender", "性别"), ("age_text", "年龄"), ("education", "学历")):
             values = list(dict.fromkeys(str(getattr(item, attr)) for item in facts if getattr(item, attr)))
