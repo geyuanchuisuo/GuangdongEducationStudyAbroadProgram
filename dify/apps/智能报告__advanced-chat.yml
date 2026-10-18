@@ -120,7 +120,9 @@ workflow:
             temperature: 0.7
           mode: chat
           name: your-model-name
-          provider: openai-api-compatible
+          provider: your-model-provider
+        context:
+          enabled: false
         prompt_template:
         - id: a309e365-01e7-4b79-8b07-ca84c86f9340
           role: system

@@ -1,25 +1,50 @@
-# 企业员工助手 Agent 应用配置（v6.11.4 导出骨架）
+# 企业员工助手 Agent 应用配置（v6.11.4 骨架，v6.11.14 对齐 Dify 1.16 DSL 0.5.0 model_config 结构）
 # 导入说明：
-#   1. Dify 控制台「创建应用 → 导入 DSL」选此文件
-#   2. 导入后需在「模型供应商」绑定 OpenAI-API-compatible 模型（地址与模型名以 dify/docker/.env 客户配置为准），并在本应用模型设置里选它
+#   1. dify-init 自动导入（推荐）；或 Dify 控制台「创建应用 → 导入 DSL」选此文件
+#   2. your-model-name / your-model-provider 为占位符，由 dify-init 导入时注入 dify/docker/.env 的客户模型配置
 #   3. 建议挂载知识库《公司新人指南》（员工入职/业务流程）
 #   4. 后端会通过 inputs.capabilities 注入当前员工可用能力清单（见 backend/app/services/employee_service.py _build_agent_context），本 prompt 仅为基础人设
 app:
-  name: 企业员工助手
   description: 粤教留学员工端智能助手，支持 CRM 管理、日报整理、待办提醒、指令式业务处理
   icon: 🤖
   icon_background: '#FFEAD5'
-  mode: agent-chat
-  use_icon_as_answer_icon: true
-model:
-  provider: openai-api-compatible
-  name: your-model-name
   mode: chat
-  completion_params:
-    temperature: 0.7
-    max_tokens: 4096
-    top_p: 1
-prompt:
+  name: 企业员工助手
+  use_icon_as_answer_icon: true
+kind: app
+model_config:
+  agent_mode:
+    enabled: false
+    prompt: null
+    strategy: null
+    tools: []
+  annotation_reply:
+    enabled: false
+  chat_prompt_config: {}
+  completion_prompt_config: {}
+  dataset_configs:
+    retrieval_model: multiple
+  dataset_query_variable: null
+  external_data_tools: []
+  file_upload:
+    image:
+      detail: high
+      enabled: false
+      number_limits: 3
+      transfer_methods:
+      - remote_url
+      - local_file
+  model:
+    completion_params:
+      temperature: 0.7
+      max_tokens: 4096
+      top_p: 1
+    mode: chat
+    name: your-model-name
+    provider: your-model-provider
+  more_like_this:
+    enabled: false
+  opening_statement: 你好，我是企业员工助手。我可以帮你管理客户、整理日报、设置待办，或用自然语言下达业务指令。今天想处理什么？
   pre_prompt: |
     你是粤教留学的「企业员工助手」，服务对象是公司内部员工。
 
@@ -34,42 +59,22 @@ prompt:
     - 执行前必须提示员工确认，不得自行执行写操作
 
     后端会在 inputs.capabilities 中注入当前员工的可用能力清单，你只能在此范围内提供服务。
-  opening_statement: 你好，我是企业员工助手。我可以帮你管理客户、整理日报、设置待办，或用自然语言下达业务指令。今天想处理什么？
-  suggested_questions:
-    - 帮我整理今天的日报
-    - 我有哪些待办？
-    - 录入一条客户跟进记录
-conversation_memory:
-  window:
-    enabled: true
-    size: 5
-  role_prefix:
-    user: ''
-    assistant: ''
-features:
-  file_upload:
-    enabled: true
-    allowed_file_types: [image, document]
-    allowed_file_extensions: [.png, .jpg, .jpeg, .pdf, .doc, .docx, .xls, .xlsx]
-    number_limits: 5
-    transfer_method: local_file
+  prompt_type: simple
   retriever_resource:
     enabled: true
-sensitive_word_avoidance:
-  enabled: false
-more_like_this:
-  enabled: false
-speech_to_text:
-  enabled: false
-text_to_speech:
-  enabled: false
-  language: ''
-  voice: ''
-citation:
-  enabled: false
-moderation:
-  enabled: false
-  type: keywords
-  keywords: []
-agents: {}
-toolbox: []
+  sensitive_word_avoidance:
+    configs: []
+    enabled: false
+    type: ''
+  speech_to_text:
+    enabled: false
+  suggested_questions:
+  - 帮我整理今天的日报
+  - 我有哪些待办？
+  - 录入一条客户跟进记录
+  suggested_questions_after_answer:
+    enabled: false
+  text_to_speech:
+    enabled: false
+  user_input_form: []
+version: 0.5.0

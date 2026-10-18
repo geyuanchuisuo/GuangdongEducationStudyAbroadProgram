@@ -14,6 +14,7 @@ Dify 一键初始化脚本（dify-init 容器入口）
 运行环境：dify-init 容器内（与 Dify api 同 docker 网络）
 """
 
+import base64
 import glob
 import json
 import os
@@ -36,8 +37,10 @@ AUTO_BIND = os.environ.get("DIFY_INIT_AUTO_BIND_MODEL", "true").lower() == "true
 APPS_DIR = os.environ.get("DIFY_APPS_DIR", "/apps")
 APP_KEYS_FILE = os.environ.get("DIFY_APP_KEYS_FILE", "/output/app_keys.txt")
 
-# 模型供应商标识（OpenAI-API-compatible）
-MODEL_PROVIDER = "openai-api-compatible"
+# 模型供应商标识（Dify 1.16 插件化：OpenAI-API-compatible 供应商 = 模型插件，三段式标识）
+MODEL_PROVIDER = "langgenius/openai_api_compatible/openai_api_compatible"
+MODEL_PLUGIN_ID = "langgenius/openai_api_compatible"
+MARKETPLACE_API_URL = "https://marketplace.dify.ai"
 MODEL_MODE = "chat"  # 业务应用均用对话模型
 
 
@@ -56,7 +59,8 @@ def wait_for_dify(timeout: int = 180) -> None:
     deadline = time.time() + timeout
     while time.time() < deadline:
         try:
-            r = httpx.get(f"{DIFY_API_URL}/health", timeout=10)
+            # 探 /console/api/setup（业务级探活）：/health 不查 DB，DB 未就绪时会「假 healthy」
+            r = httpx.get(f"{DIFY_API_URL}/console/api/setup", timeout=10)
             if r.status_code == 200:
                 log("✅ Dify api 已就绪")
                 return
@@ -66,30 +70,46 @@ def wait_for_dify(timeout: int = 180) -> None:
     fail(f"Dify api 在 {timeout}s 内未就绪")
 
 
+def _b64pwd(password: str) -> str:
+    """Dify console 接口要求密码字段 base64 编码（前端 btoa 行为）"""
+    return base64.b64encode(password.encode("utf-8")).decode("ascii")
+
+
 # ── 步骤 2：登录/创建管理员 ───────────────────────────────
+def _create_admin(client: httpx.Client) -> None:
+    log("Dify 未初始化，自动创建管理员...")
+    # 注意：setup 接口无解码装饰器，password 传明文（valid_password 校验+原样哈希存储）；
+    # login 接口则要求 base64（decrypt_password_field 服务端解码）——两者契约不同
+    r = client.post(
+        f"{DIFY_API_URL}/console/api/setup",
+        json={
+            "email": DIFY_ADMIN_EMAIL,
+            "name": "Admin",
+            "password": DIFY_ADMIN_PASSWORD,
+        },
+        timeout=30,
+    )
+    if r.status_code not in (200, 201):
+        fail(f"创建管理员失败: {r.status_code} {r.text[:300]}")
+    log("✅ 管理员创建成功")
+
+
 def get_access_token(client: httpx.Client) -> str:
     """返回 console access_token"""
     # 先检测是否已初始化
     try:
-        r = client.get(f"{DIFY_API_URL}/api/setup", timeout=15)
+        r = client.get(f"{DIFY_API_URL}/console/api/setup", timeout=15)
         if r.status_code == 200:
-            data = r.json()
-            not_configured = data.get("not_configured", False)
+            data = r.json() or {}
+            # Dify 1.16 状态 schema：{"step": "not_started"|"finished", "setup_at": ...}
+            step = data.get("step")
+            not_configured = (
+                step == "not_started"
+                if step is not None
+                else (data.get("not_configured") or not (data.get("setup_at") or data.get("setup_time")))
+            )
             if not_configured:
-                log("Dify 未初始化，自动创建管理员...")
-                r = client.post(
-                    f"{DIFY_API_URL}/api/setup",
-                    json={
-                        "email": DIFY_ADMIN_EMAIL,
-                        "name": "Admin",
-                        "password": DIFY_ADMIN_PASSWORD,
-                        "allow_register": False,
-                    },
-                    timeout=30,
-                )
-                if r.status_code not in (200, 201):
-                    fail(f"创建管理员失败: {r.status_code} {r.text[:300]}")
-                log("✅ 管理员创建成功")
+                _create_admin(client)
             else:
                 log("Dify 已初始化，使用预设账号登录")
         else:
@@ -97,26 +117,114 @@ def get_access_token(client: httpx.Client) -> str:
     except httpx.HTTPError as e:
         fail(f"检测 Dify 初始化状态失败: {e}")
 
-    # 登录
+    # 登录（401 not_setup 时兜底：自动初始化后重试一次）
     r = client.post(
-        f"{DIFY_API_URL}/api/console/login",
-        json={"email": DIFY_ADMIN_EMAIL, "password": DIFY_ADMIN_PASSWORD, "remember_me": True},
+        f"{DIFY_API_URL}/console/api/login",
+        json={"email": DIFY_ADMIN_EMAIL, "password": _b64pwd(DIFY_ADMIN_PASSWORD), "remember_me": True},
         timeout=30,
     )
+    if r.status_code != 200 and "not_setup" in r.text:
+        log("登录返回 not_setup，执行初始化后重试...")
+        _create_admin(client)
+        r = client.post(
+            f"{DIFY_API_URL}/console/api/login",
+            json={"email": DIFY_ADMIN_EMAIL, "password": _b64pwd(DIFY_ADMIN_PASSWORD), "remember_me": True},
+            timeout=30,
+        )
     if r.status_code != 200:
         fail(f"登录失败: {r.status_code} {r.text[:300]}（检查 DIFY_ADMIN_EMAIL/PASSWORD）")
-    token = r.json().get("access_token")
-    if not token:
-        fail(f"登录响应无 access_token: {r.text[:300]}")
-    log("✅ 管理员登录成功")
+    token = r.json().get("access_token") or ""
+    if token:
+        log("✅ 管理员登录成功（token 模式）")
+    else:
+        # Dify 1.16 控制台登录只回 {"result":"success"}，会话走 cookie + X-CSRF-Token（不下发 token）
+        log("✅ 管理员登录成功（cookie 会话模式）")
     return token
+
+
+def build_headers(client: httpx.Client, token: str) -> dict:
+    """认证头：兼容 token 模式（Bearer）与 cookie 会话模式（X-CSRF-Token）"""
+    headers = {}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    csrf = client.cookies.get("csrf_token") or client.cookies.get("X-CSRF-Token")
+    if csrf:
+        headers["X-CSRF-Token"] = csrf
+    return headers
+
+
+# ── 步骤 2.5：确保模型插件已安装（Dify 1.16 插件化，OpenAI-API-compatible 供应商=插件）──
+def ensure_model_plugin(client: httpx.Client, token: str) -> None:
+    headers = build_headers(client, token)
+    r = client.get(
+        f"{DIFY_API_URL}/console/api/workspaces/current/model-providers",
+        headers=headers,
+        params={"model_type": "llm"},
+        timeout=30,
+    )
+    if r.status_code == 200 and any(
+        p.get("provider") == MODEL_PROVIDER for p in (r.json().get("data") or [])
+    ):
+        log(f"模型插件 {MODEL_PLUGIN_ID} 已就位，跳过安装")
+        return
+
+    log(f"模型插件 {MODEL_PLUGIN_ID} 未安装，从 marketplace 获取最新包标识 ...")
+    try:
+        r = httpx.post(
+            f"{MARKETPLACE_API_URL}/api/v1/plugins/batch",
+            json={"plugin_ids": [MODEL_PLUGIN_ID]},
+            headers={"X-Dify-Version": "1.16.0-rc1"},
+            timeout=30,
+        )
+        plugins = (r.json().get("data") or {}).get("plugins") or []
+        ident = plugins[0].get("latest_package_identifier") if plugins else None
+        if not ident:
+            fail(f"marketplace 未返回 {MODEL_PLUGIN_ID} 的包标识")
+    except httpx.HTTPError as e:
+        fail(f"访问 marketplace 失败（需外网）: {e}")
+
+    log(f"安装模型插件: {ident} ...")
+    r = client.post(
+        f"{DIFY_API_URL}/console/api/workspaces/current/plugin/install/marketplace",
+        headers=headers,
+        json={"plugin_unique_identifiers": [ident]},
+        timeout=60,
+    )
+    if r.status_code != 200:
+        fail(f"安装模型插件失败: {r.status_code} {r.text[:300]}")
+
+    # 轮询安装任务直到 success（插件含依赖编译，最长等 240s）
+    for _ in range(40):
+        time.sleep(6)
+        r = client.get(
+            f"{DIFY_API_URL}/console/api/workspaces/current/plugin/tasks",
+            headers=headers,
+            params={"page": 1, "page_size": 5},
+            timeout=30,
+        )
+        if r.status_code != 200:
+            continue
+        for task in (r.json().get("tasks") or []):
+            for p in task.get("plugins") or []:
+                if p.get("plugin_id") == MODEL_PLUGIN_ID:
+                    if p.get("status") == "success":
+                        log("✅ 模型插件安装完成")
+                        return
+                    if p.get("status") in ("failed", "error"):
+                        fail(f"模型插件安装失败: {p.get('message')}")
+    fail("模型插件安装超时（240s）")
 
 
 # ── 步骤 3：添加模型供应商 ────────────────────────────────
 def setup_model_provider(client: httpx.Client, token: str) -> None:
-    headers = {"Authorization": f"Bearer {token}"}
-    # 查询现有模型供应商，避免重复
-    r = client.get(f"{DIFY_API_URL}/api/console/model-providers", headers=headers, timeout=30)
+    headers = build_headers(client, token)
+    # 查询现有模型供应商（Dify 1.16：/workspaces/current/model-providers），避免重复
+    r = client.get(
+        f"{DIFY_API_URL}/console/api/workspaces/current/model-providers",
+        headers=headers,
+        params={"model_type": "llm"},
+        timeout=30,
+    )
     if r.status_code != 200:
         fail(f"查询模型供应商失败: {r.status_code} {r.text[:300]}")
 
@@ -126,20 +234,20 @@ def setup_model_provider(client: httpx.Client, token: str) -> None:
     if exists:
         log(f"模型供应商 {MODEL_PROVIDER} 已存在，跳过添加")
     else:
-        log(f"添加模型供应商 {MODEL_PROVIDER} ...")
+        log(f"添加模型供应商 {MODEL_PROVIDER} 凭证 ...")
+        # Dify 1.16：POST .../credentials 保存供应商凭证（服务端会校验凭证有效性）
         r = client.post(
-            f"{DIFY_API_URL}/api/console/model-providers/{MODEL_PROVIDER}",
+            f"{DIFY_API_URL}/console/api/workspaces/current/model-providers/{MODEL_PROVIDER}/credentials",
             headers=headers,
             json={
-                "config": {
-                    "credentials": {
-                        "api_key": DIFY_MODEL_API_KEY,
-                        "base_url": DIFY_MODEL_BASE_URL,
-                        "mode": MODEL_MODE,
-                    }
-                }
+                "credentials": {
+                    "api_key": DIFY_MODEL_API_KEY,
+                    "base_url": DIFY_MODEL_BASE_URL,
+                    "mode": MODEL_MODE,
+                },
+                "name": "default",
             },
-            timeout=30,
+            timeout=60,
         )
         if r.status_code not in (200, 201):
             fail(f"添加模型供应商失败: {r.status_code} {r.text[:300]}")
@@ -147,23 +255,44 @@ def setup_model_provider(client: httpx.Client, token: str) -> None:
 
     # 查询该供应商下的可用模型，确认模型名存在
     r = client.get(
-        f"{DIFY_API_URL}/api/console/model-providers/{MODEL_PROVIDER}/models",
+        f"{DIFY_API_URL}/console/api/workspaces/current/model-providers/{MODEL_PROVIDER}/models",
         headers=headers,
         timeout=30,
     )
+    model_names = []
     if r.status_code == 200:
         models = r.json().get("data", []) or []
         model_names = [m.get("model") for m in models]
-        if DIFY_MODEL_NAME not in model_names:
-            log(f"⚠️  模型列表中未找到 {DIFY_MODEL_NAME}，可用模型: {model_names}")
-            log("   将尝试直接绑定，若失败请检查模型名称是否正确")
+    if DIFY_MODEL_NAME not in model_names:
+        # 自定义模型型供应商：需单独注册模型（Dify 1.16 models/credentials；数值字段为字符串）
+        log(f"注册自定义模型 {DIFY_MODEL_NAME} ...")
+        r = client.post(
+            f"{DIFY_API_URL}/console/api/workspaces/current/model-providers/{MODEL_PROVIDER}/models/credentials",
+            headers=headers,
+            json={
+                "model": DIFY_MODEL_NAME,
+                "model_type": "llm",
+                "credentials": {
+                    "api_key": DIFY_MODEL_API_KEY,
+                    "endpoint_url": DIFY_MODEL_BASE_URL,
+                    "mode": MODEL_MODE,
+                    "context_size": "8192",
+                    "max_tokens_to_sample": "4096",
+                },
+            },
+            timeout=60,
+        )
+        if r.status_code in (200, 201):
+            log(f"✅ 自定义模型 {DIFY_MODEL_NAME} 注册成功")
+        else:
+            fail(f"注册自定义模型失败: {r.status_code} {r.text[:300]}")
 
 
 # ── 步骤 4：导入应用 yml ──────────────────────────────────
 def list_existing_apps(client: httpx.Client, token: str) -> dict:
     """返回 {app_name: app_id}"""
-    headers = {"Authorization": f"Bearer {token}"}
-    r = client.get(f"{DIFY_API_URL}/api/apps?page=1&limit=100", headers=headers, timeout=30)
+    headers = build_headers(client, token)
+    r = client.get(f"{DIFY_API_URL}/console/api/apps?page=1&limit=100", headers=headers, timeout=30)
     if r.status_code != 200:
         fail(f"查询应用列表失败: {r.status_code} {r.text[:300]}")
     apps = r.json().get("data", []) or []
@@ -172,7 +301,7 @@ def list_existing_apps(client: httpx.Client, token: str) -> dict:
 
 def import_apps(client: httpx.Client, token: str) -> dict:
     """导入 yml，返回 {app_name: app_id}（含已存在的）"""
-    headers = {"Authorization": f"Bearer {token}"}
+    headers = build_headers(client, token)
     existing = list_existing_apps(client, token)
     log(f"Dify 现有应用: {list(existing.keys())}")
 
@@ -189,9 +318,10 @@ def import_apps(client: httpx.Client, token: str) -> dict:
         log(f"  导入应用: {name} ...")
         with open(yml_path, "r", encoding="utf-8") as f:
             dsl_content = f.read()
-        # 模型名占位符替换：yml 内统一写 your-model-name，导入前替换为客户配置的模型名
+        # 模型占位符替换：yml 内统一写 your-model-name / your-model-provider，导入前替换为客户配置值
         # （Chatflow 工作流 LLM 节点的模型取自 DSL 本身，app 级 model-config 改不到它，必须导入时注入）
         dsl_content = dsl_content.replace("your-model-name", DIFY_MODEL_NAME)
+        dsl_content = dsl_content.replace("your-model-provider", MODEL_PROVIDER)
         # 尝试解析 yaml 确认格式合法
         try:
             yaml.safe_load(dsl_content)
@@ -199,28 +329,27 @@ def import_apps(client: httpx.Client, token: str) -> dict:
             log(f"  ⚠️  {name} yml 格式警告: {e}")
 
         r = client.post(
-            f"{DIFY_API_URL}/api/apps/import",
+            f"{DIFY_API_URL}/console/api/apps/imports",
             headers=headers,
-            json={"data": dsl_content},
-            timeout=60,
+            json={"mode": "yaml-content", "yaml_content": dsl_content},
+            timeout=120,
         )
-        if r.status_code in (200, 201):
-            app_id = r.json().get("id")
-            existing[name] = app_id
-            log(f"  ✅ {name} 导入成功 (id={app_id})")
+        if r.status_code in (200, 201, 202):
+            log(f"  ✅ {name} 导入成功")
         else:
             log(f"  ⚠️  {name} 导入返回 {r.status_code}: {r.text[:200]}，尝试继续")
 
-    return existing
+    # 导入后统一重查应用列表，拿最新 name→id 映射（导入接口两步式，不依赖响应体）
+    return list_existing_apps(client, token)
 
 
 # ── 步骤 5：绑定模型 ──────────────────────────────────────
 def bind_model_to_apps(client: httpx.Client, token: str, apps: dict) -> None:
-    headers = {"Authorization": f"Bearer {token}"}
+    headers = build_headers(client, token)
     for name, app_id in apps.items():
         log(f"  绑定模型到 {name} ...")
         # 先获取当前 model-config 结构
-        r = client.get(f"{DIFY_API_URL}/api/apps/{app_id}/model-config", headers=headers, timeout=30)
+        r = client.get(f"{DIFY_API_URL}/console/api/apps/{app_id}/model-config", headers=headers, timeout=30)
         if r.status_code != 200:
             log(f"    获取 model-config 失败: {r.status_code}，跳过")
             continue
@@ -230,7 +359,7 @@ def bind_model_to_apps(client: httpx.Client, token: str, apps: dict) -> None:
         current["model"]["name"] = DIFY_MODEL_NAME
         current["model"]["mode"] = MODEL_MODE
         r = client.post(
-            f"{DIFY_API_URL}/api/apps/{app_id}/model-config",
+            f"{DIFY_API_URL}/console/api/apps/{app_id}/model-config",
             headers=headers,
             json=current,
             timeout=30,
@@ -241,9 +370,25 @@ def bind_model_to_apps(client: httpx.Client, token: str, apps: dict) -> None:
             log(f"    ⚠️  绑定返回 {r.status_code}: {r.text[:200]}")
 
 
+# ── 步骤 5.5：发布工作流（advanced-chat 导入后未发布，调 API 报 Workflow not published）──
+def publish_workflows(client: httpx.Client, token: str, apps: dict) -> None:
+    headers = build_headers(client, token)
+    for name, app_id in apps.items():
+        r = client.post(
+            f"{DIFY_API_URL}/console/api/apps/{app_id}/workflows/publish",
+            headers=headers,
+            json={},
+            timeout=30,
+        )
+        if r.status_code in (200, 201):
+            log(f"    ✅ {name} 工作流已发布")
+        else:
+            log(f"    （{name} 非工作流应用或已发布，跳过：{r.status_code}）")
+
+
 # ── 步骤 6：输出 app key ──────────────────────────────────
 def export_app_keys(client: httpx.Client, token: str, apps: dict) -> None:
-    headers = {"Authorization": f"Bearer {token}"}
+    headers = build_headers(client, token)
     lines = [
         "# Dify 应用 API Key（由 dify-init 自动生成）",
         "# 请将下方 key 复制到 backend/.env 对应变量：",
@@ -254,7 +399,7 @@ def export_app_keys(client: httpx.Client, token: str, apps: dict) -> None:
         "",
     ]
     for name, app_id in apps.items():
-        r = client.get(f"{DIFY_API_URL}/api/apps/{app_id}/api-keys", headers=headers, timeout=30)
+        r = client.get(f"{DIFY_API_URL}/console/api/apps/{app_id}/api-keys", headers=headers, timeout=30)
         key = ""
         if r.status_code == 200:
             keys = r.json().get("data", []) or []
@@ -263,7 +408,7 @@ def export_app_keys(client: httpx.Client, token: str, apps: dict) -> None:
         if not key:
             # 没有 key 则创建一个
             r = client.post(
-                f"{DIFY_API_URL}/api/apps/{app_id}/api-keys",
+                f"{DIFY_API_URL}/console/api/apps/{app_id}/api-keys",
                 headers=headers,
                 json={},
                 timeout=30,
@@ -314,6 +459,7 @@ def main() -> None:
 
     with httpx.Client() as client:
         token = get_access_token(client)
+        ensure_model_plugin(client, token)
         setup_model_provider(client, token)
 
         apps = {}
@@ -326,6 +472,8 @@ def main() -> None:
         if AUTO_BIND and apps:
             log("绑定模型到应用 ...")
             bind_model_to_apps(client, token, apps)
+            log("发布工作流 ...")
+            publish_workflows(client, token, apps)
 
         if apps:
             export_app_keys(client, token, apps)
