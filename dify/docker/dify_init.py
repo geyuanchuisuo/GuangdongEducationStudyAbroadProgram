@@ -29,8 +29,8 @@ DIFY_API_URL = os.environ.get("DIFY_API_URL", "http://api:5001")
 DIFY_ADMIN_EMAIL = os.environ.get("DIFY_ADMIN_EMAIL", "admin@example.com")
 DIFY_ADMIN_PASSWORD = os.environ.get("DIFY_ADMIN_PASSWORD", "")
 DIFY_MODEL_API_KEY = os.environ.get("DIFY_MODEL_API_KEY", "")
-DIFY_MODEL_BASE_URL = os.environ.get("DIFY_MODEL_BASE_URL", "https://api.xiaomimimo.com/v1")
-DIFY_MODEL_NAME = os.environ.get("DIFY_MODEL_NAME", "mimo-v2.6-flash")
+DIFY_MODEL_BASE_URL = os.environ.get("DIFY_MODEL_BASE_URL", "")
+DIFY_MODEL_NAME = os.environ.get("DIFY_MODEL_NAME", "")
 AUTO_IMPORT = os.environ.get("DIFY_INIT_AUTO_IMPORT", "true").lower() == "true"
 AUTO_BIND = os.environ.get("DIFY_INIT_AUTO_BIND_MODEL", "true").lower() == "true"
 APPS_DIR = os.environ.get("DIFY_APPS_DIR", "/apps")
@@ -123,9 +123,6 @@ def get_access_token(client: httpx.Client) -> str:
 
 # ── 步骤 3：添加模型供应商 ────────────────────────────────
 def setup_model_provider(client: httpx.Client, token: str) -> None:
-    if not DIFY_MODEL_API_KEY:
-        fail("DIFY_MODEL_API_KEY 为空，请在 dify/docker/.env 中配置模型 API Key")
-
     headers = {"Authorization": f"Bearer {token}"}
     # 查询现有模型供应商，避免重复
     r = client.get(f"{DIFY_API_URL}/api/console/model-providers", headers=headers, timeout=30)
@@ -227,6 +224,9 @@ def import_apps(client: httpx.Client, token: str) -> dict[str, str]:
             continue
         with open(yml_path, "r", encoding="utf-8") as f:
             dsl_content = f.read()
+        # 模型名占位符替换：yml 内统一写 your-model-name，导入前替换为客户配置的模型名
+        # （Chatflow 工作流 LLM 节点的模型取自 DSL 本身，app 级 model-config 改不到它，必须导入时注入）
+        dsl_content = dsl_content.replace("your-model-name", DIFY_MODEL_NAME)
         # 尝试解析 yaml 确认格式合法
         try:
             dsl = yaml.safe_load(dsl_content) or {}
@@ -334,12 +334,26 @@ def main() -> None:
     log("Dify 一键初始化开始")
     log(f"  DIFY_API_URL       = {DIFY_API_URL}")
     log(f"  DIFY_ADMIN_EMAIL   = {DIFY_ADMIN_EMAIL}")
-    log(f"  DIFY_MODEL_NAME    = {DIFY_MODEL_NAME}")
-    log(f"  DIFY_MODEL_BASE_URL= {DIFY_MODEL_BASE_URL}")
+    log(f"  DIFY_MODEL_NAME    = {DIFY_MODEL_NAME or '(空)'}")
+    log(f"  DIFY_MODEL_BASE_URL= {DIFY_MODEL_BASE_URL or '(空)'}")
     log(f"  DIFY_MODEL_API_KEY = {'***' if DIFY_MODEL_API_KEY else '(空)'}")
     log(f"  AUTO_IMPORT        = {AUTO_IMPORT}")
     log(f"  AUTO_BIND_MODEL    = {AUTO_BIND}")
     log("=" * 60)
+
+    # 模型配置完整性校验（fail-fast：配置不完整则初始化失败，阻塞 backend 启动）
+    missing = [
+        k for k, v in (
+            ("DIFY_MODEL_API_KEY", DIFY_MODEL_API_KEY),
+            ("DIFY_MODEL_BASE_URL", DIFY_MODEL_BASE_URL),
+            ("DIFY_MODEL_NAME", DIFY_MODEL_NAME),
+        ) if not v
+    ]
+    if missing:
+        fail(
+            f"模型配置不完整，缺少: {', '.join(missing)}。"
+            "请在 dify/docker/.env 中填写三项模型配置（OpenAI-API-compatible，由客户自定义）"
+        )
 
     wait_for_dify()
 

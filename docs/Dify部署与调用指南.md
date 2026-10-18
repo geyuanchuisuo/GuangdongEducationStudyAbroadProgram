@@ -117,10 +117,10 @@ docker compose up -d
 先复制模板，然后设置模型、管理员、数据库和内部服务密码：
 
 ```bash
-# ── 模型供应商（OpenAI-API-compatible）──
+# ── 模型供应商（OpenAI-API-compatible 通用协议，支持任一兼容服务，不绑定任何特定模型）──
 DIFY_MODEL_API_KEY=                  # ⚠️ 必填，你的模型 API Key
-DIFY_MODEL_BASE_URL=https://api.xiaomimimo.com/v1
-DIFY_MODEL_NAME=mimo-v2.6-flash
+DIFY_MODEL_BASE_URL=                 # ⚠️ 必填，OpenAI 兼容接口地址（通常以 /v1 结尾）
+DIFY_MODEL_NAME=                     # ⚠️ 必填，服务商模型列表中的模型名
 
 # ── Dify 管理员（dify-init 首次自动创建；已存在则用此账号登录）──
 DIFY_ADMIN_EMAIL=admin@example.com
@@ -142,11 +142,13 @@ DIFY_INIT_AUTO_IMPORT=true           # 自动导入 dify/apps/ 下的 yml
 DIFY_INIT_AUTO_BIND_MODEL=true       # 自动为所有应用绑定模型
 ```
 
+> 模型三项均**默认留空**，由客户按自己所使用的服务商填写（不绑定任何特定模型）；任一项缺失则 dify-init 初始化失败并阻塞 backend 启动。
+
 | 变量 | 必填 | 默认值 | 说明 |
 |------|------|--------|------|
-| `DIFY_MODEL_API_KEY` | ✅ | 空 | 模型 API Key（个人凭据，勿入库）。留空则 init 失败 |
-| `DIFY_MODEL_BASE_URL` | ✅ | Mimo 地址 | OpenAI-compatible 接口地址，可按需更换 |
-| `DIFY_MODEL_NAME` | ✅ | `mimo-v2.6-flash` | 模型名称（需在供应商模型列表中存在） |
+| `DIFY_MODEL_API_KEY` | ✅ | 空 | 模型 API Key（客户凭据，勿入库）。留空则 init 失败 |
+| `DIFY_MODEL_BASE_URL` | ✅ | 空 | OpenAI-API-compatible 接口地址（客户自定义，通常以 /v1 结尾） |
+| `DIFY_MODEL_NAME` | ✅ | 空 | 模型名称（客户自定义，需在服务商模型列表中存在） |
 | `DIFY_ADMIN_EMAIL` | ✅ | `admin@example.com` | Dify 管理员邮箱 |
 | `DIFY_ADMIN_PASSWORD` | ✅ | 无 | 本地 Dify 管理员强密码 |
 | `DIFY_INIT_AUTO_IMPORT` | 可选 | `true` | 是否自动导入 `dify/apps/*.yml` |
@@ -166,10 +168,10 @@ DIFY_INIT_AUTO_BIND_MODEL=true       # 自动为所有应用绑定模型
 | `DIFY_CUSTOMER_AGENT_KEY` | 按需 | 空 | 粤教客服 Agent 的 app key |
 | `DIFY_REPORT_AGENT_KEY` | 按需 | 空 | 智能报告 Agent 的 app key（v6.11.11 起支持，报告 AI 分析用；留空则报告 AI 恒 `unavailable`） |
 | `DIFY_MODEL_API_KEY` | 可选 | 空 | 直连模型降级用的 API Key。留空则跳过直连降级，走本地话术 |
-| `DIFY_MODEL_BASE_URL` | 可选 | `https://api.xiaomimimo.com/v1` | 直连模型地址 |
-| `DIFY_MODEL_NAME` | 可选 | `mimo-v2.6-flash` | 直连模型名称 |
+| `DIFY_MODEL_BASE_URL` | 可选 | 空 | 直连模型地址（OpenAI-API-compatible，客户自定义） |
+| `DIFY_MODEL_NAME` | 可选 | 空 | 直连模型名称（客户自定义） |
 
-> `DIFY_*_AGENT_KEY` 留空时，对应 Agent 端点无法调用 Dify 并触发降级；不影响其他非 AI 功能。
+> 四个 `DIFY_*_AGENT_KEY` 留空时，对应 Agent 端点返回 401 并触发降级；不影响其他功能。
 
 ### 3.3 Dify 内部服务密码
 

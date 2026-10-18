@@ -37,8 +37,8 @@ model_config:
   model:
     completion_params: {}
     mode: chat
-    name: deepseek-flash
-    provider: langgenius/deepseek/deepseek
+    name: your-model-name
+    provider: openai-api-compatible
   more_like_this:
     enabled: false
   opening_statement: null
