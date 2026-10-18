@@ -54,8 +54,8 @@ def fail(msg: str) -> None:
 
 
 # ── 步骤 1：等待 Dify 就绪 ────────────────────────────────
-def wait_for_dify(timeout: int = 180) -> None:
-    log(f"等待 Dify api 就绪：{DIFY_API_URL}")
+def wait_for_dify(timeout: int = 600) -> None:
+    log(f"等待 Dify api 就绪：{DIFY_API_URL}（全新实例首次启动需完成 DB 迁移，最长等 {timeout}s）")
     deadline = time.time() + timeout
     while time.time() < deadline:
         try:
@@ -211,6 +211,18 @@ def ensure_model_plugin(client: httpx.Client, token: str) -> None:
                         log("✅ 模型插件安装完成")
                         return
                     if p.get("status") in ("failed", "error"):
+                        # 任务态与实际安装可能竞态（daemon 后台恢复完成），以 provider 就位为最终判据
+                        r2 = client.get(
+                            f"{DIFY_API_URL}/console/api/workspaces/current/model-providers",
+                            headers=headers,
+                            params={"model_type": "llm"},
+                            timeout=30,
+                        )
+                        if r2.status_code == 200 and any(
+                            q.get("provider") == MODEL_PROVIDER for q in (r2.json().get("data") or [])
+                        ):
+                            log("✅ 模型插件实际已就位（任务态滞后），继续")
+                            return
                         fail(f"模型插件安装失败: {p.get('message')}")
     fail("模型插件安装超时（240s）")
 
