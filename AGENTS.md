@@ -502,6 +502,8 @@ npm run dev
 
 Dify（1.16.0-rc1）已作为子 compose 纳入项目，随 `docker compose up -d` 一键启动，无需单独部署。
 
+> 📖 **完整配置说明、调用规则、降级机制见 [Dify部署与调用指南.md](./docs/Dify部署与调用指南.md)**
+
 ```bash
 # 一体化启动后，Dify 相关服务自动运行：
 #   dify_nginx（控制台入口，端口 8081）

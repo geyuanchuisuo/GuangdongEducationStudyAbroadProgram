@@ -1,0 +1,291 @@
+# Dify 部署与调用指南
+
+> v6.11.6 起，Dify 已一体化打包进项目 docker-compose，客户拉取代码后一条命令即可启动全套服务（含 Dify）。本文档说明封装内容、配置项、调用规则与降级机制。
+
+---
+
+## 一、封装概览
+
+### 1.1 一体化打包内容
+
+Dify 1.16.0-rc1 官方 compose 已纳入项目 `dify/docker/` 目录，随主 `docker-compose.yml` 一键启动。
+
+| 封装项 | 路径 | 说明 |
+|--------|------|------|
+| Dify compose | `dify/docker/docker-compose.yaml` | Dify 全套服务定义 |
+| Dify 环境变量 | `dify/docker/.env` | DB/redis 密码、端口等默认配置（无个人密钥） |
+| Dify 环境变量模板 | `dify/docker/.env.example` | 同上，供参考 |
+| Dify envs 片段 | `dify/docker/envs/` | 各服务可选 env 片段（required: false） |
+| Dify nginx 配置 | `dify/docker/nginx/` | 反代模板 |
+| Dify ssrf_proxy | `dify/docker/ssrf_proxy/` | 沙箱代理 |
+| Agent 应用 DSL | `dify/apps/*.yml` | 3 个业务 Agent + 2 个智能报告应用配置骨架 |
+| 主 compose 引用 | `docker-compose.yml` 顶层 `include` | 自动引入 Dify compose |
+
+### 1.2 服务重命名（避免冲突）
+
+项目本身已有 `nginx` 和 `redis` 服务，Dify 的同名服务已重命名：
+
+| Dify 原服务名 | 重命名后 | 说明 |
+|--------------|---------|------|
+| `nginx` | `dify_nginx` | Dify 控制台反代，端口 8081 |
+| `redis` | `dify_redis` | Dify 专用 redis（带密码 difyai123456），与项目 redis 独立 |
+
+### 1.3 端口分配
+
+| 服务 | 端口 | 说明 |
+|------|------|------|
+| 项目 nginx（前端） | 8080 | 前端页面 |
+| backend API | 8000 | 后端 API |
+| Dify 控制台 | 8081 | Dify web 控制台 + Service API |
+| MySQL | 59000 | 项目数据库 |
+| Redis | 6379 | 项目缓存 |
+
+---
+
+## 二、启动方式
+
+### 2.1 一键启动全部
+
+```bash
+docker compose up -d
+```
+
+启动后服务清单：
+
+```
+项目核心：mysql、redis、backend、nginx
+Dify 全套：api、worker、worker_beat、web、dify_nginx、dify_redis、
+          db_postgres、weaviate、sandbox、plugin_daemon、agent_backend、
+          local_sandbox、ssrf_proxy
+```
+
+### 2.2 仅启动核心（不需要 AI）
+
+```bash
+docker compose up -d mysql redis backend
+```
+
+AI 端点自动走本地降级，不影响登录/成绩/CRM 等非 AI 功能。
+
+### 2.3 访问入口
+
+| 入口 | URL |
+|------|-----|
+| 前端页面 | http://localhost:8080 |
+| 后端 API | http://localhost:8000 |
+| Dify 控制台 | http://localhost:8081 |
+| Dify Service API | http://localhost:8081/v1 |
+
+---
+
+## 三、配置清单
+
+### 3.1 backend/.env — Dify 相关变量
+
+| 变量 | 必填 | 默认值 | 说明 |
+|------|------|--------|------|
+| `DIFY_BASE_URL` | ✅ | `http://localhost:8081` | Dify Service API 地址。Docker 容器内由 compose 覆盖为 `http://dify_nginx`；本机跑 uvicorn 用 `http://localhost:8081` |
+| `DIFY_VERSION` | ✅ | `1.16.0-rc1` | Dify 版本号 |
+| `DIFY_API_PROTOCOL` | ✅ | `openai` | API 协议（当前走 Dify 原生 /chat-messages） |
+| `DIFY_STUDENT_AGENT_KEY` | 按需 | 空 | 留学生智能管家 Agent 的 app key（`app-` 开头），Dify 控制台「访问 API」获取 |
+| `DIFY_EMPLOYEE_AGENT_KEY` | 按需 | 空 | 企业员工助手 Agent 的 app key |
+| `DIFY_CUSTOMER_AGENT_KEY` | 按需 | 空 | 粤教客服 Agent 的 app key |
+| `DIFY_MODEL_API_KEY` | 可选 | 空 | 直连模型降级用的 API Key（如 mimo）。留空则跳过直连降级，走本地话术 |
+| `DIFY_MODEL_BASE_URL` | 可选 | `https://api.xiaomimimo.com/v1` | 直连模型的 OpenAI-compatible 地址 |
+| `DIFY_MODEL_NAME` | 可选 | `mimo-v2.6-flash` | 直连模型名称 |
+
+> 三个 `DIFY_*_AGENT_KEY` 留空时，对应 Agent 端点返回 401 并触发降级；不影响其他功能。
+
+### 3.2 dify/docker/.env — Dify 自身配置
+
+Dify 自带 PostgreSQL、Redis、Weaviate，均使用默认密码（`difyai123456`）。生产环境需修改。关键变量：
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `EXPOSE_NGINX_PORT` | `8081` | Dify 控制台端口 |
+| `DB_PASSWORD` | `difyai123456` | Dify PostgreSQL 密码 |
+| `REDIS_PASSWORD` | `difyai123456` | Dify Redis 密码 |
+| `DB_HOST` | `db_postgres` | Dify 元数据库 service 名 |
+| `REDIS_HOST` | `dify_redis` | Dify Redis service 名 |
+| `VECTOR_STORE` | `weaviate` | 向量数据库类型 |
+
+> 模型 API Key（mimo 等）**不在** `dify/docker/.env` 中，需在 Dify 控制台「模型供应商」手动配置。
+
+---
+
+## 四、调用规则
+
+项目有 **两套 AI 调用机制**，构成三级降级链：
+
+```
+Dify Agent 网关（主路径）
+    ↓ 失败/超时
+直连模型降级（model_ai_service）
+    ↓ 未配置/失败
+本地话术兜底（各 service 内置规则）
+```
+
+### 4.1 机制一：Dify Agent 网关（主路径）
+
+**实现文件**：`backend/app/services/ai_service.py`（`AIService`）+ `backend/app/services/dify_client.py`（`DifyClient`）
+
+**协议**：Dify 原生 `POST /v1/chat-messages`（blocking 模式）
+
+**鉴权**：`Authorization: Bearer {DIFY_*_AGENT_KEY}`
+
+**请求体**：
+```json
+{
+  "inputs": {},           // 上下文（人设、能力清单、限制预期）
+  "query": "用户消息",
+  "response_mode": "blocking",
+  "user": "user-id",
+  "conversation_id": "可选，续会话用"
+}
+```
+
+**响应**：`data.answer` 为回复内容，`data.conversation_id` 为会话 ID。
+
+**Agent 与 key 映射**：
+
+| AgentType | 环境变量 | 对应 Dify 应用 |
+|-----------|---------|---------------|
+| `CUSTOMER` | `DIFY_CUSTOMER_AGENT_KEY` | 粤教客服 |
+| `EMPLOYEE` | `DIFY_EMPLOYEE_AGENT_KEY` | 企业员工助手 |
+| `STUDENT` | `DIFY_STUDENT_AGENT_KEY` | 留学生智能管家 |
+
+### 4.2 机制二：直连模型降级
+
+**实现文件**：`backend/app/services/model_ai_service.py`（`ModelAIService`）
+
+**触发条件**：Dify Agent 调用抛出异常（连接失败、超时、401 等）时。
+
+**协议**：OpenAI-compatible `POST {DIFY_MODEL_BASE_URL}/chat/completions`
+
+**鉴权**：`Authorization: Bearer {DIFY_MODEL_API_KEY}`
+
+**前提**：`DIFY_MODEL_API_KEY` 非空，否则跳过此级降级。
+
+### 4.3 各业务场景调用链
+
+| 业务场景 | API 端点 | 主路径 | 降级路径 | 最终兜底 |
+|---------|---------|--------|---------|---------|
+| 客服对话 | `POST /cs/chat` | `DifyClient` → 客服 Agent | 本地正则提取画像 SLOTS | 本地话术 |
+| 员工助手会话 | `POST /employee/agent/chat` | `ai_service.chat(EMPLOYEE)` | `model_ai_service.chat` | 本地 fallback reply |
+| 员工指令解析 | `POST /employee/agent/command` | `ai_service.chat(EMPLOYEE)` | 本地关键词+正则规则 | 报错提示 |
+| 员工新人指引 | `POST /employee/guide/ask` | `ai_service.chat(EMPLOYEE)` | `model_ai_service.chat` | 本地关键词匹配 |
+| 学生助手会话 | `POST /student/agent/chat` | `ai_service.chat(STUDENT)` | `model_ai_service.chat` | `_AGENT_FALLBACK_REPLY` |
+| 学生心理关怀 | `POST /student/psych/chat` | `ai_service.chat(STUDENT)` | `model_ai_service.chat` | 本地情绪词库 |
+| 智能报告 AI 分析 | `POST /report/...` | `ai_service.chat` | `model_ai_service.analyze` | 确定性报告（无 AI 摘要） |
+
+### 4.4 上下文注入规则
+
+人设/能力/限制预期由**后端代码注入**到 Dify `inputs`，不写死在 Dify 控制台：
+
+| Agent | 注入字段 | 来源 |
+|-------|---------|------|
+| 员工助手 | `inputs.capabilities` | `employee_service.py` 按角色动态生成能力清单 |
+| 学生助手 | `inputs.restrictions` / `inputs.capabilities` | `student_service.py`（不承诺退费/不给医疗级建议） |
+| 客服 | 无（pre_prompt 在 Dify 控制台） | `cs_agent_service.py` 解析 `[intent:]/[RECOMMEND]/[SLOTS]` 三标记 |
+
+---
+
+## 五、降级机制说明
+
+所有 AI 端点均实现三级降级，**任何一级失败都不阻断核心业务**：
+
+| 级别 | 触发条件 | 表现 |
+|------|---------|------|
+| L1 Dify Agent | 正常配置且可达 | 真实 AI 回复 |
+| L2 直连模型 | Dify 失败 + `DIFY_MODEL_API_KEY` 已配 | 直连模型生成回复 |
+| L3 本地兜底 | 上述均不可用 | 本地话术/规则/关键词匹配 |
+
+验证降级是否生效：停止 Dify 容器后调用任一 AI 端点，应返回 `source: "fallback"` 的本地回复而非 500。
+
+---
+
+## 六、接手者配置步骤
+
+### 步骤 1：启动全部服务
+
+```bash
+docker compose up -d
+```
+
+等待 Dify 控制台就绪（约 1-2 分钟）：`http://localhost:8081`
+
+### 步骤 2：配置模型供应商（必须）
+
+1. 打开 Dify 控制台 `http://localhost:8081`，注册管理员账号
+2. 进入「设置 → 模型供应商」
+3. 添加 **OpenAI-API-compatible** 类型：
+   - API 地址：`https://api.xiaomimimo.com/v1`
+   - API Key：填入你的 mimo API Key
+   - 模型名称：`mimo-v2.6-flash`
+4. 保存并测试连接
+
+> mimo API Key 从小米 mimo 开放平台申请，属个人凭据，**勿入库**。也可使用其他 OpenAI-compatible 模型。
+
+### 步骤 3：导入 3 个 Agent 应用
+
+Dify 控制台「工作室 → 创建应用 → 导入 DSL」，依次导入 `dify/apps/` 下的 yml：
+
+| yml 文件 | 应用名 | 模式 |
+|---------|--------|------|
+| `粤教客服__advanced-chat.yml` | 粤教客服 | advanced-chat |
+| `企业员工助手__agent-chat.yml` | 企业员工助手 | agent-chat |
+| `留学生智能管家__agent-chat.yml` | 留学生智能管家 | agent-chat |
+
+### 步骤 4：应用绑定模型
+
+进入每个应用「编排 → 模型」，选择步骤 2 配置的 `mimo-v2.6-flash`。
+
+> 导入 yml 后模型 ID 因环境而异，必须手动重选。
+
+### 步骤 5：回填 app key
+
+每个应用「访问 API」页面复制 app key（`app-` 开头），写入 `backend/.env`：
+
+```bash
+DIFY_CUSTOMER_AGENT_KEY=app-xxxx
+DIFY_EMPLOYEE_AGENT_KEY=app-yyyy
+DIFY_STUDENT_AGENT_KEY=app-zzzz
+```
+
+改完重启 backend：
+```bash
+docker compose restart backend
+```
+
+### 步骤 6：验证
+
+调用三个 AI 端点各发一条消息，确认返回 `source: "dify"` 而非 `fallback`：
+
+```bash
+# 客服
+curl -X POST http://localhost:8000/api/v1/cs/chat -H "Content-Type: application/json" -d '{"query":"你好","user":"test"}'
+```
+
+### 步骤 7（可选）：配置直连模型降级
+
+在 `backend/.env` 填入：
+```bash
+DIFY_MODEL_API_KEY=你的-mimo-api-key
+```
+当 Dify Agent 不可用时，自动直连模型生成兜底回复。留空则跳过此级。
+
+---
+
+## 七、常见问题
+
+**Q: Dify 控制台打不开？**
+A: 检查 `dify_nginx` 容器是否 healthy：`docker compose ps dify_nginx`。首次启动需等待 PostgreSQL 迁移完成。
+
+**Q: AI 端点返回 fallback？**
+A: 检查①三个 app key 是否已回填 ②Dify 应用是否绑定模型 ③模型供应商 API Key 是否有效。查看 `docker compose logs backend` 确认降级原因。
+
+**Q: 想换其他模型？**
+A: Dify 控制台「模型供应商」支持任何 OpenAI-API-compatible 模型，改完在应用里重选即可，无需改代码。
+
+**Q: Dify 数据存在哪？**
+A: `dify/docker/volumes/`（已 gitignore），包含 PostgreSQL、Redis、Weaviate、上传文件等。删除会丢失所有 Dify 配置和知识库。

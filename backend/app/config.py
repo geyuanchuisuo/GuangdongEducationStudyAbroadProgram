@@ -12,15 +12,16 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "change-this-to-a-secure-random-string"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
 
-    DIFY_BASE_URL: str = "http://localhost"
+    DIFY_BASE_URL: str = "http://localhost:8081"
     DIFY_VERSION: str = "1.16.0-rc1"
     DIFY_API_PROTOCOL: str = "openai"
     DIFY_STUDENT_AGENT_KEY: str = ""
     DIFY_EMPLOYEE_AGENT_KEY: str = ""
     DIFY_CUSTOMER_AGENT_KEY: str = ""
+    # 直连模型降级（Dify Agent 不可用时用，留空则跳过直连降级走本地话术）
     DIFY_MODEL_API_KEY: str = ""
-    DIFY_MODEL_BASE_URL: str = "https://apihub.agnes-ai.com/v1"
-    DIFY_MODEL_NAME: str = "agnes-2.5-flash"
+    DIFY_MODEL_BASE_URL: str = "https://api.xiaomimimo.com/v1"
+    DIFY_MODEL_NAME: str = "mimo-v2.6-flash"
 
     # M5 智能报告数据来源开关（M5-02.3）：mock=模拟数据（默认）；production=真实业务表取数
     REPORT_DATA_SOURCE: str = "mock"
