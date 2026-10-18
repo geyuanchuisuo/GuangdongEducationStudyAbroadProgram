@@ -6,6 +6,10 @@
 
 ## 零、快速定位（打开项目先看这里）
 
+> v6.11.16（2026-10-19）：Dify 1.16 首启脚本修正到 `/console/api/*` 并使用 cookie/CSRF 登录，补入智能报告 app key 映射；Agnes 模型配置仅保存在忽略的 `dify/docker/.env`。Dify API/Postgres/Redis/Sandbox 健康且管理员已创建，但 OpenAI 兼容插件和 DSL 依赖需访问 Marketplace；当前本机及容器均收到 403，dify-init 停在供应商配置，app keys 尚未生成。详见更新记录 v6.11.16、LOG-073。
+
+> v6.11.15（2026-10-19）：Dify 首启阻塞修复——根 `.env.example` 启用默认 PostgreSQL/Weaviate profiles；Dify Redis 使用独立服务名；backend 只读挂载 `dify_app_keys`；init_permissions 首启生成 sandbox 配置和依赖清单；Dify 示例移除可选空值并统一控制台 8081。本地 `.env` 保留但不跟踪。当前模型三项未配置，dify-init 尚未完成。详见更新记录 v6.11.15 与 LOG-073。
+
 > v6.11.13（2026-10-19）：第十次同步 origin/master→master_ZNBG——**M5 阻塞 B5 销账**：上游 M0 4 行补丁（DIFY_REPORT_AGENT_KEY + AgentType.REPORT/映射，经用户批准）并入；M5 配套 session 改 "new"（动态串必被 Dify 拒）；生效差一步：backend/.env 回填报告 key；详见更新记录 v6.11.13 与 LOG-071（ZNBG）。
 
 > v6.11.12（2026-10-19）：**一体化 Dify 栈首次启动实测失败（exit 1）**，定位两处配置缺陷并按用户决定**暂不修复、仅记录**：**A（Dify 侧）** `dify/docker/.env` 精简模板把可选变量留成空值行（`KEY=`）→ 空串被当作"显式设为空"，Dify `api` 启动即 `ValidationError: INDEXING_MAX_SEGMENTATION_TOKENS_LENGTH unable to parse string as an integer [input_value='']`，api/worker/worker_beat/plugin_daemon/sandbox/agent_backend 全部 Restarting（应改为注释态 = 用默认值）；**B（业务侧）** `docker-compose.yml` backend 的 command 要 `. /run/dify-keys/app_keys.env`，但 `volumes` **缺 `dify_app_keys:/run/dify-keys` 挂载** → 不论 dify-init 成功与否 backend 都起不来（`sh: 1: .: cannot open …: No such file`）。业务侧仍可跑（旧拓扑 4 容器：`/health` ok、107 路由、登录与业务接口全通）；业务后端已用 `docker cp` 空 `app_keys.env` + `up -d --no-deps backend` 临时恢复，**该手段不持久（容器重建即再次失败）**。详见更新记录 v6.11.12、运行日志 LOG-070、开发路线图移交清单第 25 项。

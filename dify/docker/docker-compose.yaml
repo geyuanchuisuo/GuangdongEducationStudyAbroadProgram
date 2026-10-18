@@ -207,10 +207,34 @@ services:
   # Init container to fix permissions
   init_permissions:
     image: busybox:latest
+    env_file:
+      - ./.env
     command:
       - sh
       - -c
       - |
+        SANDBOX_CONFIG="/app/sandbox/conf/config.yaml"
+        if [ ! -f "$${SANDBOX_CONFIG}" ]; then
+          mkdir -p /app/sandbox/conf
+          cat > "$${SANDBOX_CONFIG}" <<EOF
+        app:
+          port: 8194
+          debug: false
+          key: "$${SANDBOX_API_KEY}"
+          max_workers: 4
+          max_requests: 50
+          worker_timeout: 15
+          enable_network: true
+        allowed_syscalls: []
+        proxy:
+          socks5: ''
+          http: ''
+          https: ''
+        EOF
+          chmod 600 "$${SANDBOX_CONFIG}"
+        fi
+        mkdir -p /app/sandbox/dependencies
+        touch /app/sandbox/dependencies/python-requirements.txt
         FLAG_FILE="/app/api/storage/.init_permissions"
         if [ -f "$${FLAG_FILE}" ]; then
           echo "Permissions already initialized. Exiting."
@@ -221,6 +245,8 @@ services:
         echo "Permissions initialized. Exiting."
     volumes:
       - ./volumes/app/storage:/app/api/storage
+      - ./volumes/sandbox/conf:/app/sandbox/conf
+      - ./volumes/sandbox/dependencies:/app/sandbox/dependencies
     restart: "no"
 
   # API service
@@ -527,6 +553,9 @@ services:
     volumes:
       - ./volumes/sandbox/dependencies:/dependencies
       - ./volumes/sandbox/conf:/conf
+    depends_on:
+      init_permissions:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8194/health"]
     networks:

@@ -5,12 +5,6 @@ app:
   mode: advanced-chat
   name: 智能报告
   use_icon_as_answer_icon: false
-dependencies:
-- current_identifier: null
-  type: marketplace
-  value:
-    marketplace_plugin_unique_identifier: langgenius/deepseek:0.0.24@9e12eef09973667f0eaf4f082af883167e1de88740b22e71e71488d020c3778a
-    version: null
 kind: app
 version: 0.5.0
 workflow:
@@ -120,7 +114,7 @@ workflow:
             temperature: 0.7
           mode: chat
           name: your-model-name
-          provider: openai-api-compatible
+          provider: langgenius/openai_api_compatible/openai_api_compatible
         prompt_template:
         - id: a309e365-01e7-4b79-8b07-ca84c86f9340
           role: system

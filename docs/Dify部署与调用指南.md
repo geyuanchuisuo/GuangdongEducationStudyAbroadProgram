@@ -1,6 +1,8 @@
 # Dify 部署与调用指南
 
-> v6.11.10 起，Dify 已一体化打包进项目 docker-compose，并提供 **dify-init 一键初始化服务**。先复制 `dify/docker/.env.example` 为本地 `.env`，设置模型 API Key、管理员密码及 Dify 内部服务强密钥，再启动服务；本地 `.env` 不入库。
+> Dify 已一体化打包进项目 docker-compose，并提供 **dify-init 一键初始化服务**。首次启动前，复制根目录 `.env.example` 为 `.env`，再复制 `dify/docker/.env.example` 为 `dify/docker/.env`；在后者配置模型 API Key、Base URL、模型名、管理员密码及 Dify 内部服务强密钥。本地 `.env` 不入库。
+
+> **Marketplace 前置条件**：Dify 1.16 将模型供应商作为插件。在用 DSL 统一使用 `langgenius/openai_api_compatible/openai_api_compatible`；首次初始化时，Dify API/Plugin Daemon 必须能访问 `marketplace.dify.ai` 安装 OpenAI-API-compatible 插件。不能联网时需先准备与 Dify 1.16 兼容的 `.difypkg` 插件包，再运行 `dify-init`。服务健康不代表模型和应用初始化完成。
 
 ---
 
@@ -24,7 +26,7 @@ Dify 1.16.0-rc1 官方 compose 已纳入项目 `dify/docker/` 目录，随主 `d
 
 ### 1.2 dify-init 服务
 
-`dify-init` 是项目新增的一次性初始化容器，启动时自动执行：
+`dify-init` 是项目新增的一次性初始化容器，启动时按以下顺序执行；模型供应商插件必须已安装：
 
 ```
 等待 Dify api 就绪
@@ -37,10 +39,12 @@ Dify 1.16.0-rc1 官方 compose 已纳入项目 `dify/docker/` 目录，随主 `d
     ↓
 为所有应用绑定模型
     ↓
-将 3 个业务 Agent key 写入受限 Docker 命名卷；backend 启动时自动读取，无需手动回填
+将 3 个业务 Agent 和智能报告共 4 个 app key 写入受限 Docker 命名卷；backend 启动时自动读取，无需手动回填
 ```
 
 **硬性约束**：backend 依赖 `dify-init: service_completed_successfully`，即 init 失败则 backend 不启动（长期挂载场景，配置必须完整）。
+
+根目录 `.env.example` 启用默认 `postgresql,weaviate,collaboration` profiles；Dify Redis 已重命名为 `dify_redis`，避免连接到项目业务 Redis。`init_permissions` 首次启动时生成 Sandbox 配置文件与空的 Python 依赖清单。
 
 ### 1.3 服务重命名（避免冲突）
 
@@ -97,7 +101,7 @@ Dify 初始化：dify-init（一次性，成功后退出）
 docker compose up -d
 ```
 
-当前 backend 依赖 `dify-init` 成功完成后才启动，因此仍需按 2.1 配置并启动 Dify。业务上不调用 AI 的端点可继续使用登录、成绩、CRM 等功能；此部署包目前没有单独跳过 Dify 的核心服务启动命令。
+当前 backend 依赖 `dify-init` 成功完成后才启动，因此仍需按 2.1 配置并启动 Dify，且确保 Marketplace 插件依赖可安装。业务上不调用 AI 的端点可继续使用登录、成绩、CRM 等功能；此部署包目前没有单独跳过 Dify 的核心服务启动命令。
 
 ### 2.3 访问入口
 
@@ -300,7 +304,7 @@ DIFY_ADMIN_PASSWORD=your-local-strong-password
 docker compose up -d
 ```
 
-dify-init 容器会自动完成：创建管理员 → 配模型供应商 → 按 DSL 应用名导入并去重、跳过留档 `agent-chat` DSL → 绑定模型 → 将 3 个业务 Agent key 写入权限为 `0600` 的共享卷供 backend 自动加载。
+dify-init 容器会自动完成：创建管理员 → 检查 OpenAI-compatible 插件 → 配置模型 → 按 DSL 应用名导入并去重、跳过留档 `agent-chat` DSL → 绑定模型 → 将 4 个 app key 写入权限为 `0600` 的共享卷供 backend 自动加载。
 
 查看 init 进度：
 ```bash
@@ -311,19 +315,9 @@ docker compose logs -f dify-init
 
 ### 步骤 3：验证
 
-dify-init 将 5 个 app key 写入 `dify/docker/app_keys.txt`（已 gitignore）。打开该文件，复制四个应用的 key 到 `backend/.env`：
+app keys 保存在受限命名卷并由 backend 只读加载；不要把 key 输出到日志或提交到仓库。只有 `dify-init` 成功退出且 backend 重建后，才算一键初始化完成。
 
-```bash
-# 从 dify/docker/app_keys.txt 复制对应行
-DIFY_CUSTOMER_AGENT_KEY=app-xxxx      # 粤教客服
-DIFY_EMPLOYEE_AGENT_KEY=app-yyyy      # 企业员工助手
-DIFY_STUDENT_AGENT_KEY=app-zzzz       # 留学生智能管家
-DIFY_REPORT_AGENT_KEY=app-rrrr        # 智能报告（留空则报告 AI 恒 unavailable）
-```
-
-> 注：backend 容器「启动时自动加载 /run/dify-keys/app_keys.env」的设计因 docker-compose 缺 `dify_app_keys:/run/dify-keys` 挂载暂不可用（已记录于 LOG-070（ZNBG）/开发路线图移交清单第 25 项，按用户决定暂不修复）；当前以 `backend/.env` 回填为可用路径。
-
-### 步骤 4：重启 backend
+### 步骤 4：验证
 
 ```bash
 docker compose restart backend
@@ -364,7 +358,8 @@ docker compose logs dify-init
 |---------|------|------|
 | `DIFY_MODEL_API_KEY 为空` | 未在 `dify/docker/.env` 填模型 Key | 填入 Key 后 `docker compose up dify-init` |
 | `登录失败: 401` | Dify 管理员密码不匹配 | 修改 `dify/docker/.env` 的 `DIFY_ADMIN_PASSWORD`，或进控制台重置 |
-| `添加模型供应商失败` | API Key 无效或 base_url 错误 | 检查 Key 和 URL，`docker compose up dify-init` 重试 |
+| `尚未安装 OpenAI-API-compatible Marketplace 插件` | 插件市场不可达或插件未安装 | 允许 Dify 访问 Marketplace，或导入兼容插件包后重试 |
+| `查询模型供应商失败` | Dify Console API 不可用或未完成初始化 | 查看 API 健康状态及 `docker compose logs dify-init` |
 | `Dify api 在 180s 内未就绪` | Dify 启动慢或 PostgreSQL 迁移卡住 | `docker compose ps` 检查 Dify 服务状态，等待后重试 |
 | `导入应用失败` | yml 格式问题 | 检查 `dify/apps/*.yml` 是否合法，或设 `DIFY_INIT_AUTO_IMPORT=false` 跳过 |
 

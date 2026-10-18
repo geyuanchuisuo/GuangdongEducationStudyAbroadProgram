@@ -12,7 +12,7 @@ app:
   mode: agent-chat
   use_icon_as_answer_icon: true
 model:
-  provider: openai-api-compatible
+  provider: langgenius/openai_api_compatible/openai_api_compatible
   name: your-model-name
   mode: chat
   completion_params:
