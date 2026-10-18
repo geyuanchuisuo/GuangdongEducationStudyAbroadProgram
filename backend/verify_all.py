@@ -174,12 +174,13 @@ test('/api/v1/crm + /ai + /courses + /events (15 paths, M1/M2 v6.7.3)',
      lambda: None if all(p in routes for p in expected_m1m2_paths) else
      (_ for _ in ()).throw(Exception('missing')))
 
-# ── M2 公开客服路由（2 paths，v6.9.0 客服 Agent 二期） ─────────
+# ── M2 公开客服路由（3 paths，v6.9.0 客服 Agent 二期 + v6.10.3 开场白） ─────────
 expected_cs_public_paths = [
     '/api/v1/cs/faq',
+    '/api/v1/cs/greeting',
     '/api/v1/cs/sessions/{session_id}/messages',
 ]
-test('/api/v1/cs (2 paths, M2 v6.9.0 公开FAQ+会话历史)',
+test('/api/v1/cs (3 paths, M2 v6.9.0 公开FAQ+会话历史 + v6.10.3 开场白)',
      lambda: None if all(p in routes for p in expected_cs_public_paths) else
      (_ for _ in ()).throw(Exception('missing')))
 
@@ -253,7 +254,7 @@ test('repositories (2 modules)', lambda: None)
 
 from app.services.user_service import UserService
 from app.services.customer_service import CustomerService
-from app.services.ai_service import AiService
+from app.services.cs_agent_service import AiService  # v6.10.2 M2 客服迁出 ai_service.py
 from app.services.approval_engine import ApprovalEngine, ApprovalBizType, ApprovalStatus, TaskStatus
 from app.services.event_bus import EventBus
 from app.services.event_contracts import EventType

@@ -7,7 +7,7 @@ from app.repositories.crm_repo import CrmRepository
 from app.repositories.customer_repo import CustomerRepository
 from app.repositories.customer_service_repo import CustomerServiceRepository
 from app.schemas.ai import ChatRequest
-from app.services.ai_service import AiService
+from app.services.cs_agent_service import AiService
 from app.services.crm_service import CrmService
 
 router = APIRouter(prefix="/ai", tags=["智能客服"])

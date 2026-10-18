@@ -1,5 +1,5 @@
 """v6.10.0：客服对话本地信息提取（v6.9.10 交付的兜底逻辑）测试入库——原 5/5 为临时脚本未留档。"""
-from app.services.ai_service import AiService
+from app.services.cs_agent_service import AiService
 
 
 def test_extract_name_age_education():
