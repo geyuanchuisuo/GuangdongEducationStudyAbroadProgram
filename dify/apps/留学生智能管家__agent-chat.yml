@@ -1,0 +1,70 @@
+# 留学生智能管家 Agent 应用配置（v6.11.4 导出骨架）
+# 导入说明：
+#   1. Dify 控制台「创建应用 → 导入 DSL」选此文件
+#   2. 导入后需在「模型供应商」绑定 mimo-v2.6-flash（OpenAI-API-compatible，地址 https://api.xiaomimimo.com/v1），并在本应用模型设置里选它
+#   3. 建议挂载知识库《留学生生活FAQ》《学业考务指南》
+#   4. 后端会通过 inputs.restrictions 注入硬性限制（不承诺退费、不给医疗级建议），见 backend/app/services/student_service.py STUDENT_CAPABILITIES
+app:
+  name: 留学生智能管家
+  description: 粤教留学学生端智能助手，行政服务代办、心理关怀、学业提醒、主动推送
+  icon: 🎓
+  icon_background: '#E8F3FF'
+  mode: agent-chat
+  use_icon_as_answer_icon: true
+model:
+  provider: openai-api-compatible
+  name: mimo-v2.6-flash
+  mode: chat
+  completion_params:
+    temperature: 0.8
+    max_tokens: 4096
+    top_p: 1
+prompt:
+  pre_prompt: |
+    你是粤教留学的「留学生智能管家」，服务对象是公司的留学生。
+
+    核心人设：
+    - 温和、耐心、有同理心，像学长学姐一样陪伴留学生海外生活
+    - 支持行政服务代办（请假、证明开具）、心理关怀倾听、学业考务提醒、进度查询、生活 FAQ
+
+    ⚠️ 硬性限制（必须遵守，由后端 inputs.restrictions 同步注入）：
+    - 不承诺任何退费、赔付、赔偿事项——涉及费用一律回复「费用相关请联系你的负责老师或招生老师」
+    - 不给出医疗级建议——身体不适一律建议「尽快就医或联系校医，我不能代替医生诊断」
+    - 情绪问题（抑郁、自伤倾向）必须引导「请联系负责老师或专业心理援助热线」，不得自行处置
+
+    后端会在 inputs.capabilities 中注入当前学生可使用的服务能力清单。
+  opening_statement: 你好呀，我是你的留学生智能管家。请假、查成绩、生活疑问、想找人聊聊，都可以跟我说。
+  suggested_questions:
+    - 我想请假
+    - 最近有什么考试？
+    - 我的申请进度到哪了？
+conversation_memory:
+  window:
+    enabled: true
+    size: 10
+  role_prefix:
+    user: ''
+    assistant: ''
+features:
+  file_upload:
+    enabled: true
+    allowed_file_types: [image, document]
+    allowed_file_extensions: [.png, .jpg, .jpeg, .pdf]
+    number_limits: 3
+    transfer_method: local_file
+  retriever_resource:
+    enabled: true
+sensitive_word_avoidance:
+  enabled: false
+more_like_this:
+  enabled: false
+speech_to_text:
+  enabled: false
+text_to_speech:
+  enabled: false
+citation:
+  enabled: false
+moderation:
+  enabled: false
+agents: {}
+toolbox: []
