@@ -99,8 +99,12 @@ OrgNode.model_rebuild()
 class ScoreCreate(BaseModel):
     student_id: int = Field(..., description="学生 user id")
     course_name: str = Field(..., min_length=1, max_length=100)
-    score: float = Field(..., ge=0, le=999.99)
+    score: float = Field(..., ge=0, le=100, description="成绩范围 0-100（与前端口径统一）")
     semester: Optional[str] = Field(None, max_length=50)
+
+
+class ScoreUpdate(BaseModel):
+    score: float = Field(..., ge=0, le=100, description="成绩范围 0-100（与前端口径统一）")
 
 
 class ScoreOut(BaseModel):

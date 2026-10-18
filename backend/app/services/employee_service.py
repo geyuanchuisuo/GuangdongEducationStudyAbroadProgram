@@ -15,6 +15,7 @@ from app.repositories.employee_repo import (
 from app.services.approval_engine import ApprovalBizType, ApprovalStatus, approval_engine
 from app.utils.logger import logger  # 合并修复：model 回落分支引用了 logger，此前未导入会 NameError→50001
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -192,6 +193,11 @@ class EmployeeService:
         return await self.org_repo.list_all()
 
     # ── 成绩 ──────────────────────────────────────────
+    @staticmethod
+    def _norm_semester(value: str | None) -> str:
+        # semester 一律规范化为空串（不用 NULL），确保 uq_student_score_unique 唯一索引在 MySQL 下生效
+        return (value or "").strip()
+
     async def record_score(self, data: dict) -> StudentScore:
         # 验证学生存在且身份为 STUDENT
         result = await self.db.execute(select(User).where(User.id == data["student_id"]))
@@ -200,8 +206,38 @@ class EmployeeService:
             raise NotFoundError(message="学生不存在")
         if student.user_type != "STUDENT":
             raise BusinessError(code=40002, message=f"用户 {data['student_id']} 不是学生")
+        data["semester"] = self._norm_semester(data.get("semester"))
+        # 服务层查重（唯一键 student_id+course_name+semester），冲突返回 40901
+        dup = await self.db.execute(
+            select(StudentScore).where(
+                StudentScore.student_id == data["student_id"],
+                StudentScore.course_name == data["course_name"],
+                StudentScore.semester == data["semester"],
+            )
+        )
+        if dup.scalar_one_or_none():
+            raise ConflictError(message="该学生在此学期已录入该课程成绩，请直接修改")
         score = StudentScore(**data)
-        return await self.score_repo.create(score)
+        try:
+            return await self.score_repo.create(score)
+        except IntegrityError:
+            # 并发兜底：服务层查重后另一请求抢先插入，数据库唯一索引拦截
+            await self.db.rollback()
+            raise ConflictError(message="该学生在此学期已录入该课程成绩，请直接修改")
+
+    async def update_score(self, score_id: int, data: dict) -> StudentScore:
+        result = await self.db.execute(select(StudentScore).where(StudentScore.id == score_id))
+        score = result.scalar_one_or_none()
+        if not score:
+            raise NotFoundError(message="成绩记录不存在")
+        score.score = data["score"]
+        try:
+            await self.db.commit()
+        except IntegrityError:
+            await self.db.rollback()
+            raise ConflictError(message="修改后与已有成绩记录冲突")
+        await self.db.refresh(score)
+        return score
 
     async def list_scores(
         self, student_id: int | None, semester: str | None, page: int, page_size: int

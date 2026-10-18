@@ -1,4 +1,4 @@
-# AGENTS.md - 项目接手指南
+﻿# AGENTS.md - 项目接手指南
 
 > 给下一个接手这个项目的人/AI 的完整指南
 
@@ -540,6 +540,28 @@ docker volume inspect guangdongeducationstudyabroadprogram_backend_storage
 
 ## 六、关键配置文件
 
+### 6.0 环境特异配置清单（接手必读，先看这里再改代码）
+
+> **核心原则：环境特异配置 = 每台机器/每个人不一样的东西，禁止把某个人电脑上的具体值硬编码入库**（真实教训：v6.10.3 合并曾把成员内网 IP 写进 docker-compose.yml，v6.10.4 修复并记 LOG-060）。
+
+**接手第一步：按下面清单逐项检查并改成你自己的值**
+
+| 配置项 | 位置 | 该填什么 | 常见错误 |
+|--------|------|----------|----------|
+| `DATABASE_URL` | backend/.env、docker-compose.yml | 你本机 MySQL 地址与密码 | 直接沿用别人的密码导致连不上库 |
+| `REDIS_URL` | backend/.env、docker-compose.yml | 你本机 Redis 地址 | - |
+| `SECRET_KEY` | backend/.env | 随机字符串（自行生成） | 沿用仓库示例值上线 |
+| `DIFY_BASE_URL` | backend/.env、docker-compose.yml | **本机：`http://localhost`；Docker 容器内：`http://host.docker.internal`** | ❌ 写成其他成员的内网 IP（如 192.168.x.x）——你的机器上必不通 |
+| `DIFY_*_AGENT_KEY` | backend/.env（不入库，.env 已 gitignore） | 你自己在 Dify 控制台生成的 app-xxx | 直接用别人的 key（对方撤销后全体失效） |
+| `STORAGE_BACKEND` | backend/.env、docker-compose.yml | 一期默认 `local` | - |
+| `VITE_API_BASE_URL` | frontend/.env | 本机 `http://localhost:8000/api/v1`；生产构建用相对路径 `/api/v1`（.env.production 已配） | 指到别人的机器 |
+
+**规则**：
+1. docker-compose.yml / 代码里只允许出现**通用别名**（host.docker.internal、localhost、服务名 mysql/redis），具体 IP 一律不入库
+2. 个性化值放 `.env`（已 gitignore）或 `.env.example` 只放占位符
+3. 合并公共 compose/config 后，先检查环境变量类差异（IP/端口/URL）再启动，别只做代码冒烟
+4. 不确定某配置是不是环境特异 → 按环境特异处理
+
 ### 6.1 后端环境变量（.env）
 
 ```bash
@@ -738,9 +760,9 @@ chore: 构建
 
 ---
 
-**最后更新**：2026-10-18（**v6.11.0~v6.11.2**：M5 一期需求对齐改造（画像四类/期末状态不可得/部分生成/下钻快照/投诉 AI 表/报告专用 Agent/前端闭环）+ Dify「智能报告」改 Chatflow 接入（发布后 `blocking` 200、JSON 契约 PASS、DSL 已导出）；回归 pytest **146/146**、verify_all **29/29**、compileall、`npm run build`、Docker E2E **80/80**、production 16/16、迁移 004 上下往返通过；剩余唯一阻塞交 M0（4 行补丁）；已提交推送 `master_ZNBG`，未合并 master）
+**最后更新**：2026-10-18（v6.11.3 M3 成绩三件套：新增 PUT /employee/scores/{id} 修改接口（不存在→40401）+ student_score 唯一约束 uq_student_score_unique（重复→40901，semester 归一空串）+ 成绩口径统一 0-100 + 迁移 005 清理存量 4 条重复 + E2E 幂等适配；HTTP 冒烟 7/7 + pytest 154/154 + E2E 两轮；同轮完成前端联通诊断（LOG-062）：双 MySQL 环境下 .env 3306→59000 已修、Dify 响应 13~30s 属环境性能）
 
-**最后更新**：2026-10-18（**v6.10.3 第七次同步 origin/master 732d43f（ZNBG，fast-forward 零冲突）**：①先按硬性规则 5 上报公共模块 8 类——M0 AI 网关 `ai_service.py` +243（M2 客服槽位采集/本地提取/微信号清洗/推荐落库）、M0 认证 `user_service.py` +113（PROSPECT 注册审批门 `status=待审批` + 登录 40006）、`auth.py`/`schemas/user.py`、迁移 `001/002` 共**8 处 FK BigInteger→Integer**、`seed_data.py` 重写（`drop_all+create_all` + `random.seed(42)` + 固定核心账号 + 密码统一 `Test@123456`）、`verify_all.py` 增 M2 公开客服断言、`models/customer_service.py`+`__init__`/`dify_client.py`/`api/v1/ai.py`+`schemas/ai.py`、`platform.ts`/`AgentDock.vue`——经用户同意后合并 ②按用户授权更新 `tests/e2e_m3m4_test.py` 账号为 `13810000004/13810000003/13810000002` + `Test@123456` ③**空库迁移链验收通过**（临时库 `alembic upgrade head` 001→002→003：32 表/44 外键/8 处 FK 列均 `int`；`downgrade base` 亦通；验后删库）④回归 compileall + verify_all **29/29**（103 路径 = 102 API + 1 health）+ pytest **143/143** + `npm run build` + Docker E2E **80/80** + **M5 mock 5/5** + **M5 production 10/10**（中文『跟进中』经 M1 接口写入后归一入统 122 条全入 0 跳过、客户下钻 122 条真实数据、PDF、未来周期仍 40002、complaint_weekly 设计拒绝）⑤**销账**：清单第 2 项（002 迁移 FK）与 v6.9.3 记录的 seed 撞键 P2 均由上游修复并经本轮验证；**M5 切 production 仅余 M3 迟报口径 + M4 投诉 9 字段**；详见更新记录 v6.10.3 与 LOG-054）  
+**最后更新**：2026-10-18（v6.11.3 M3 成绩三件套：新增 PUT /employee/scores/{id} 修改接口（不存在→40401）+ student_score 唯一约束 uq_student_score_unique（重复→40901，semester 归一空串）+ 成绩口径统一 0-100 + 迁移 005 清理存量 4 条重复 + E2E 幂等适配；HTTP 冒烟 7/7 + pytest 154/154 + E2E 两轮；同轮完成前端联通诊断（LOG-062）：双 MySQL 环境下 .env 3306→59000 已修、Dify 响应 13~30s 属环境性能）
 
 **上一版记录（v6.10.2）**：2026-10-18（**v6.10.2 第八次同步 origin/master→longtrying_test**：并入 M1/M2 全量（v6.9.8~v6.10.1：PROSPECT 审批门 + 客服Agent阶段B + 五项补齐）与 v6.9.7 迁移链修复，39 文件 +1793/-140；公共模块 7 项变更（ai_service 纯新增/user auth 审批门/dify_client URL/迁移链 FK/main.cs 路由+CsRecommendLog 31→32 表/verify_all 32表断言/schemas+wechat）按规则先上报后合并获用户同意；**重点验证 ai_service.py 的 AgentType/AIService/ai_service 全保留**（v6.8.8 教训落地为标准检查动作）；回归 compileall + verify_all **29/29** + pytest **143/143** + 容器重启导入冒烟 **32 表** + /docs 200 + 新路由 /api/v1/cs/faq 200；运行日志编号双线并行（anhoa LOG-044~053 / longtrying_test LOG-044~046）后缀标注区分，勿重编号他人条目；详见更新记录 v6.10.2 与 LOG-046（longtrying_test））  
 
@@ -842,3 +864,6 @@ chore: 构建
 > 合并验证（2026-10-18）：云端最新 master 已并入本地 master；四个本地后端 WIP 按用户要求放弃，后端以云端为准；verify_all 29/29 + pytest 143/143 + npm build 通过。
 
 > 文档索引补充：`docs/前端无法解决问题清单.md`（前端无法根治问题、后端解决方案、验收标准）。
+
+
+**最后更新**：2026-10-18（v6.11.3 M3 成绩三件套：新增 PUT /employee/scores/{id} 修改接口（不存在→40401）+ student_score 唯一约束 uq_student_score_unique（重复→40901，semester 归一空串）+ 成绩口径统一 0-100 + 迁移 005 清理存量 4 条重复 + E2E 幂等适配；HTTP 冒烟 7/7 + pytest 154/154 + E2E 两轮；同轮完成前端联通诊断（LOG-062）：双 MySQL 环境下 .env 3306→59000 已修、Dify 响应 13~30s 属环境性能）

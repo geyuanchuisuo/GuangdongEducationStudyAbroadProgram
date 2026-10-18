@@ -59,6 +59,7 @@ from app.schemas.employee import (
     RemindersOut,
     ScoreCreate,
     ScoreOut,
+    ScoreUpdate,
     TodoCreate,
     TodoOut,
     TodoUpdate,
@@ -286,6 +287,17 @@ async def record_score(
 ):
     score = await service.record_score(data.model_dump(exclude_unset=True))
     return success_response(data=ScoreOut.model_validate(score), message="成绩已录入")
+
+
+@router.put("/scores/{score_id}", summary="修改成绩")
+async def update_score(
+    score_id: int,
+    data: ScoreUpdate,
+    current_user: User = Depends(require_user_type("EMPLOYEE", "MANAGER")),
+    service: EmployeeService = Depends(_get_service),
+):
+    score = await service.update_score(score_id, data.model_dump())
+    return success_response(data=ScoreOut.model_validate(score), message="成绩已修改")
 
 
 @router.get("/scores", summary="成绩列表（员工/管理层查询）")
