@@ -540,6 +540,28 @@ docker volume inspect guangdongeducationstudyabroadprogram_backend_storage
 
 ## 六、关键配置文件
 
+### 6.0 环境特异配置清单（接手必读，先看这里再改代码）
+
+> **核心原则：环境特异配置 = 每台机器/每个人不一样的东西，禁止把某个人电脑上的具体值硬编码入库**（真实教训：v6.10.3 合并曾把成员内网 IP 写进 docker-compose.yml，v6.10.4 修复并记 LOG-060）。
+
+**接手第一步：按下面清单逐项检查并改成你自己的值**
+
+| 配置项 | 位置 | 该填什么 | 常见错误 |
+|--------|------|----------|----------|
+| `DATABASE_URL` | backend/.env、docker-compose.yml | 你本机 MySQL 地址与密码 | 直接沿用别人的密码导致连不上库 |
+| `REDIS_URL` | backend/.env、docker-compose.yml | 你本机 Redis 地址 | - |
+| `SECRET_KEY` | backend/.env | 随机字符串（自行生成） | 沿用仓库示例值上线 |
+| `DIFY_BASE_URL` | backend/.env、docker-compose.yml | **本机：`http://localhost`；Docker 容器内：`http://host.docker.internal`** | ❌ 写成其他成员的内网 IP（如 192.168.x.x）——你的机器上必不通 |
+| `DIFY_*_AGENT_KEY` | backend/.env（不入库，.env 已 gitignore） | 你自己在 Dify 控制台生成的 app-xxx | 直接用别人的 key（对方撤销后全体失效） |
+| `STORAGE_BACKEND` | backend/.env、docker-compose.yml | 一期默认 `local` | - |
+| `VITE_API_BASE_URL` | frontend/.env | 本机 `http://localhost:8000/api/v1`；生产构建用相对路径 `/api/v1`（.env.production 已配） | 指到别人的机器 |
+
+**规则**：
+1. docker-compose.yml / 代码里只允许出现**通用别名**（host.docker.internal、localhost、服务名 mysql/redis），具体 IP 一律不入库
+2. 个性化值放 `.env`（已 gitignore）或 `.env.example` 只放占位符
+3. 合并公共 compose/config 后，先检查环境变量类差异（IP/端口/URL）再启动，别只做代码冒烟
+4. 不确定某配置是不是环境特异 → 按环境特异处理
+
 ### 6.1 后端环境变量（.env）
 
 ```bash
