@@ -161,9 +161,10 @@ DIFY_INIT_AUTO_BIND_MODEL=true       # 自动为所有应用绑定模型
 | `DIFY_BASE_URL` | ✅ | `http://localhost:8081` | Dify Service API 地址。Docker 容器内由 compose 覆盖为 `http://dify_nginx` |
 | `DIFY_VERSION` | ✅ | `1.16.0-rc1` | Dify 版本号 |
 | `DIFY_API_PROTOCOL` | ✅ | `openai` | API 协议 |
-| `DIFY_STUDENT_AGENT_KEY` | 自动注入 | 空 | 留学生智能管家 Agent 的 app key，由 `dify-init` 写入共享卷并在 backend 启动时加载 |
-| `DIFY_EMPLOYEE_AGENT_KEY` | 自动注入 | 空 | 企业员工助手 Agent 的 app key，由 `dify-init` 自动加载 |
-| `DIFY_CUSTOMER_AGENT_KEY` | 自动注入 | 空 | 粤教客服 Agent 的 app key，由 `dify-init` 自动加载 |
+| `DIFY_STUDENT_AGENT_KEY` | 按需 | 空 | 留学生智能管家 Agent 的 app key，从 `dify/docker/app_keys.txt` 复制 |
+| `DIFY_EMPLOYEE_AGENT_KEY` | 按需 | 空 | 企业员工助手 Agent 的 app key |
+| `DIFY_CUSTOMER_AGENT_KEY` | 按需 | 空 | 粤教客服 Agent 的 app key |
+| `DIFY_REPORT_AGENT_KEY` | 按需 | 空 | 智能报告 Agent 的 app key（v6.11.11 起支持，报告 AI 分析用；留空则报告 AI 恒 `unavailable`） |
 | `DIFY_MODEL_API_KEY` | 可选 | 空 | 直连模型降级用的 API Key。留空则跳过直连降级，走本地话术 |
 | `DIFY_MODEL_BASE_URL` | 可选 | `https://api.xiaomimimo.com/v1` | 直连模型地址 |
 | `DIFY_MODEL_NAME` | 可选 | `mimo-v2.6-flash` | 直连模型名称 |
@@ -308,7 +309,27 @@ docker compose logs -f dify-init
 
 ### 步骤 3：验证
 
-`dify-init` 将 3 个业务 Agent key 写入权限为 `0600` 的 Docker 命名卷，backend 等待 init 成功后，在启动时自动加载这些 key。调用 AI 端点，确认返回 `source: "dify"` 而非 `fallback`：
+dify-init 将 5 个 app key 写入 `dify/docker/app_keys.txt`（已 gitignore）。打开该文件，复制四个应用的 key 到 `backend/.env`：
+
+```bash
+# 从 dify/docker/app_keys.txt 复制对应行
+DIFY_CUSTOMER_AGENT_KEY=app-xxxx      # 粤教客服
+DIFY_EMPLOYEE_AGENT_KEY=app-yyyy      # 企业员工助手
+DIFY_STUDENT_AGENT_KEY=app-zzzz       # 留学生智能管家
+DIFY_REPORT_AGENT_KEY=app-rrrr        # 智能报告（留空则报告 AI 恒 unavailable）
+```
+
+> 注：backend 容器「启动时自动加载 /run/dify-keys/app_keys.env」的设计因 docker-compose 缺 `dify_app_keys:/run/dify-keys` 挂载暂不可用（已记录于 LOG-070（ZNBG）/开发路线图移交清单第 25 项，按用户决定暂不修复）；当前以 `backend/.env` 回填为可用路径。
+
+### 步骤 4：重启 backend
+
+```bash
+docker compose restart backend
+```
+
+### 步骤 5：验证
+
+调用三个 AI 端点各发一条消息，确认返回 `source: "dify"` 而非 `fallback`：
 
 ```bash
 # 客服

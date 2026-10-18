@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     DIFY_STUDENT_AGENT_KEY: str = ""
     DIFY_EMPLOYEE_AGENT_KEY: str = ""
     DIFY_CUSTOMER_AGENT_KEY: str = ""
+    DIFY_REPORT_AGENT_KEY: str = ""
+    # 直连模型降级（Dify Agent 不可用时用，留空则跳过直连降级走本地话术）
     DIFY_MODEL_API_KEY: str = ""
     DIFY_MODEL_BASE_URL: str = "https://api.xiaomimimo.com/v1"
     DIFY_MODEL_NAME: str = "mimo-v2.6-flash"

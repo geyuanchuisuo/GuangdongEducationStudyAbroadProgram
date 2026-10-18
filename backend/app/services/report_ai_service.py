@@ -1,12 +1,11 @@
 """M5 智能报告模块 — 报告 AI 分析入口（v6.11.10 决策）
 
-v6.11.9 经用户确认，M0 不登记 `AgentType.REPORT` / `DIFY_REPORT_AGENT_KEY`；报告调用保留动态 session ID。若后续重新接入 REPORT，动态 session 可能被 Dify 当作 conversation_id 并拒绝；当前按现有降级路径处理。
+v6.11.13 第十次同步：上游 M0 已登记 `AgentType.REPORT`/`DIFY_REPORT_AGENT_KEY`（经用户批准，取代本线 v6.11.9 的「不登记」决策）；本模块探测到登记即走专用调用，session 用 "new"。若 key 未回填，网关仍按不可用处理，走既有降级路径。
 
 AI 只做文字归纳（摘要/趋势/分析/建议），数字由程序计算；schema 校验、超时/错误处理失败时保留确定性指标。模拟文本仅在 `REPORT_DATA_SOURCE=mock` 下使用并标记 `ai_source=mock`。
 """
 import json
 import logging
-from datetime import datetime
 
 from app.config import settings
 
@@ -211,10 +210,12 @@ class ReportAIService:
 
             agent = getattr(AgentType, "REPORT", None)
             if agent is not None:
+                # session 传 "new"（新建会话）：网关对非 "new" 的 session 会作为 conversation_id
+                # 发给 Dify，动态串（非 UUID/不存在）必被 400 拒绝——v6.11.6 同因实测结论。
                 resp = await ai_service.chat(
                     agent,
                     self._build_prompt(report_type, metrics, context),
-                    f"report-{report_type}-{int(datetime.now().timestamp())}",
+                    "new",
                     user_id="report",
                 )
                 analysis = _parse_json(getattr(resp, "content", ""))

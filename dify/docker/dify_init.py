@@ -291,6 +291,11 @@ def export_app_keys(client: httpx.Client, token: str, apps: dict) -> None:
     lines = [
         "# Dify 应用 API Key（由 dify-init 自动生成）",
         "# 由 backend 容器启动时自动加载；不要提交或公开此文件。",
+        "# 请将下方 key 复制到 backend/.env 对应变量：",
+        "#   留学生智能管家 -> DIFY_STUDENT_AGENT_KEY",
+        "#   企业员工助手   -> DIFY_EMPLOYEE_AGENT_KEY",
+        "#   粤教客服       -> DIFY_CUSTOMER_AGENT_KEY",
+        "#   智能报告       -> DIFY_REPORT_AGENT_KEY（留空则报告 AI 恒 unavailable）",
         "",
     ]
     for name, app_id in apps.items():
