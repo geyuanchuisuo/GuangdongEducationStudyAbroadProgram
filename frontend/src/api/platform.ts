@@ -110,7 +110,21 @@ export const platformApi = {
     fd.append('file', file)
     return toData(request.post('/crm/assessments/file', fd, { headers: { 'Content-Type': 'multipart/form-data' } }))
   },
-  policies: () => Promise.resolve(policies),
+  // v6.11.23：政策资讯接库（GET /cs/policies 公开，publish_date 映射为 date）
+  policies: async (params: AnyRecord = {}): Promise<Array<AnyRecord>> => {
+    try {
+      const data: any = await toData(request.get('/cs/policies', { params: query(params) }))
+      if (data?.items?.length) {
+        return data.items.map((i: AnyRecord) => ({
+          country: i.country, date: i.publish_date, title: i.title,
+          summary: i.summary, content: i.content,
+        }))
+      }
+    } catch (error) {
+      console.warn('[platformApi] 接口不可用，回落到本地演示数据：', error)
+    }
+    return policies
+  },
   notifications: (params: AnyRecord = {}) => fallback(() => request.get('/notifications', { params: query(params) }), notifications),
   notificationsUnread: () => toData(request.get('/notifications/unread-count')),
   markNotificationRead: (id: number) => toData(request.put('/notifications/' + id + '/read')),
@@ -144,6 +158,7 @@ export const platformApi = {
     oralReport: (data: AnyRecord) => toData(request.post('/employee/reports/oral', data)),
     createCrmLead: (data: AnyRecord) => toData(request.post('/employee/crm/leads', data)),
     createFollowUp: (data: AnyRecord) => toData(request.post('/employee/crm/follow-ups', data)),
+    deleteFollowUp: (id: number) => toData(request.delete('/employee/crm/follow-ups/' + id)),
     listFollowUps: (params: AnyRecord = {}) => toData(request.get('/employee/crm/follow-ups', { params: query(params) })),
     parseCommand: (data: AnyRecord) => toData(request.post('/employee/commands/parse', data)),
     executeCommand: (data: AnyRecord) => toData(request.post('/employee/commands/execute', data)),

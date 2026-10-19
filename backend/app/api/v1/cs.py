@@ -32,6 +32,37 @@ async def list_public_courses(
     return success_response(data=await service.list_courses(page, page_size, category))
 
 
+@router.get("/policies", summary="公开留学政策资讯（政策内容页数据源，无需登录）")
+async def list_policies(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=100),
+    country: str | None = Query(None, description="国家筛选：德国/新加坡/综合"),
+    db: AsyncSession = Depends(get_db),
+):
+    from sqlalchemy import func, select
+
+    from app.models.course import Policy
+    from app.schemas.course import PolicyOut
+
+    q = select(Policy).where(Policy.status == "published")
+    cq = select(func.count()).select_from(Policy).where(Policy.status == "published")
+    if country:
+        q = q.where(Policy.country == country)
+        cq = cq.where(Policy.country == country)
+    total = (await db.execute(cq)).scalar() or 0
+    rows = (await db.execute(
+        q.order_by(Policy.publish_date.desc()).offset((page - 1) * page_size).limit(page_size)
+    )).scalars().all()
+    return success_response(
+        data={
+            "items": [PolicyOut.model_validate(r).model_dump() for r in rows],
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+        }
+    )
+
+
 @router.get("/faq", summary="公开 FAQ 列表（常见问题自助解答，无需登录）")
 async def list_faqs(
     page: int = Query(1, ge=1),

@@ -1,5 +1,5 @@
 from app.models.base import Base
-from app.models.course import CourseProject
+from app.models.course import CourseProject, Policy
 from app.models.crm import (AiReport, AiReportAttachment, AiReportDrill, CrmFollowUp, CrmLead, CustomerAssessment, TicketAIAnalysis)
 from app.models.customer import Customer, PendingLead
 from app.models.customer_service import CsChatMessage, CsChatSession, CsFaq, CsIntentLog, CsRecommendLog
@@ -36,6 +36,7 @@ __all__ = [
     "AiReportDrill",
     "TicketAIAnalysis",
     "CourseProject",
+    "Policy",
     "EventLecture",
     "EventRegistration",
     "CsChatSession",

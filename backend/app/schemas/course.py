@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from pydantic import BaseModel
 class CourseOut(BaseModel):
@@ -11,5 +11,20 @@ class CourseOut(BaseModel):
     duration: str | None = None
     status: str
     create_time: datetime | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class PolicyOut(BaseModel):
+    """留学政策资讯（v6.11.23 建表接库）。"""
+
+    id: int
+    title: str
+    country: str
+    category: str | None = None
+    summary: str
+    content: str | None = None
+    publish_date: date | None = None
+    status: str = "published"
 
     model_config = {"from_attributes": True}

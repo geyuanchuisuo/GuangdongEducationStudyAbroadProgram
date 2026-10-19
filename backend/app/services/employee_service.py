@@ -586,6 +586,19 @@ class EmployeeService:
         await self.db.refresh(follow)
         return follow
 
+    async def delete_follow_up(self, employee_id: int, follow_id: int) -> None:
+        """删除跟进记录（数据隔离：只能删自己的；MANAGER 可删任意）。v6.11.23"""
+        from app.models.crm import CrmFollowUp
+        result = await self.db.execute(select(CrmFollowUp).where(CrmFollowUp.id == follow_id))
+        follow = result.scalar_one_or_none()
+        if not follow:
+            raise NotFoundError(message="跟进记录不存在")
+        user = await self.db.get(User, employee_id)
+        if user is not None and user.user_type != "MANAGER" and follow.employee_id != employee_id:
+            raise NotFoundError(message="跟进记录不存在")
+        await self.db.delete(follow)
+        await self.db.commit()
+
     async def list_my_follow_ups(
         self, employee_id: int, customer_id: int | None, page: int, page_size: int
     ) -> tuple[list, int]:

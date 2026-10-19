@@ -6,6 +6,8 @@
 
 ## 零、快速定位（打开项目先看这里）
 
+> v6.11.23（2026-10-19，longtrying_test）：**Policies 政策页建表接库 + B 类假动作全接真实接口**——新增 `policy` 表（迁移 007_policy 幂等）+ `GET /cs/policies` 公开接口 + 18 条政策种子（幂等脚本）；学生请假/删除跟进（新 `DELETE /employee/crm/follow-ups/{id}`）/客户抽屉跟进与状态/查看完整号码/批量再分配/权限保存/导出 CSV/组织树/学生 DDL 与申请进度/跟进柱状图 10 处假动作全部改真实接口（路由 107→109）。build ✓ ×2 + API 拨测 10 项 + pytest 164/164。详见更新记录 v6.11.23 / LOG-081。
+>
 > v6.11.22（2026-10-19，longtrying_test）：**P0 方案A 落地：种子数据归属重分配**——新增 `backend/scripts/seed_owner_rebalance_v6_11_22.py`（幂等、仅动归属字段，经用户批准）：EMPLOYEE(13810000003) 名下 customer/todo/follow_up/lead/通知 60/50 条、STUDENT(13810000002) 名下 ticket/admin_service/academic/通知 60/50 条，测试账号登录即见满屏真实数据。**结构性上限**：日报 8 条（UNIQUE(emp,date)×全库 8 日期）、成绩 32 条（UNIQUE 学生课程学期×32 组合），重建库时 seed 扩分布可解除。API 验收达标 + pytest 164/164。详见更新记录 v6.11.22 / LOG-080。
 >
 > v6.11.21（2026-10-19，longtrying_test）：**第十三次同步 gitea/master→longtrying_test（工作台双轨修复融合）**——master 3729eba 与本线 v6.11.20 同区域双轨修复合并：seed_data.py 种子补齐/vite 分包移除/nginx 禁缓存直入；RoleWorkspace.vue 6 冲突块双向融合（本线为基础+master 差异字段：MANAGER 看板漏斗/todoRows/orgTree/勾选式批量审批等）；dify_init.py 按用户裁定以本线为基准。pytest 164/164 + build ✓。**遗留已销账**：dify_init.py 键值格式断点已修（APP_KEY_ENV_MAP 输出 shell 变量名 + 留档版跳过 + 前缀容错，POSIX sh source 实测通过）。详见更新记录 v6.11.21 / LOG-079。

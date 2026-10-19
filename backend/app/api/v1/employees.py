@@ -404,6 +404,16 @@ async def create_follow_up(
     return success_response(data=CrmFollowUpOut.model_validate(follow), message="已记录")
 
 
+@router.delete("/crm/follow-ups/{follow_id}", summary="删除跟进记录（只能删自己的，MANAGER 任意）")
+async def delete_follow_up(
+    follow_id: int,
+    current_user: User = Depends(require_user_type("EMPLOYEE", "MANAGER")),
+    service: EmployeeService = Depends(_get_service),
+):
+    await service.delete_follow_up(current_user.id, follow_id)
+    return success_response(data={"id": follow_id}, message="已删除")
+
+
 @router.get("/crm/follow-ups", summary="我的跟进记录")
 async def list_follow_ups(
     customer_id: int | None = Query(None),
