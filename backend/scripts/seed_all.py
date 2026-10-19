@@ -25,15 +25,26 @@ BACKEND_DIR = Path(__file__).resolve().parent.parent
 
 
 async def _db_has_data() -> bool:
-    """空库判定：sys_user 有行即视为已注入过。"""
+    """空库判定：sys_user 有行即视为已注入过；表不存在（1146）视为空库。
+
+    compose 冷启动时 seed_all 先于 uvicorn 建表执行，sys_user 尚未创建，
+    直接查询会抛 (1146, "Table ... doesn't exist") 导致自动注入整链失败；
+    此处将「表不存在」归一为空库语义，后续 seed_data 会 drop_all+create_all 自建表。
+    """
     from sqlalchemy import func, select
 
     from app.database import async_session_factory
     from app.models.user import User
 
-    async with async_session_factory() as session:
-        n = (await session.execute(select(func.count()).select_from(User))).scalar() or 0
-    return n > 0
+    try:
+        async with async_session_factory() as session:
+            n = (await session.execute(select(func.count()).select_from(User))).scalar() or 0
+        return n > 0
+    except Exception as exc:
+        msg = str(exc)
+        if "1146" in msg or "doesn't exist" in msg:
+            return False
+        raise
 
 
 def _run(label: str, cmd: list[str], env: dict | None = None) -> None:

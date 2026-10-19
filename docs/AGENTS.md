@@ -6,6 +6,7 @@
 
 ## 零、快速定位（打开项目先看这里）
 
+> v6.11.57（2026-10-20，longtrying_test）：**.env 自动补建 + 一键运行流程修复**——start-project.bat 全栈化重写（根 .env/dify .env 自动补建与模型 key 预检 → compose 全栈含 Dify 13 容器+dify-init → 前端构建 → 健康等待+种子保险 → vite 非阻断 → localtunnel 穿透；npm_config_cache 重定向 logs\npm-cache 固化沙箱边界：Docker=沙箱外 / vite+tunnel=沙箱内）；seed_all 空库判定兼容 1146 表不存在，compose 冷启动自动注入闭环（v6.11.40 遗留时序缺陷）；两轮一键实测全绿（LOG-111）。
 > v6.11.56（2026-10-19，longtrying_test）：**第二十次同步 gitea/master（三线统一）**——并入 master_ZNBG 线管理层四项修复（登录支持手机号兜底/审批放宽任一 MANAGER+留痕/审批分类 seed 修正/双层标题+个人信息布局，公共模块 user_repo/user_service/approval_engine/seed_data 经用户批准），3 处文档冲突并集；合并后本地 longtrying_test=本地 master=云端 longtrying_test=云端 master 四端同指 bd0fc04（LOG-109）。
 > v6.11.55（2026-10-19，longtrying_test）：**本线合入 master 推送云端**——云端 master 无差异后按 §7.1 流程 Fast-forward 合入并推送（58e775a..42323c7），master=longtrying_test=gitea/master 三者同指（LOG-108）。
 > v6.11.54（2026-10-19，longtrying_test）：**第十九次同步 gitea/master**——并入 v6.11.52 master 线（chunk 加载失败兜底、业务错误 bizCode 标记、代客申请表单修复），2 处文档冲突并集；pytest 170/170 + verify_all 29/29 + build ✓（LOG-107）。
