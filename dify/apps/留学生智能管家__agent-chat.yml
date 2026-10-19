@@ -1,25 +1,50 @@
-# 留学生智能管家 Agent 应用配置（v6.11.4 导出骨架）
+# 留学生智能管家 Agent 应用配置（v6.11.4 骨架，v6.11.14 对齐 Dify 1.16 DSL 0.5.0 model_config 结构）
 # 导入说明：
-#   1. Dify 控制台「创建应用 → 导入 DSL」选此文件
-#   2. 导入后需在「模型供应商」绑定 OpenAI-API-compatible 模型（地址与模型名以 dify/docker/.env 客户配置为准），并在本应用模型设置里选它
+#   1. dify-init 自动导入（推荐）；或 Dify 控制台「创建应用 → 导入 DSL」选此文件
+#   2. your-model-name / your-model-provider 为占位符，由 dify-init 导入时注入 dify/docker/.env 的客户模型配置
 #   3. 建议挂载知识库《留学生生活FAQ》《学业考务指南》
 #   4. 后端会通过 inputs.restrictions 注入硬性限制（不承诺退费、不给医疗级建议），见 backend/app/services/student_service.py STUDENT_CAPABILITIES
 app:
-  name: 留学生智能管家
   description: 粤教留学学生端智能助手，行政服务代办、心理关怀、学业提醒、主动推送
   icon: 🎓
   icon_background: '#E8F3FF'
-  mode: agent-chat
-  use_icon_as_answer_icon: true
-model:
-  provider: langgenius/openai_api_compatible/openai_api_compatible
-  name: your-model-name
   mode: chat
-  completion_params:
-    temperature: 0.8
-    max_tokens: 4096
-    top_p: 1
-prompt:
+  name: 留学生智能管家
+  use_icon_as_answer_icon: true
+kind: app
+model_config:
+  agent_mode:
+    enabled: false
+    prompt: null
+    strategy: null
+    tools: []
+  annotation_reply:
+    enabled: false
+  chat_prompt_config: {}
+  completion_prompt_config: {}
+  dataset_configs:
+    retrieval_model: multiple
+  dataset_query_variable: null
+  external_data_tools: []
+  file_upload:
+    image:
+      detail: high
+      enabled: false
+      number_limits: 3
+      transfer_methods:
+      - remote_url
+      - local_file
+  model:
+    completion_params:
+      temperature: 0.8
+      max_tokens: 4096
+      top_p: 1
+    mode: chat
+    name: your-model-name
+    provider: your-model-provider
+  more_like_this:
+    enabled: false
+  opening_statement: 你好呀，我是你的留学生智能管家。请假、查成绩、生活疑问、想找人聊聊，都可以跟我说。
   pre_prompt: |
     你是粤教留学的「留学生智能管家」，服务对象是公司的留学生。
 
@@ -33,38 +58,22 @@ prompt:
     - 情绪问题（抑郁、自伤倾向）必须引导「请联系负责老师或专业心理援助热线」，不得自行处置
 
     后端会在 inputs.capabilities 中注入当前学生可使用的服务能力清单。
-  opening_statement: 你好呀，我是你的留学生智能管家。请假、查成绩、生活疑问、想找人聊聊，都可以跟我说。
-  suggested_questions:
-    - 我想请假
-    - 最近有什么考试？
-    - 我的申请进度到哪了？
-conversation_memory:
-  window:
-    enabled: true
-    size: 10
-  role_prefix:
-    user: ''
-    assistant: ''
-features:
-  file_upload:
-    enabled: true
-    allowed_file_types: [image, document]
-    allowed_file_extensions: [.png, .jpg, .jpeg, .pdf]
-    number_limits: 3
-    transfer_method: local_file
+  prompt_type: simple
   retriever_resource:
     enabled: true
-sensitive_word_avoidance:
-  enabled: false
-more_like_this:
-  enabled: false
-speech_to_text:
-  enabled: false
-text_to_speech:
-  enabled: false
-citation:
-  enabled: false
-moderation:
-  enabled: false
-agents: {}
-toolbox: []
+  sensitive_word_avoidance:
+    configs: []
+    enabled: false
+    type: ''
+  speech_to_text:
+    enabled: false
+  suggested_questions:
+  - 我想请假
+  - 最近有什么考试？
+  - 我的申请进度到哪了？
+  suggested_questions_after_answer:
+    enabled: false
+  text_to_speech:
+    enabled: false
+  user_input_form: []
+version: 0.5.0

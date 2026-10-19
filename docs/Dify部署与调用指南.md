@@ -26,18 +26,21 @@ Dify 1.16.0-rc1 官方 compose 已纳入项目 `dify/docker/` 目录，随主 `d
 
 ### 1.2 dify-init 服务
 
-`dify-init` 是项目新增的一次性初始化容器，启动时按以下顺序执行；模型供应商插件必须已安装：
+`dify-init` 是项目新增的一次性初始化容器，启动时自动执行（v6.11.14 按 Dify 1.16 真实契约适配）：
 
 ```
-等待 Dify api 就绪
+等待 Dify api 就绪（探 /console/api/setup 业务级探活，避免 DB 未就绪假 healthy）
     ↓
-创建/登录 Dify 管理员（用 dify/docker/.env 中的账号）
+创建/登录 Dify 管理员（setup 传明文、login 传 base64；cookie 会话 + X-CSRF-Token）
     ↓
-添加 OpenAI-API-compatible 模型供应商（用客户填的 Key/URL/模型名）
+确保模型插件已安装（1.16 插件化，未装则从 marketplace 自动安装 OpenAI-API-compatible 插件）
     ↓
-按 DSL 内应用名导入并去重在用应用（跳过留档 DSL）
+添加模型供应商凭证 + 注册自定义模型（DIFY_MODEL_NAME，endpoint_url/context_size）
     ↓
-为所有应用绑定模型
+导入 dify/apps/ 下 5 个应用 yml（两步式 /apps/imports，幂等，已存在则跳过；
+    导入前把 your-model-name / your-model-provider 占位符替换为客户配置）
+    ↓
+为所有应用绑定模型 + 发布工作流（chatflow 未发布调 API 会报 Workflow not published）
     ↓
 将 3 个业务 Agent 和智能报告共 4 个 app key 写入受限 Docker 命名卷；backend 启动时自动读取，无需手动回填
 ```
@@ -167,7 +170,7 @@ DIFY_INIT_AUTO_BIND_MODEL=true       # 自动为所有应用绑定模型
 | `DIFY_BASE_URL` | ✅ | `http://localhost:8081` | Dify Service API 地址。Docker 容器内由 compose 覆盖为 `http://dify_nginx` |
 | `DIFY_VERSION` | ✅ | `1.16.0-rc1` | Dify 版本号 |
 | `DIFY_API_PROTOCOL` | ✅ | `openai` | API 协议 |
-| `DIFY_STUDENT_AGENT_KEY` | 按需 | 空 | 留学生智能管家 Agent 的 app key，从 `dify/docker/app_keys.txt` 复制 |
+| `DIFY_STUDENT_AGENT_KEY` | 按需 | 空 | 留学生智能管家 Agent 的 app key，由 dify-init 写入 `dify_app_keys` 共享卷，backend 启动时自动加载（无需手动回填） |
 | `DIFY_EMPLOYEE_AGENT_KEY` | 按需 | 空 | 企业员工助手 Agent 的 app key |
 | `DIFY_CUSTOMER_AGENT_KEY` | 按需 | 空 | 粤教客服 Agent 的 app key |
 | `DIFY_REPORT_AGENT_KEY` | 按需 | 空 | 智能报告 Agent 的 app key（v6.11.11 起支持，报告 AI 分析用；留空则报告 AI 恒 `unavailable`） |
@@ -325,14 +328,19 @@ docker compose restart backend
 
 ### 步骤 5：验证
 
-调用三个 AI 端点各发一条消息，确认返回 `source: "dify"` 而非 `fallback`：
+调用 AI 端点发一条消息，确认返回 `source: "dify"` 而非 `fallback`/`model`（v6.11.14 实测路径）：
 
 ```bash
-# 客服
-curl -X POST http://localhost:8000/api/v1/cs/chat -H "Content-Type: application/json" -d '{"query":"你好","user":"test"}'
+# 客服（公开接口）
+curl -X POST http://localhost:8000/api/v1/ai/customer-service/chat -H "Content-Type: application/json" -d '{"message":"公司简称是什么？"}'
+
+# 学生/员工助手（需登录 token）
+curl -X POST http://localhost:8000/api/v1/student/agent/chat -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"message":"我想请假"}'
 ```
 
-### 步骤 4（可选）：配置直连模型降级
+预期：客服返回真实应答；学生/员工返回 `source: "dify"`（Dify 直连）。
+
+### 步骤 6（可选）：配置直连模型降级
 
 在 `backend/.env` 填入：
 ```bash
@@ -356,11 +364,16 @@ docker compose logs dify-init
 
 | 错误信息 | 原因 | 解决 |
 |---------|------|------|
-| `DIFY_MODEL_API_KEY 为空` | 未在 `dify/docker/.env` 填模型 Key | 填入 Key 后 `docker compose up dify-init` |
-| `登录失败: 401` | Dify 管理员密码不匹配 | 修改 `dify/docker/.env` 的 `DIFY_ADMIN_PASSWORD`，或进控制台重置 |
-| `尚未安装 OpenAI-API-compatible Marketplace 插件` | 插件市场不可达或插件未安装 | 允许 Dify 访问 Marketplace，或导入兼容插件包后重试 |
-| `查询模型供应商失败` | Dify Console API 不可用或未完成初始化 | 查看 API 健康状态及 `docker compose logs dify-init` |
-| `Dify api 在 180s 内未就绪` | Dify 启动慢或 PostgreSQL 迁移卡住 | `docker compose ps` 检查 Dify 服务状态，等待后重试 |
+| `模型配置不完整，缺少: ...` | `dify/docker/.env` 模型三变量有留空 | 填齐 `DIFY_MODEL_API_KEY`/`BASE_URL`/`NAME` 后 `docker compose up dify-init` |
+| `登录失败: 401 ... not_setup` | 实例未初始化（自动兜底会先建管理员再登录，仍失败才报） | 检查 `DIFY_ADMIN_EMAIL/PASSWORD` 是否被改过；必要时删 `dify/docker/volumes/` 重来 |
+| `创建管理员失败: 422` | setup 密码不满足规则（字母+数字≥8 位，且**传明文**） | 改 `DIFY_ADMIN_PASSWORD` 为含字母+数字的 8 位以上 |
+| `登录响应 ... 无 access_token`（旧版报错） | 1.16 登录只回 `{"result":"success"}` 走 cookie 会话 | v6.11.14 已适配，若复现请确认 dify-init 镜像已重建 |
+| `添加模型供应商失败: 400 ... does not exist` | 模型插件未安装/供应商标识错 | v6.11.14 起自动装插件；若 marketplace 不可达（需外网），手动在控制台装「OpenAI-API-compatible」插件 |
+| `注册自定义模型失败` | 模型凭证字段不符（`endpoint_url`、数值字段为字符串） | 检查 dify_init.py 版本；或手动在控制台「模型供应商→添加模型」 |
+| `Missing model_config` | 应用 yml 是旧骨架结构（顶层 `model:` 简写） | 用 0.5.0 `model_config` 标准结构（现仓库 yml 已合规） |
+| `Agent Chat App does not support blocking mode` | agent-chat 模式不支持 blocking 调用 | 业务 Agent 用 `mode: chat`（现仓库 yml 已合规）；或网关走 streaming |
+| `Workflow not published` | chatflow 导入后未发布 | v6.11.14 起 init 自动发布；手动可进控制台点「发布」 |
+| `Bind for 0.0.0.0:5003 failed: port is already allocated` | 存在旧的手动 Dify 实例（`docker-*` 容器）抢端口 | `docker compose -p docker down` 停旧套（数据卷保留）后重试 |
 | `导入应用失败` | yml 格式问题 | 检查 `dify/apps/*.yml` 是否合法，或设 `DIFY_INIT_AUTO_IMPORT=false` 跳过 |
 
 ### 7.3 重新执行 init
@@ -391,7 +404,13 @@ A: 检查 `dify_nginx` 容器是否 healthy：`docker compose ps dify_nginx`。�
 A: 检查①`dify-init` 是否成功 ②backend 日志中是否有加载 app key 的错误 ③模型供应商 API Key 是否有效。查看 `docker compose logs backend` 确认降级原因。
 
 **Q: 想换其他模型？**
-A: 修改 `dify/docker/.env` 的 `DIFY_MODEL_BASE_URL` / `DIFY_MODEL_NAME` / `DIFY_MODEL_API_KEY`，然后 `docker compose up dify-init` 重新绑定。支持任何 OpenAI-API-compatible 模型，无需改代码。
+A: 修改 `dify/docker/.env` 的 `DIFY_MODEL_BASE_URL` / `DIFY_MODEL_NAME` / `DIFY_MODEL_API_KEY`，然后 `docker compose up dify-init` 重新初始化。支持任何 OpenAI-API-compatible 模型，无需改代码（init 会自动注册新模型名并重绑 5 个应用；yml 占位符机制保证 Chatflow 节点同源生效）。
+
+**Q: 启动报端口 5003/8081 被占用？**
+A: 多半是旧的手动 Dify 实例（`docker-*` 容器）还在跑。执行 `docker compose -p docker down` 停旧套（数据卷保留），再 `docker compose up -d`。`start-project.bat` 启动时会自动预检并提示（v6.11.15）。
+
+**Q: 业务 Agent（学生/员工/客服）调用报 blocking 不支持？**
+A: Dify 的 `agent-chat` 模式不支持 blocking 调用。项目 yml 已统一 `mode: chat`（v6.11.14），如自行改回 agent-chat 会复现该问题。
 
 **Q: Dify 数据存在哪？**
 A: `dify/docker/volumes/`（已 gitignore），包含 PostgreSQL、Redis、Weaviate、上传文件等。删除会丢失所有 Dify 配置和知识库。

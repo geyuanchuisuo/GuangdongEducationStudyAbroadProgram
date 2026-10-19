@@ -3,7 +3,7 @@ app:
   icon: 🤖
   icon_background: '#FFEAD5'
   mode: agent-chat
-  name: 智能报告
+  name: 智能报告（agent-chat旧版留档）
   use_icon_as_answer_icon: false
 dependencies:
 - current_identifier: null
@@ -38,7 +38,7 @@ model_config:
     completion_params: {}
     mode: chat
     name: your-model-name
-    provider: openai-api-compatible
+    provider: your-model-provider
   more_like_this:
     enabled: false
   opening_statement: null

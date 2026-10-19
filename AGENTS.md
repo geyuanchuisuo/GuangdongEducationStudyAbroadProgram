@@ -6,6 +6,8 @@
 
 ## 零、快速定位（打开项目先看这里）
 
+> v6.11.16（2026-10-19，longtrying_test）：**第十二次同步 gitea/master→longtrying_test**——Dify 核心全部以本线为准（v6.11.14 十项契约适配 + v6.11.15 加固）；M0 共享卷机制并入（`dify_app_keys` 卷，backend 启动自动加载 app_keys.env，dify_init.py 适配 APP_KEY_ENV_MAP 输出 shell env 格式）+ 根 `.env.example` 新增 + `dify/docker/.env` 改不入库；M2 意图码归一 + FAQ 缴费口径 + M5 投诉域 import 缺陷修复 + 种子 INTENT_TYPES 9 码归一经批准并入；解 13 冲突；pytest **164/164**；详见更新记录 v6.11.16 merge 条目与 LOG-075。
+>
 > v6.11.17（2026-10-19，ZNBG/M5）：**production 投诉域静默清零缺陷修复**——`report_data_source.py` 漏 import `ComplaintReportInput`（v6.11.0 引入），调用处 NameError 被 v6.9.6 逐行容错当脏行静默吞掉、报告仍 completed → production 任意含工单周期投诉指标恒 0（本库 105 行全跳过；mock 不受影响）；补 import + 防回退用例后实测 orders_total 0→9 / new_count 6 / analyzed_count 8；回归 compileall + pytest 158/158 + Docker E2E 81/81 + production 冒烟 7/7；详见更新记录 v6.11.17 与 LOG-074（ZNBG）。
 >
 > v6.11.18（2026-10-19，anhoa）：**第十五次同步 origin/master**——M0 公共模块 10 项变更（Dify 共享卷/迁移006/种子补齐/投诉域修复等）经用户批准并入，解 8 冲突；无 M1/M2 业务逻辑变更；回归 compileall + verify_all 29/29 + pytest 164/164 + 前端 build ✅；详见更新记录「merge 第十五次同步」与 LOG-069。
@@ -18,7 +20,7 @@
 >
 > v6.11.22（2026-10-19，anhoa）：**多轮 [intent:] 标记全剥离修复+「重复答案」排查闭环**——排查「还是只重复回答一个答案」：链路分层验证（后端直连/Dify 直连/vite 代理空载）均正常，所见重复文案实为前端 AgentDock 固定兜底（v6.11.21 发布+压测维护窗口致超时/空回答触发）；顺手修复多轮标记泄漏——Dify 会话历史含原始标记致模型模仿输出多个 [intent:]，`_extract_intent` 由剥首个改为 `INTENT_RE.sub` 全剥离；3 轮实测回答各异、意图正确、marker_leaked=False×3；详见更新记录 v6.11.22 与 LOG-078（anhoa）。
 
-> v6.11.16（2026-10-19）：Dify 1.16 首启脚本修正到 `/console/api/*` 并使用 cookie/CSRF 登录，补入智能报告 app key 映射；Agnes 模型配置仅保存在忽略的 `dify/docker/.env`。Dify API/Postgres/Redis/Sandbox 健康且管理员已创建，但 OpenAI 兼容插件和 DSL 依赖需访问 Marketplace；当前本机及容器均收到 403，dify-init 停在供应商配置，app keys 尚未生成。详见更新记录 v6.11.16、LOG-073。
+> v6.11.16（2026-10-19，ZNBG 线，与本线 v6.11.16 同号异义）：Dify 1.16 首启脚本修正到 `/console/api/*` 并使用 cookie/CSRF 登录，补入智能报告 app key 映射；Agnes 模型配置仅保存在忽略的 `dify/docker/.env`。Dify API/Postgres/Redis/Sandbox 健康且管理员已创建，但 OpenAI 兼容插件和 DSL 依赖需访问 Marketplace；当前本机及容器均收到 403，dify-init 停在供应商配置，app keys 尚未生成。详见更新记录 v6.11.16、LOG-073。
 
 > v6.11.15（2026-10-19）：Dify 首启阻塞修复——根 `.env.example` 启用默认 PostgreSQL/Weaviate profiles；Dify Redis 使用独立服务名；backend 只读挂载 `dify_app_keys`；init_permissions 首启生成 sandbox 配置和依赖清单；Dify 示例移除可选空值并统一控制台 8081。本地 `.env` 保留但不跟踪。当前模型三项未配置，dify-init 尚未完成。详见更新记录 v6.11.15 与 LOG-073。
 
@@ -42,7 +44,7 @@
 
 **M5 一期口径与外部阻塞（v6.11.0~v6.11.2，2026-10-18）**：
 - ✅ **已按需求文件改造**：画像四类（含「部分符合」）、期末状态标不可得、数据源部分生成、下钻快照、投诉 AI 独立表、报告专用 Agent、前端周期/版本/对比/徽标/完整详情。**口径以 `C:\Users\Windows\Desktop\M5_一期需求确认与执行提示词.md`（2026-10-18）为准，v6.10.1 的「4→3 映射」与「当前值推算」已被推翻**。
-- 🔴 **阻塞（需他人改动，M5 不得越权）**：①M1 历史时点状态能力 ②M1/M3/M4 四个报告聚合接口（M5 现为直读表，属登记偏离）③M4 工单 6 字段 ~~④M0 补 4 行~~（✅ **上游 v6.11.11 已落地并经第十次同步并入**：config.py 加 `DIFY_REPORT_AGENT_KEY`、ai_service.py 加 `AgentType.REPORT` + `_AGENT_KEY_MAP` 映射，pytest 157/157；**生效仍差一步**：`backend/.env` 回填 dify-init 导出的报告 key，未回填前恒 `unavailable`。历史：本机线 v6.11.6 曾接入、v6.11.9 曾确认移除，上游 v6.11.11 经用户批准重新登记，以最后决策为准）⑤Dify 侧建议补 Chatflow 的 system prompt 约束并降温。
+- 🔴 **阻塞（需他人改动，M5 不得越权）**：①M1 历史时点状态能力 ②M1/M3/M4 四个报告聚合接口（M5 现为直读表，属登记偏离）③M4 工单 6 字段 ~~④M0 补 4 行~~（✅ **v6.11.11 已落地**：config.py 加 `DIFY_REPORT_AGENT_KEY`、ai_service.py 加 `AgentType.REPORT` + `_AGENT_KEY_MAP` 映射，pytest 157/157）~~⑤Dify 侧建议补 Chatflow 的 system prompt 约束并降温~~（✅ **v6.11.15 已落地**：智能报告 Chatflow system prompt 补 JSON 契约约束 + temperature 0.2）。
 - 📄 **新增文档**：`docs/M5_上游接口契约.md`（四份上游契约 + 阻塞清单）、`docs/Dify_接入与智能报告.md`（实例/应用/DSL/阻塞/上云合并）、`dify/apps/智能报告__advanced-chat.yml`（在用）与 `智能报告__agent-chat.yml`（留档）。
 
 **M5 移交待办清单（v6.9.0，接手者从这里继续）**：
@@ -463,7 +465,7 @@ cp .env.example .env
 #   REDIS_URL - Redis连接地址
 #   SECRET_KEY - JWT密钥（请用随机字符串）
 #   DIFY_BASE_URL - Dify API 地址（v6.11.6 起一体化打包：本机 http://localhost:8081，容器内由 compose 覆盖为 http://dify_nginx）
-#   DIFY_*_AGENT_KEY - 各Agent的API Key（app-开头；dify-init 启动时自动创建应用并输出到 dify/docker/app_keys.txt，复制回填即可）
+#   DIFY_*_AGENT_KEY - 各Agent的API Key（app-开头；dify-init 启动时自动创建应用并写入 dify_app_keys 共享卷，backend 启动时自动加载，无需手动回填）
 #   STORAGE_BACKEND - 文件存储后端：local（默认，本地磁盘）/ s3（MinIO，二期可选）
 ```
 
@@ -555,9 +557,9 @@ Dify（1.16.0-rc1）已作为子 compose 纳入项目，随 `docker compose up -
 | 步骤 | 操作 | 说明 |
 |------|------|------|
 | ① 填写模型配置 | 编辑 `dify/docker/.env`，填入 `DIFY_MODEL_API_KEY` / `DIFY_MODEL_BASE_URL` / `DIFY_MODEL_NAME`（三项必填，默认留空） | OpenAI-API-compatible 通用协议，key/url/模型名由客户自定义，**不绑定任何特定模型**；API Key 勿入库 |
-| ② 启动全部服务 | `docker compose up -d` | dify-init 自动：创建管理员→配模型供应商→导入 5 个 yml→绑定模型→输出 app key |
+| ② 启动全部服务 | `docker compose up -d` | dify-init 自动（v6.11.14）：创建管理员→装模型插件→配供应商→注册自定义模型→导入 5 个 yml（占位符注入）→绑定模型→发布工作流→输出 app key |
 | ③ 查看 init 日志 | `docker compose logs -f dify-init` | 成功标志：`🎉 Dify 初始化全部完成` |
-| ④ 回填 app key | 打开 `dify/docker/app_keys.txt`，复制四个业务 Agent key 到 `backend/.env` | `DIFY_CUSTOMER_AGENT_KEY` / `DIFY_EMPLOYEE_AGENT_KEY` / `DIFY_STUDENT_AGENT_KEY` / `DIFY_REPORT_AGENT_KEY` |
+| ④ 回填 app key | app key 由 dify-init 写入 `dify_app_keys` 共享卷，backend 启动时自动加载（无需手动复制） | `DIFY_CUSTOMER_AGENT_KEY` / `DIFY_EMPLOYEE_AGENT_KEY` / `DIFY_STUDENT_AGENT_KEY` / `DIFY_REPORT_AGENT_KEY`（留档版不回填） |
 | ⑤ 重启 backend | `docker compose restart backend` | 使 app key 生效 |
 | ⑥ 验证 AI | 调用任一 AI 端点，确认返回 `source: "dify"` | 如返回 `fallback` 则检查 app key 是否回填正确 |
 
@@ -598,7 +600,7 @@ docker volume inspect guangdongeducationstudyabroadprogram_backend_storage
 | `REDIS_URL` | backend/.env、docker-compose.yml | 你本机 Redis 地址 | - |
 | `SECRET_KEY` | backend/.env | 随机字符串（自行生成） | 沿用仓库示例值上线 |
 | `DIFY_BASE_URL` | backend/.env、docker-compose.yml | **本机：`http://localhost:8081`；Docker 容器内：`http://dify_nginx`**（v6.11.6 起 Dify 一体化打包，勿再用 host.docker.internal/3000/旧内网 IP） | ❌ 写成其他成员的内网 IP（如 192.168.x.x）或旧 VM 地址——你的机器上必不通 |
-| `DIFY_*_AGENT_KEY` | backend/.env（不入库，.env 已 gitignore） | dify-init 自动输出到 `dify/docker/app_keys.txt`，复制四个业务 Agent key 回填 | 直接用别人的 key（对方撤销后全体失效） |
+| `DIFY_*_AGENT_KEY` | `dify_app_keys` 共享卷（dify-init 自动写入，backend 只读挂载自动加载） | 无需手动回填；本地非 Docker 调试时才需在 backend/.env 手动填写 | 直接用别人的 key（对方撤销后全体失效） |
 | `DIFY_MODEL_API_KEY` / `DIFY_MODEL_BASE_URL` / `DIFY_MODEL_NAME` | dify/docker/.env（模型供应商） | 你自己的模型配置（任一 OpenAI-API-compatible 服务，key/url/模型名全部客户自定义，**三项默认全空、不绑定任何特定模型**），dify-init 自动配供应商 | 任一项填错/留空 → dify-init 失败，backend 不启动 |
 | `STORAGE_BACKEND` | backend/.env、docker-compose.yml | 一期默认 `local` | - |
 | `VITE_API_BASE_URL` | frontend/.env | 本机 `http://localhost:8000/api/v1`；生产构建用相对路径 `/api/v1`（.env.production 已配） | 指到别人的机器 |
@@ -630,7 +632,7 @@ DIFY_API_PROTOCOL=openai
 DIFY_STUDENT_AGENT_KEY=app-xxx
 DIFY_EMPLOYEE_AGENT_KEY=app-yyy
 DIFY_CUSTOMER_AGENT_KEY=app-zzz
-# 三个 key 来源：dify-init 输出的 dify/docker/app_keys.txt（勿提交）
+# key 来源：dify-init 自动写入 dify_app_keys 共享卷，backend 容器启动时自动加载（无需手动填写；此处仅为本地非 Docker 调试时手动配置用）
 
 # 直连模型降级（可选）：Dify Agent 不可用时直连 OpenAI-API-compatible 模型兜底
 # 三项默认全空（不绑定任何特定模型），启用时由客户自定义填写
@@ -747,7 +749,7 @@ chore: 构建
 
 检查：
 1. DIFY_BASE_URL是否正确（本机 `http://localhost:8081`；容器内 `http://dify_nginx`。v6.11.6 起 Dify 一体化打包，**不是 3000、不是 host.docker.internal、不是旧内网 IP**）
-2. API Key是否正确（app-开头；dify-init 输出在 `dify/docker/app_keys.txt`，复制回填 backend/.env 后重启 backend）
+2. API Key是否正确（app-开头；dify-init 自动写入 `dify_app_keys` 共享卷，backend 启动时自动加载——若怀疑 key 未生效，执行 `docker compose up dify-init` 重跑后 `docker compose restart backend`）
 3. Agent应用是否已发布（`docker compose logs dify-init` 看导入/绑定是否成功）
 4. 网络是否可达（容器内验证：docker exec edu-backend python -c "import socket;socket.create_connection(('dify_nginx',80))"）
 5. Key 未配置/AI 不可用时系统自动降级：agent/chat 返回能力清单话术，commands/parse 走本地规则兜底（source=local），不阻断业务
@@ -953,6 +955,10 @@ chore: 构建
 
 > v6.11.13：种子数据差异补齐 + 迁移链漂移债清偿——数据 vs 字段审计 16 类缺口以 `backend/scripts/seed_supplement_v6_11_13.py`（固定种子 20261019、幂等只填 NULL）补真实数据；迁移 005 防御式 + 006_schema_drift（40 列/2 表/52 处类型/7 主键加宽/16 索引）对齐 ORM，空库全链 001→006 建库与 ORM diff 归零、downgrade↔upgrade 双向过、开发库 `alembic stamp 006`（数据零改动）；pytest 157/157；详见更新记录 v6.11.13。
 
-**最后更新**：2026-10-19（v6.11.13 种子数据差异补齐 + 迁移链漂移债清偿：seed_supplement_v6_11_13.py 补 16 类字段缺口真实数据；005 防御式 + 006_schema_drift 对齐 ORM，全链建库 diff 归零、开发库 stamp 006、pytest 157/157；v6.11.12 Dify 模型配置去供应商绑定：三变量默认值全空 + dify-init 必填校验 + yml 模型占位符注入，全仓 MiMo/供应商绑定痕迹清零，历史日志仅作留痕标注；2026-10-18 合并 gitea/master→longtrying_test：10 项公共模块经用户逐项审批并入——注册免审批反转（客户模块二期升级）、approval.approved 事件总线（PROSPECT 自动转 STUDENT）、客服 FAQ 修复、CRM 画像字段、测评工具、前端 6 文件；Dify 部分以我方为准（恢复 dify/apps/智能报告__*.yml）；pytest 157/157；v6.11.5~8 Dify 一体化打包 + dify-init 一键初始化：客户在 dify/docker/.env 填模型 Key 即自动配供应商/导入 5 应用/绑模型/导出 app key（见 docs/Dify部署与调用指南.md）；v6.11.4 REMOTE_ACCESS.md 补 localtunnel 方案一（免注册）+ 503 掉线已知问题与排查顺序，原方案顺延二/三/四；v6.11.3 M3 成绩三件套：新增 PUT /employee/scores/{id} 修改接口（不存在→40401）+ student_score 唯一约束 uq_student_score_unique（重复→40901，semester 归一空串）+ 成绩口径统一 0-100 + 迁移 005 清理存量 4 条重复 + E2E 幂等适配；HTTP 冒烟 7/7 + pytest 154/154 + E2E 两轮；同轮完成前端联通诊断（LOG-062）：双 MySQL 环境下 .env 3306→59000 已修、Dify 响应 13~30s 属环境性能）
+> v6.11.14：dify-init Dify 1.16 真实环境适配（10 项）——console API 路径/密码双契约（login base64、setup 明文）/cookie 会话+CSRF/供应商接口迁移/模型插件自动安装/自定义模型注册（models/credentials）/DSL 两步导入/工作流发布/yml model_config 0.5.0 结构+mode chat+LLM 节点 context/`your-model-provider` 占位符；`docker compose up -d` 一条命令全链拉起，AI 三端 source=dify 真实可用；pytest 157/157；详见更新记录 v6.11.14。
+
+> v6.11.15：遗留问题清零——`start-project.bat` 旧 Dify 实例冲突预检（docker-* 检测→提示 down）；dify_init.py 文案/日志语义修正；**阻塞清单⑤销账**（智能报告 Chatflow 补 system prompt JSON 契约约束 + temperature 0.2，实例已重导一致）；pytest 157/157；详见更新记录 v6.11.15。
+
+**最后更新**：2026-10-19（v6.11.15 遗留问题清零：启动防冲突预检、dify_init 文案语义、阻塞清单⑤销账（报告 Chatflow system prompt 约束+降温）；v6.11.14 dify-init Dify 1.16 适配：10 项契约修复（路径/密码/CSRF/插件安装/模型注册/两步导入/工作流发布/yml 结构），一条命令全链拉起、AI 三端 source=dify 真实可用、pytest 157/157；v6.11.13 种子数据差异补齐 + 迁移链漂移债清偿：seed_supplement_v6_11_13.py 补 16 类字段缺口真实数据；005 防御式 + 006_schema_drift 对齐 ORM，全链建库 diff 归零、开发库 stamp 006；v6.11.12 Dify 模型配置去供应商绑定：三变量默认值全空 + dify-init 必填校验 + yml 模型占位符注入，全仓 MiMo/供应商绑定痕迹清零，历史日志仅作留痕标注；2026-10-18 合并 gitea/master→longtrying_test：10 项公共模块经用户逐项审批并入，pytest 157/157）
 
 > 合并回归（2026-10-18）：qianduan 已并入 origin/master 成绩三件套、环境修复与远端访问文档更新；verify_all 29/29、pytest 152/152、npm build 通过。

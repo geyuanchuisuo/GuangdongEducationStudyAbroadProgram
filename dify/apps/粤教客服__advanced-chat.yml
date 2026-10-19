@@ -1,3 +1,12 @@
+# 粤教客服 Agent 应用配置（完整版 Chatflow，v6.11.21）
+# 注意：v6.10.2 起客服 Agent 已迁移为 cs_agent_service 独立服务，走 Dify Chatflow（advanced-chat 模式）。
+# 本文件为完整 Chatflow：问题分类器（7 类）+ 各分支 LLM + FAQ 知识检索（kr_6）+ 槽位采集。
+#
+# 导入说明：
+#   1. Dify 控制台「创建应用 → 导入 DSL」选此文件（advanced-chat 模式）
+#   2. 导入后绑定 OpenAI-API-compatible 模型（地址与模型名以 dify/docker/.env 客户配置为准）
+#   3. 挂载知识库：FAQ知识库（dataset_id 为环境级加密 ID，换环境需重建后重新绑定）
+#   4. pre_prompt 中三标记契约（[intent:] / [RECOMMEND] / [SLOTS]）是后端 cs_agent_service 解析的约定，勿删
 app:
   description: 公开主页智能客服，7 大场景应答 + 主动信息采集 + 高意向转线索
   icon: 💬
