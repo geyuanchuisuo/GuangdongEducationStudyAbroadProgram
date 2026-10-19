@@ -6,6 +6,8 @@
 
 ## 零、快速定位（打开项目先看这里）
 
+> v6.11.22（2026-10-19，longtrying_test）：**P0 方案A 落地：种子数据归属重分配**——新增 `backend/scripts/seed_owner_rebalance_v6_11_22.py`（幂等、仅动归属字段，经用户批准）：EMPLOYEE(13810000003) 名下 customer/todo/follow_up/lead/通知 60/50 条、STUDENT(13810000002) 名下 ticket/admin_service/academic/通知 60/50 条，测试账号登录即见满屏真实数据。**结构性上限**：日报 8 条（UNIQUE(emp,date)×全库 8 日期）、成绩 32 条（UNIQUE 学生课程学期×32 组合），重建库时 seed 扩分布可解除。API 验收达标 + pytest 164/164。详见更新记录 v6.11.22 / LOG-080。
+>
 > v6.11.21（2026-10-19，longtrying_test）：**第十三次同步 gitea/master→longtrying_test（工作台双轨修复融合）**——master 3729eba 与本线 v6.11.20 同区域双轨修复合并：seed_data.py 种子补齐/vite 分包移除/nginx 禁缓存直入；RoleWorkspace.vue 6 冲突块双向融合（本线为基础+master 差异字段：MANAGER 看板漏斗/todoRows/orgTree/勾选式批量审批等）；dify_init.py 按用户裁定以本线为基准。pytest 164/164 + build ✓。**遗留已销账**：dify_init.py 键值格式断点已修（APP_KEY_ENV_MAP 输出 shell 变量名 + 留档版跳过 + 前缀容错，POSIX sh source 实测通过）。详见更新记录 v6.11.21 / LOG-079。
 >
 > v6.11.20（2026-10-19，longtrying_test）：**前后端假联通清零 + 七缺口接线 + 测试时间炸弹修复**——ProjectDetail「报名咨询」假成功→接 `POST /customers/pending-leads` 真落库（落库选型经后端代码确认，鉴权匹配"先登录再咨询"）；Home 项目/活动切真实接口；demo 硬编码清零（批量审批 id/approve 兜底 id/个人信息/StatCard/审批卡片）；PROSPECT 工作台"报名"假成功→真调 /events/{id}/register；七缺口全接线（operation-logs 日志表、pending-leads 面板+合并、assessments 保存/批量、leads 跟进/状态、cs 会话历史）；禁用按钮 tooltip。顺带修复 M5 测试时间炸弹（test_report_data_source 夹具未钉 created_at，跑测日≥2026-10-19 必红，LOG-078），pytest **164/164**。P0 数据可见性三选一待用户决策。详见更新记录 v6.11.20。
