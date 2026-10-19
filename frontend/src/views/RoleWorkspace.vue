@@ -117,6 +117,18 @@ function customerStatusKey(status: string) {
 const mgrOverview = computed(() => dashboardData.value?.overview || {})
 const mgrCustomers = computed(() => dashboardData.value?.customers || {})
 const mgrPendingTotal = computed(() => approvalsData.value?.stats?.pending_total ?? '—')
+// v6.11.45：签约金额 = 成交客户数（已签约+已入学）× 已定价项目学费，由后端 overview.signed_amount 计算。
+// 客户侧没有「意向项目」落库字段，无法逐单匹配，故按当前唯一已定价项目的学费估算，卡片注释写明口径。
+const signedAmountLabel = computed(() => {
+  const amount = mgrOverview.value.signed_amount
+  if (amount === null || amount === undefined) return '暂无数据'
+  return (Number(amount) / 10000).toLocaleString('zh-CN', { maximumFractionDigits: 2 }) + ' 万元'
+})
+const signedAmountNote = computed(() => {
+  const unit = mgrOverview.value.signed_amount_unit
+  if (unit === null || unit === undefined) return '暂无已定价项目，无法估算'
+  return '成交 ' + (mgrOverview.value.converted ?? 0) + ' 人 × ' + (Number(unit) / 10000) + ' 万/人（唯一已定价项目）'
+})
 // 审批筛选：按 radio 标签语义映射 biz_type（转化申请=convert、请假=leave、员工流程=日报补报/投诉）
 const approvalFilterBizTypes: Record<string, string[]> = { '转化申请': ['convert'], '请假': ['leave'], '员工流程': ['late_report', 'complaint'] }
 const filteredApprovalItems = computed<any[]>(() => {
@@ -1680,7 +1692,7 @@ function revealPhone(member: any) {
       <div class="stat-grid">
         <StatCard label="新增意向数" :value="String(mgrOverview.new_prospects_this_month ?? '—')" :note="'其中仍意向 ' + (mgrOverview.new_outcomes?.intent ?? 0) + ' · 已签约 ' + (mgrOverview.new_outcomes?.signed ?? 0)" tone="purple" />
         <StatCard label="转化率" :value="(mgrOverview.conversion_rate ?? '—') + '%'" :note="'成交 ' + (mgrOverview.converted ?? 0) + ' / 客户 ' + (mgrCustomers.total ?? 0)" tone="lime" />
-        <StatCard label="签约金额" value="暂无数据" note="签约金额数据源待接入" tone="amber" />
+        <StatCard label="签约金额" :value="signedAmountLabel" :note="signedAmountNote" tone="amber" />
         <StatCard label="在办学生数" :value="String(mgrOverview.active_students ?? '—')" note="状态正常的在读学生" tone="coral" />
         <StatCard label="投诉率" :value="(mgrOverview.complaint_rate ?? '—') + '%'" :note="'待处理工单 ' + (dashboardData.tickets?.pending ?? 0)" tone="purple" />
         <StatCard label="待我审批" :value="String(mgrPendingTotal)" note="含转化、请假和员工流程" tone="coral" />
