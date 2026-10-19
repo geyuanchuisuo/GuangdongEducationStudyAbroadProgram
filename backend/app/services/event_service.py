@@ -36,3 +36,8 @@ class EventService:
         event.current_participants += 1
         await self.repo.update_event(event)
         return RegistrationOut.model_validate(created).model_dump()
+
+    async def my_registrations(self, current_user: User) -> dict:
+        """当前用户已报名的活动 id 列表。前端据此把已报名活动显示为「已报名」。"""
+        rows = await self.repo.list_registrations_by_user(current_user.id)
+        return {"event_ids": [row.event_id for row in rows], "total": len(rows)}

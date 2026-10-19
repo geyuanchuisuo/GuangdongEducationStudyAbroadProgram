@@ -40,6 +40,8 @@ const customerRows = ref<any[]>([])
 // 访客页与转化申请表单用的公开列表（走 platformApi，含懒加载演示数据兜底）
 const publicProjects = ref<any[]>([])
 const publicEvents = ref<any[]>([])
+// v6.11.49：当前意向客户已报名的活动 id（GET /events/my-registrations），用于把按钮显示为「已报名」
+const myEventIds = ref<number[]>([])
 const selectedCustomerIds = ref<number[]>([])
 const reassignFromId = ref<number | undefined>()
 const reassignToId = ref<number | undefined>()
@@ -559,6 +561,10 @@ onMounted(async () => {
     // 公开列表（课程/活动）：走平台层，接口不可用时由平台层登记提示条
     platformApi.projects().then((rows) => { publicProjects.value = rows }).catch(() => {})
     platformApi.events().then((rows) => { publicEvents.value = rows }).catch(() => {})
+    // v6.11.49：意向客户额外拉取「我的报名」——活动列表是公开接口，不含当前用户的报名状态
+    if (role.value === 'PROSPECT') {
+      platformApi.myEventRegistrations().then((data: any) => { myEventIds.value = data?.event_ids || [] }).catch(() => {})
+    }
     const requests: Promise<any>[] = [platformApi.notifications()]
     // M5-05.9：员工端不再请求 /reports（该组接口仅 MANAGER/ADMIN，员工调用必 403）
     if (role.value === 'EMPLOYEE' || role.value === 'MANAGER') {
@@ -1457,6 +1463,8 @@ async function applyEvent(event: any) {
   confirmWrite('确认报名“' + (event?.title || '该活动') + '”吗？', async () => {
     try {
       await platformApi.eventRegister(event.id)
+      // v6.11.49：报名成功即时置为「已报名」，不必等刷新
+      if (!myEventIds.value.includes(event.id)) myEventIds.value = [...myEventIds.value, event.id]
       notifySuccess('报名成功')
     } catch (error: unknown) {
       notifyInfo(errorMessage(error, '活动报名接口尚未就绪'))
@@ -2036,7 +2044,7 @@ function revealPhone(member: any) {
 
     <template v-else-if="role === 'PROSPECT' && section === 'events'">
       <!-- v6.11.48：去掉与顶部页面标题重复的内层标题，说明文案已上提到 pageDesc -->
-      <div class="event-list"><div v-for="item in publicEvents.slice(0,3)" :key="item.id" class="surface ticket-row"><div><b>{{ item.title }}</b><small>{{ item.date }} · {{ item.format }}</small></div><el-button type="primary" round @click="applyEvent(item)">报名</el-button></div></div>
+      <div class="event-list"><div v-for="item in publicEvents.slice(0,3)" :key="item.id" class="surface ticket-row"><div><b>{{ item.title }}</b><small>{{ item.date }} · {{ item.format }}</small></div><el-tag v-if="myEventIds.includes(item.id)" type="success" round>已报名</el-tag><el-button v-else type="primary" round @click="applyEvent(item)">报名</el-button></div></div>
     </template>
 
     <template v-else-if="role === 'PROSPECT' && section === 'consult'">

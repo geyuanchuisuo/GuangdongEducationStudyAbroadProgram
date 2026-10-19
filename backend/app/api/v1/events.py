@@ -25,6 +25,15 @@ async def list_events(
     return success_response(data=await service.list_events(page, page_size, status))
 
 
+# 注意：本路由必须声明在 /{event_id} 之前，否则 "my-registrations" 会被当成整数路径参数解析报 422
+@router.get("/my-registrations")
+async def my_registrations(
+    current_user: User = Depends(get_current_user),
+    service: EventService = Depends(_get_service),
+):
+    return success_response(data=await service.my_registrations(current_user))
+
+
 @router.get("/{event_id}")
 async def get_event(event_id: int, service: EventService = Depends(_get_service)):
     return success_response(data=await service.get_event(event_id))

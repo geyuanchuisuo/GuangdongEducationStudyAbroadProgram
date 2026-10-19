@@ -102,6 +102,9 @@ export const platformApi = {
     return []
   },
   eventRegister: (id: number) => toData(request.post('/events/' + id + '/register')),
+  // v6.11.49：当前用户已报名的活动（GET /events/my-registrations）。
+  // 活动列表是公开的、不含用户信息，已报名状态只能由此接口提供。
+  myEventRegistrations: () => toData(request.get('/events/my-registrations')),
   faqs: async (): Promise<Array<{ q: string; a: string }>> => {
     try {
       const data: any = await toData(request.get('/cs/faq', { params: { page_size: 100 } }))
