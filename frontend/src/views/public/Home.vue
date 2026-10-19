@@ -62,7 +62,7 @@ const businesses = [
         </SectionTitle>
         <div class="project-grid">
           <article v-for="project in projects.slice(0, 3)" :key="project.id" class="project-card" @click="router.push('/projects/' + project.id)">
-            <div class="project-top"><span>{{ project.category }}</span><b>{{ project.tag }}</b></div>
+            <div class="project-top"><span>{{ project.category }}</span><b v-if="project.tag">{{ project.tag }}</b></div>
             <h3>{{ project.title }}</h3><p>{{ project.summary }}</p>
             <div class="project-meta"><span>{{ project.duration }}</span><span>{{ project.fee }}</span></div>
             <button>查看详情 <el-icon><ArrowRight /></el-icon></button>

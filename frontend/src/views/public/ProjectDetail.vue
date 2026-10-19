@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowLeft, Check, Phone } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { projects } from '../../data/mock'
+import { projects as mockProjects } from '../../data/mock'
 import { platformApi } from '../../api/platform'
 import { useUserStore } from '../../stores/user'
 
@@ -12,15 +12,17 @@ const router = useRouter()
 const userStore = useUserStore()
 const dialog = ref(false)
 const submitting = ref(false)
-const project = computed(() => projects.find((item) => item.id === Number(route.params.id)) || projects[0])
+// v6.11.33：改为 ref 整体替换真实数据。原先是 computed 直接返回 mock 数组里的对象，
+// onMounted 里 Object.assign 到该对象上（普通对象、非响应式）不会触发重渲染，
+// 详情页因此一直显示 mock 写死的学制/费用/人群，真实项目数据永远不生效。
+const project = ref<any>(mockProjects.find((item) => item.id === Number(route.params.id)) || mockProjects[0])
 const form = ref({ name: '', phone: '', note: '' })
 
-// v6.11.20：项目详情接真实课程数据（从列表页点入 id 对齐 /cs/courses，mock 仅兜底）
 onMounted(async () => {
   try {
     const list: any[] = await platformApi.projects()
     const hit = list.find((p) => p.id === Number(route.params.id))
-    if (hit) Object.assign(project.value, hit)
+    if (hit) project.value = hit
   } catch { /* 兜底 mock 项目 */ }
 })
 
@@ -72,15 +74,17 @@ function submit() {
   <div class="page-wrap detail">
     <el-button text :icon="ArrowLeft" @click="router.push('/projects')">返回项目列表</el-button>
     <header>
-      <div><span class="badge">{{ project.category }} · {{ project.tag }}</span><h1>{{ project.title }}</h1><p>{{ project.summary }}</p></div>
+      <div><span class="badge">{{ project.category }}<template v-if="project.tag"> · {{ project.tag }}</template></span><h1>{{ project.title }}</h1></div>
       <div class="apply-box"><small>费用说明</small><strong>{{ project.fee }}</strong><el-button type="primary" size="large" round @click="apply">立即报名咨询</el-button></div>
     </header>
     <section class="content-grid">
       <article class="surface main-content">
-        <h2>项目介绍</h2><p>项目面向不同教育背景和发展目标的人群，提供从评估、材料准备到入学或就业衔接的全流程服务。具体方案由顾问结合个人情况确认。</p>
+        <h2>项目介绍</h2><p>{{ project.summary || '项目详情请咨询顾问。' }}</p>
         <h2>适合人群</h2><p>{{ project.audience }}</p>
-        <h2>项目优势</h2>
-        <div class="check-list"><div v-for="item in project.highlights" :key="item"><el-icon><Check /></el-icon>{{ item }}</div></div>
+        <template v-if="project.highlights && project.highlights.length">
+          <h2>项目优势</h2>
+          <div class="check-list"><div v-for="item in project.highlights" :key="item"><el-icon><Check /></el-icon>{{ item }}</div></div>
+        </template>
         <h2>办理流程</h2>
         <ol><li>提交基本资料并完成适配评估</li><li>顾问确认项目和费用方案</li><li>准备申请材料与相关测试</li><li>完成录取、签证或入学衔接</li></ol>
       </article>

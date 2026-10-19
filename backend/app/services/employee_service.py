@@ -1,3 +1,4 @@
+import json
 from datetime import date, datetime, timedelta
 
 from app.core.exceptions import BusinessError, ConflictError, ForbiddenError, NotFoundError
@@ -14,7 +15,7 @@ from app.repositories.employee_repo import (
 )
 from app.services.approval_engine import ApprovalBizType, ApprovalStatus, approval_engine
 from app.utils.logger import logger  # 合并修复：model 回落分支引用了 logger，此前未导入会 NameError→50001
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -253,6 +254,14 @@ class EmployeeService:
         customer = result.scalar_one_or_none()
         if not customer:
             raise NotFoundError(message="客户不存在")
+
+        # v6.11.32：仅意向客户（NEW/FOLLOWING/STRONG）可发起留学生转化，
+        # 防止绕过前端对已签约/已入学/已流失客户重复提单（口径同 report_calculator.INTENT_STATUSES）
+        if customer.status not in ("NEW", "FOLLOWING", "STRONG"):
+            raise BusinessError(
+                code=40003,
+                message=f"该客户当前状态为「{customer.status}」，仅意向客户可发起留学生转化申请",
+            )
 
         # 审批人必须是 MANAGER
         result = await self.db.execute(select(User).where(User.id == approver_id))
@@ -890,8 +899,13 @@ class EmployeeService:
         page_size: int,
         last_follow_start: date | None = None,
         last_follow_end: date | None = None,
+        keyword: str | None = None,
     ) -> tuple[list, int]:
-        """员工查询自己名下客户，支持筛选排序。MANAGER 传 employee_id=None 查全部（v6.6.0 支持按员工下钻）。"""
+        """员工查询自己名下客户，支持筛选排序。MANAGER 传 employee_id=None 查全部（v6.6.0 支持按员工下钻）。
+
+        v6.11.32：新增 keyword，按姓名/手机号在库内模糊匹配（服务端过滤），
+        解决前端只在已加载分页里做本地关键字过滤导致「搜索命中不到后面页的客户」。
+        """
         from app.models.crm import CrmFollowUp, CustomerAssessment
 
         stmt = select(Customer)
@@ -905,6 +919,12 @@ class EmployeeService:
         if source_channel:
             stmt = stmt.where(Customer.source_channel == source_channel)
             count_stmt = count_stmt.where(Customer.source_channel == source_channel)
+        # v6.11.32：关键字服务端模糊匹配（姓名 / 手机号），避免只过滤前端已加载的一页
+        if keyword:
+            kw = f"%{keyword.strip()}%"
+            cond = or_(Customer.name.like(kw), Customer.phone.like(kw))
+            stmt = stmt.where(cond)
+            count_stmt = count_stmt.where(cond)
 
         # 按匹配度筛选：join 最新 assessment
         if score_min is not None:
@@ -1381,6 +1401,61 @@ class EmployeeService:
         "智能报告查询",
     ]
 
+    async def _factual_snapshot(self, user: User) -> dict:
+        """按角色产出「事实快照」：仅含该角色权限内的真实聚合数据，供 Agent 照实作答。
+
+        只给聚合口径（计数与分布），不含客户/学生明细，避免越权与请求体积膨胀。
+        """
+        if user.user_type == "MANAGER":
+            # 管理层：全域经营聚合（客户 6 态分布/漏斗/渠道/转化率/日报/审批/投诉/心理）
+            return {"scope": "全域（不受数据隔离限制）", "dashboard": await self.dashboard()}
+
+        # 普通员工：本人待办与到期跟进 + 名下客户状态分布
+        reminders = await self.get_reminders(user)
+        status_rows = (await self.db.execute(
+            select(Customer.status, func.count())
+            .where(Customer.owner_employee_id == user.id)
+            .group_by(Customer.status)
+        )).all()
+        by_status = {(st or "未知"): cnt for st, cnt in status_rows}
+        return {
+            "scope": "仅本人名下",
+            "reminders": reminders,
+            "my_customers_by_status": by_status,
+            "my_customers_total": sum(by_status.values()),
+        }
+
+    @staticmethod
+    def _snapshot_reply(user: User, snapshot: dict) -> str:
+        """AI 不可用时的确定性降级：直接用事实快照拼摘要，不编造、不空谈能力。"""
+        lines = [f"AI 助手暂时不可用（Dify 未连接）。以下为你的真实数据（{snapshot.get('scope')}）："]
+        if user.user_type == "MANAGER":
+            dash = snapshot.get("dashboard") or {}
+            cust = dash.get("customers") or {}
+            overview = dash.get("overview") or {}
+            reports = dash.get("reports") or {}
+            approvals = dash.get("approvals") or {}
+            so = cust.get("status_overview") or {}
+            lines.append(f"- 客户总数：{cust.get('total', '数据不可得')}")
+            lines.append("- 期末状态：" + " / ".join(
+                f"{k} {so.get(k, '—')}" for k in ("NEW", "FOLLOWING", "STRONG", "SIGNED", "ENROLLED", "LOST")
+            ))
+            lines.append(f"- 本月新增：{cust.get('new_this_month', '—')}；转化率：{overview.get('conversion_rate', '—')}%；"
+                         f"在办学生：{overview.get('active_students', '—')}")
+            lines.append(f"- 日报：今日已交 {reports.get('today_submitted', '—')}；本月已交 {reports.get('month_submitted', '—')}；"
+                         f"本月迟报 {reports.get('late_this_month', '—')}")
+            lines.append(f"- 待审批：{approvals.get('pending_total', '—')}")
+            lines.append("- 更多维度请在「经营看板 / 智能汇总 / 日报管理」页面查看。")
+        else:
+            reminders = snapshot.get("reminders") or {}
+            lines.append(f"- 我的客户：{snapshot.get('my_customers_total', 0)} 个")
+            by_status = snapshot.get("my_customers_by_status") or {}
+            if by_status:
+                lines.append("- 状态分布：" + " / ".join(f"{k} {v}" for k, v in by_status.items()))
+            lines.append(f"- 待办 {reminders.get('todos_pending', '—')} 项；"
+                         f"到期跟进 {reminders.get('follow_ups_due', '—')} 项")
+        return "\n".join(lines)
+
     async def _build_agent_real_data(self, user: User) -> str:
         """实时业务快照（v6.11.26）：注入给 Dify，让助手基于真实数据回答，杜绝编造。"""
         from sqlalchemy import func, select
@@ -1426,19 +1501,25 @@ class EmployeeService:
 
         权限感知：EMPLOYEE 数据范围=own（仅名下客户），MANAGER=all（全域），
         能力清单写入 inputs.capabilities 供 Dify Agent prompt 使用。
-        v6.11.26：注入实时业务快照（待办/客户/审批）+ 回复格式约束，禁止编造与 JSON 输出。
+        v6.11.26（master）：注入实时业务快照（待办/客户/审批）+ 回复格式约束，禁止编造与 JSON 输出。
+        本线差异字段：追加 factual_data 事实快照与 factual_rule 防编造约束（供 prompt 变量引用），
+        AI 全链路不可用时用 _snapshot_reply 做确定性降级。
         """
         from app.services.ai_service import AgentType, ai_service
 
         caps = list(self.EMPLOYEE_CAPABILITIES)
         if user.user_type == "MANAGER":
             caps += self.MANAGER_EXTRA_CAPABILITIES
+        snapshot = await self._factual_snapshot(user)
         context = {
             "user_type": user.user_type,
             "user_id": str(user.id),
             "real_name": user.real_name or user.username,
             "data_scope": "all" if user.user_type == "MANAGER" else "own",
             "capabilities": "、".join(caps),
+            "factual_data": json.dumps(snapshot, ensure_ascii=False),
+            "factual_rule": "只能引用 factual_data 中的数字与分布作答；其中没有的维度禁止编造，"
+                            "改为指引用户到对应页面查看。",
         }
         try:
             real = await self._build_agent_real_data(user)
@@ -1468,14 +1549,8 @@ class EmployeeService:
                 return {"reply": self._strip_agent_json(result["reply"]), "session_id": result.get("session_id", session_id or "new"), "source": "model"}
             except Exception as model_exc:
                 logger.warning("model fallback failed: employee=%s error=%s", user.id, model_exc)
-            reply = (
-                f"AI 助手暂时不可用（Dify 未连接）。当前身份「{user.user_type}」，"
-                f"数据范围：{'全域' if user.user_type == 'MANAGER' else '仅自己名下'}。可用能力：\n"
-                + "\n".join(f"- {c}" for c in caps)
-                + "\n\n提示：录入跟进/待办/成绩/日报等指令可走指令式业务处理接口"
-                  "（POST /employee/commands/parse → commands/execute 二次确认）。"
-            )
-            return {"reply": reply, "session_id": session_id or "new", "source": "fallback"}
+            return {"reply": self._snapshot_reply(user, snapshot),
+                    "session_id": session_id or "new", "source": "fallback"}
 
     # ── 新人指引问答（RAG 优先，本地静态降级） ────────────
     async def guide_ask(self, user: User, question: str, session_id: str | None) -> dict:

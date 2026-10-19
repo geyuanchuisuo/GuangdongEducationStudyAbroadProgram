@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     DIFY_MODEL_BASE_URL: str = ""
     DIFY_MODEL_NAME: str = ""
 
+    # Dify Agent 单次请求超时（秒）。报告生成为同步阻塞调用，最坏耗时 ≈ 超时 × 尝试次数（3 次），
+    # 网络质量差或需快速失败时按需调低；默认值与原硬编码 60s 一致
+    DIFY_AI_TIMEOUT: float = 60.0
+
     # M5 智能报告数据来源开关（M5-02.3）：mock=模拟数据（默认）；production=真实业务表取数
     REPORT_DATA_SOURCE: str = "mock"
 

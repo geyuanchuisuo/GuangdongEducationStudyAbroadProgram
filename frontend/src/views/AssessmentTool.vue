@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, type UploadFile } from 'element-plus'
 import { Search, Loading, UploadFilled } from '@element-plus/icons-vue'
 import { platformApi as api } from '../api/platform'
@@ -25,6 +25,33 @@ const samples: Record<SourceType, string> = {
 }
 
 const fileAccept = '.txt,.md,.csv,.docx,.xlsx,.pdf'
+
+// v6.11.32：注册信息渠道接真实数据——先选已有客户带出其真实注册留资，再允许人工补齐后研判。
+// 原先直接投递写死的「李四/22岁本科」示例，既没读注册数据也无法编辑。
+const customerOptions = ref<any[]>([])
+const selectedCustomerId = ref<number | undefined>(undefined)
+
+async function loadCustomerOptions() {
+  try {
+    const page: any = await api.employeeCustomers({ page: 1, page_size: 100 })
+    customerOptions.value = Array.isArray(page) ? page : (page?.items || [])
+  } catch {
+    customerOptions.value = []
+  }
+}
+
+/** 选中客户后把其真实注册留资带入表单（姓名/性别/年龄/联系方式/学历），其余字段由员工补齐 */
+function onPickCustomer(id: number | undefined) {
+  const c = customerOptions.value.find((x: any) => x.id === id)
+  if (!c) return
+  registrationForm.姓名 = c.name || ''
+  registrationForm.性别 = c.gender || ''
+  registrationForm.年龄 = c.age ? String(c.age) : ''
+  registrationForm.联系方式 = c.phone || ''
+  registrationForm.学历 = c.education || ''
+}
+
+onMounted(loadCustomerOptions)
 
 function onFileChange(uploadFile: UploadFile) {
   selectedFile.value = uploadFile.raw || null
@@ -155,8 +182,23 @@ async function runBatch() {
         />
         <div v-else-if="source === 'registration'" class="at-reg-form">
           <el-alert title="注册信息渠道" type="info" :closable="false" show-icon style="margin-bottom: 12px">
-            <template #default>按注册表单字段填写真实客户信息，联系方式（电话号码）为必填。</template>
+            <template #default>选择已有客户可带出其真实注册留资，也可按注册表单字段直接填写；联系方式（电话号码）为必填。</template>
           </el-alert>
+          <el-select
+            v-model="selectedCustomerId"
+            filterable
+            clearable
+            placeholder="选择已有客户（自动带出注册信息）"
+            style="width: 100%; margin-bottom: 12px"
+            @change="onPickCustomer"
+          >
+            <el-option
+              v-for="c in customerOptions"
+              :key="c.id"
+              :label="(c.name || '未命名') + '（' + (c.phone || '无手机号') + '）'"
+              :value="c.id"
+            />
+          </el-select>
           <el-form label-position="top" size="default">
             <div class="at-reg-grid">
               <el-form-item label="姓名"><el-input v-model="registrationForm.姓名" placeholder="如：李四" /></el-form-item>
@@ -307,6 +349,8 @@ async function runBatch() {
 .at-reg-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }
 .at-reg-grid .el-form-item { margin-bottom: 12px; }
 .at-hint { color: #909399; font-size: 12px; margin: 10px 0 0; }
+.at-reg-form { background: #f5f7fa; border-radius: 8px; padding: 12px 14px 0; }
+.at-reg-form :deep(.el-form-item) { margin-bottom: 12px; }
 .at-file-zone { border: 1px dashed #dcdfe6; border-radius: 8px; padding: 20px; text-align: center; }
 .at-upload-icon { font-size: 48px; color: #c0c4cc; }
 .at-file-selected { margin-top: 12px; display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; background: #f5f7fa; border-radius: 6px; font-size: 13px; }

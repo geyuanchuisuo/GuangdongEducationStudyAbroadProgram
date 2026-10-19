@@ -45,7 +45,7 @@ const filtered = computed(() => {
     </div>
     <div class="projects">
       <article v-for="item in filtered" :key="item.id" class="surface project">
-        <div class="project-head"><span>{{ item.category }}</span><b>{{ item.tag }}</b></div>
+        <div class="project-head"><span>{{ item.category }}</span><b v-if="item.tag">{{ item.tag }}</b></div>
         <h2>{{ item.title }}</h2><p>{{ item.summary }}</p>
         <dl><div><dt>适合人群</dt><dd>{{ item.audience }}</dd></div><div><dt>项目周期</dt><dd>{{ item.duration }}</dd></div><div><dt>费用说明</dt><dd>{{ item.fee }}</dd></div></dl>
         <div class="highlights"><span v-for="text in item.highlights" :key="text">{{ text }}</span></div>

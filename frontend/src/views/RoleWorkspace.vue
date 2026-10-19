@@ -772,10 +772,86 @@ function aiSourceText(content: any): string {
   return '可用'
 }
 
-/** 指标值渲染：null 一律显示「数据不可得」，不用 0 冒充（v6.11.0 §2.8） */
+/** 核心指标字段中文名：后端 metrics 的键是数据契约（英文标识符），
+ *  表格直接展示契约名会让用户看到 status_overview、should_submit 这类机器字段。
+ *  这里只做「键 → 展示名」映射，未登记的键原样回退，不改动任何数值。 */
+const METRIC_LABELS: Record<string, string> = {
+  // 客户经营分析
+  status_overview: '期末客户状态',
+  new_this_period: '本期新增客户',
+  new_outcomes: '本期新增结果',
+  // 期末状态 / 新增结果的枚举值
+  NEW: '新客户',
+  FOLLOWING: '跟进中',
+  STRONG: '意向强',
+  SIGNED: '已签约',
+  ENROLLED: '已入学',
+  LOST: '已流失',
+  total: '期末客户总数',
+  intent: '意向客户',
+  converted: '已成交',
+  lost: '已流失',
+  signed: '已签约',
+  enrolled: '已入学',
+  // 员工日报 / 周报
+  days: '每日提交明细',
+  week_total: '全周合计',
+  departments: '部门提交汇总',
+  date: '日期',
+  should_submit: '应交',
+  submitted: '已交',
+  missing: '未交',
+  // 学生心理周报
+  covered_students: '覆盖学生数',
+  risk: '风险分布',
+  // 投诉处理周报
+  orders_total: '工单总量',
+  pending_analysis: '待分析工单',
+  analyzed_count: '已完成分析',
+  new_count: '本期投诉',
+  resolved_in_period: '本期已解决',
+  open_count: '期末未解决',
+  over7_unresolved: '超 7 天未解决',
+  first_response_count: '已首次响应',
+  not_responded_count: '未响应',
+  avg_first_response_seconds: '平均首次响应时长（秒）',
+  max_first_response_seconds: '最长首次响应时长（秒）',
+  satisfaction: '满意度分布',
+  low_satisfaction_candidates: '低满意候选',
+  high_risk_candidates: '高风险候选',
+  special_cases: '特别案例',
+}
+
+/** 二级字段名（父键.子键）：仅用于消歧 —— status_overview 同时含 LOST（期末某状态）
+ *  与 lost（流失合计），只按子键查表会渲染出两行「已流失」；new_outcomes.intent
+ *  也需与 status_overview.intent 区分。未登记的二级键回退到 METRIC_LABELS。 */
+const METRIC_SUBLABELS: Record<string, string> = {
+  'status_overview.total': '期末总数',
+  'status_overview.intent': '意向客户合计',
+  'status_overview.converted': '成交合计',
+  'status_overview.lost': '流失合计',
+  'new_outcomes.intent': '其中意向',
+  'new_outcomes.signed': '其中签约',
+  'new_outcomes.enrolled': '其中入学',
+  'new_outcomes.lost': '其中流失',
+}
+
+/** 指标字段展示名（未登记的键原样返回，如 departments 下的部门名、risk 下的「高/中/低」） */
+function metricLabel(key: string): string {
+  return METRIC_LABELS[key] ?? key
+}
+
+/** 指标值渲染：null 一律显示「数据不可得」，不用 0 冒充（v6.11.0 §2.8）
+ *  数组/嵌套对象递归转为可读摘要，不吐原始 JSON（否则员工日报/周报的 days、departments 会出现整段机器 JSON） */
 function metricValueText(value: any): string {
   if (value === null || value === undefined) return '数据不可得'
-  if (typeof value === 'object') return JSON.stringify(value)
+  if (Array.isArray(value)) {
+    if (value.length === 0) return '—'
+    return value.map((item) => metricValueText(item)).join('；')
+  }
+  if (typeof value === 'object') {
+    return Object.entries(value).map(([k, v]) => `${metricLabel(k)}=${metricValueText(v)}`).join(' / ')
+  }
   return String(value)
 }
 
@@ -835,16 +911,21 @@ function historyText(history: any): string {
     .join('；')
 }
 
-/** 展开层 metrics 为可渲染的键值行（一层嵌套展平） */
+/** 展开层 metrics 为可渲染的键值行（一层嵌套展平）
+ *  数组整体成行，不按下标展开 —— 否则 days 会变成「days · 0 … days · 4」这类无意义键 */
 function metricRows(metrics: any): { key: string; value: any }[] {
   if (!metrics || typeof metrics !== 'object') return []
   const rows: { key: string; value: any }[] = []
   for (const [key, value] of Object.entries(metrics)) {
     if (key === 'profiles' || key === 'profile_denominator' || key === 'availability') continue
-    if (value !== null && typeof value === 'object') {
-      for (const [k2, v2] of Object.entries(value as any)) rows.push({ key: key + ' · ' + k2, value: v2 })
+    if (Array.isArray(value)) {
+      rows.push({ key: metricLabel(key), value })
+    } else if (value !== null && typeof value === 'object') {
+      for (const [k2, v2] of Object.entries(value as any)) {
+        rows.push({ key: metricLabel(key) + ' · ' + (METRIC_SUBLABELS[`${key}.${k2}`] ?? metricLabel(k2)), value: v2 })
+      }
     } else {
-      rows.push({ key, value })
+      rows.push({ key: metricLabel(key), value })
     }
   }
   return rows
@@ -883,6 +964,10 @@ const filteredCustomers = computed(() => {
   })
 })
 
+// v6.11.32：代客申请只允许选择意向客户（NEW/FOLLOWING/STRONG）。
+// 已签约/已入学/已流失的客户不得再发起留学生转化——口径同 report_calculator.INTENT_STATUSES。
+const INTENT_CUSTOMER_STATUSES = ['NEW', 'FOLLOWING', 'STRONG']
+
 async function loadCustomers() {
   try {
     const page: any = await platformApi.employeeCustomers({
@@ -890,6 +975,7 @@ async function loadCustomers() {
       page_size: 100,
       status: customerStatusFilter.value === 'all' ? undefined : customerStatusFilter.value,
       employee_id: customerOwnerFilter.value === 'all' ? undefined : customerOwnerFilter.value,
+      keyword: keyword.value.trim() || undefined,
     })
     customerRows.value = itemsOf(page).map(normalizeCustomer)
   } catch {
@@ -898,10 +984,19 @@ async function loadCustomers() {
 }
 
 watch([customerOwnerFilter, customerStatusFilter], () => { loadCustomers() })
+// v6.11.32：关键字改为服务端查询（防抖 300ms）。此前只在已加载的一页里本地过滤，
+// 客户总数超过单页时（MANAGER 120 条 / 默认 20 条）搜索必然命中不到后面的客户。
+let customerKeywordTimer: ReturnType<typeof setTimeout> | undefined
+watch(keyword, () => {
+  clearTimeout(customerKeywordTimer)
+  customerKeywordTimer = setTimeout(() => { loadCustomers() }, 300)
+})
 
 // 代客申请留学生候选：仅未转化意向客户（排除已入学/已签约转档/已转换的，避免下拉出现已留学生）
 const convertCandidates = computed(() => customerRows.value.filter((item: any) => {
   const key = customerStatusKey(item?.status)
+  // 差异字段（本线 v6.11.32）：代客申请只允许意向客户，已签约/已入学/已流失一律不出现在候选里
+  if (!INTENT_CUSTOMER_STATUSES.includes(item?.status)) return false
   return key !== 'ENROLLED' && !item?.is_converted && item?.convert_status !== 'approved'
 }))
 // 客户详情抽屉：研判/推荐/跟进接真实数据（原为写死文案与假时间线）
@@ -1511,7 +1606,7 @@ function revealPhone(member: any) {
     </template>
 
     <template v-else-if="role === 'EMPLOYEE' && section === 'convert'">
-      <div class="two-column"><section class="surface panel"><SectionTitle title="代客申请留学生" desc="一次审批：员工申请，管理层审批。" /><el-form label-position="top"><el-form-item label="选择意向客户"><el-select v-model="convertForm.customerId" style="width:100%"><el-option v-for="item in convertCandidates" :key="item.id" :label="item.name + '（' + item.project + '）'" :value="item.id" /></el-select></el-form-item><el-form-item label="转化项目"><el-select v-model="convertForm.project" style="width:100%"><el-option v-for="item in publicProjects.slice(0,3)" :key="item.id" :label="item.title" :value="item.title" /></el-select></el-form-item><el-form-item label="转化理由 / 备注"><el-input v-model="convertForm.title" type="textarea" :rows="4" /></el-form-item><el-button type="primary" @click="submitConvertApply">提交审批申请</el-button></el-form></section><section class="surface panel"><SectionTitle title="学生流程审批" /><div v-for="item in approvalRows" :key="item.id || item.title" class="ticket-row"><div><b>{{ item.title || item.t }}</b><small>学生端提交 · {{ item.created_at }}</small></div><el-tag :type="item.status === 'approved' ? 'success' : 'warning'">{{ item.status || item.s }}</el-tag></div><el-empty v-if="!approvalRows.length" description="暂无待审批的学生流程" :image-size="60" /></section></div>
+      <div class="two-column"><section class="surface panel"><SectionTitle title="代客申请留学生" desc="一次审批：员工申请，管理层审批。" /><el-form label-position="top"><el-form-item label="选择意向客户"><el-select v-model="convertForm.customerId" style="width:100%"><el-option v-for="item in convertCandidates" :key="item.id" :label="item.name + '（' + item.project + '）'" :value="item.id" /><el-empty v-if="!convertCandidates.length" description="暂无可转化的意向客户" :image-size="60" /></el-select></el-form-item><el-form-item label="转化项目"><el-select v-model="convertForm.project" style="width:100%"><el-option v-for="item in publicProjects.slice(0,3)" :key="item.id" :label="item.title" :value="item.title" /></el-select></el-form-item><el-form-item label="转化理由 / 备注"><el-input v-model="convertForm.title" type="textarea" :rows="4" /></el-form-item><el-button type="primary" @click="submitConvertApply">提交审批申请</el-button></el-form></section><section class="surface panel"><SectionTitle title="学生流程审批" /><div v-for="item in approvalRows" :key="item.id || item.title" class="ticket-row"><div><b>{{ item.title || item.t }}</b><small>学生端提交 · {{ item.created_at }}</small></div><el-tag :type="item.status === 'approved' ? 'success' : 'warning'">{{ item.status || item.s }}</el-tag></div><el-empty v-if="!approvalRows.length" description="暂无待审批的学生流程" :image-size="60" /></section></div>
     </template>
 
 <template v-else-if="role === 'EMPLOYEE' && section === 'reports'">
