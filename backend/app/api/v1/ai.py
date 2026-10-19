@@ -60,4 +60,10 @@ async def customer_service_chat_stream(request: ChatRequest, service: AiService 
                 payload = ev.get("data") or {}
             yield f"event: {name}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
-    return StreamingResponse(event_gen(), media_type="text/event-stream")
+    # X-Accel-Buffering: no —— 反代（nginx）据此对该响应禁用缓冲（LOG-097 双保险，
+    # 即使 nginx.conf 未关 proxy_buffering 也保证 SSE 增量即时下发）
+    return StreamingResponse(
+        event_gen(),
+        media_type="text/event-stream",
+        headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"},
+    )
