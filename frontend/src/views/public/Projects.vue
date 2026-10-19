@@ -8,8 +8,20 @@ import { platformApi } from '../../api/platform'
 const router = useRouter()
 const keyword = ref('')
 const category = ref('全部')
-const categories = ['全部', '德国双元制', '新加坡本硕', '国际留学', '国际研学']
 const projects = ref<any[]>([])
+
+// v6.11.33：分类筛选项改为按接口返回的分类动态生成。
+// 原先写死 ['全部','德国双元制','新加坡本硕','国际留学','国际研学']，一旦后端分类口径变化
+// （例如返回"语言培训/学科辅导"），点了筛选必然为空，页面看起来像"没数据"。
+const categories = computed(() => {
+  const firstId = new Map<string, number>()
+  for (const item of projects.value) {
+    if (!item.category) continue
+    const id = Number(item.id ?? 0)
+    firstId.set(item.category, Math.min(firstId.get(item.category) ?? id, id))
+  }
+  return ['全部', ...[...firstId.entries()].sort((a, b) => a[1] - b[1]).map(([name]) => name)]
+})
 
 // v6.10.0：课程列表接真实 GET /cs/courses（platformApi 内映射页面形状、失败回落演示数据）
 onMounted(async () => {
