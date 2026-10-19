@@ -6,6 +6,7 @@ M3/M4 依赖的通用符号（AgentType/AIResponse/AIService/ai_service）保持
 调用方式零改动：`from app.services.ai_service import AgentType, ai_service`。
 """
 
+import asyncio
 import json
 import logging
 from collections.abc import AsyncIterator
@@ -41,18 +42,24 @@ _AGENT_KEY_MAP: dict[AgentType, str] = {
     AgentType.REPORT: settings.DIFY_REPORT_AGENT_KEY,
 }
 
-_TIMEOUT = 60.0
 _MAX_RETRIES = 2
+# 重试等待：指数退避 1s → 2s（上限 8s）；429 优先服从响应头 Retry-After
+_BACKOFF_BASE = 1.0
+_BACKOFF_MAX = 8.0
+# 确定性错误：重试必然同样失败，立即放弃，避免白等「超时 × 尝试次数」
+# （如 key 失效 401、应用已被删除 404、请求体非法 400）
+_NON_RETRYABLE_STATUS = frozenset({400, 401, 403, 404, 405, 409, 422})
 
 
 class AIService:
     def __init__(self) -> None:
         self._base_url = settings.DIFY_BASE_URL.rstrip("/")
+        self._timeout = settings.DIFY_AI_TIMEOUT
         self._client: httpx.AsyncClient | None = None
 
     async def _get_client(self) -> httpx.AsyncClient:
         if self._client is None or self._client.is_closed:
-            self._client = httpx.AsyncClient(timeout=_TIMEOUT)
+            self._client = httpx.AsyncClient(timeout=self._timeout)
         return self._client
 
     def _get_api_key(self, agent: AgentType) -> str:
@@ -66,6 +73,15 @@ class AIService:
             "Authorization": f"Bearer {self._get_api_key(agent)}",
             "Content-Type": "application/json",
         }
+
+    @staticmethod
+    def _retry_delay(attempt: int, exc: Exception) -> float:
+        """重试等待秒数：优先服从 429 的 Retry-After，否则指数退避（1s → 2s，上限 8s）。"""
+        if isinstance(exc, httpx.HTTPStatusError):
+            retry_after = exc.response.headers.get("Retry-After", "").strip()
+            if retry_after.isdigit():
+                return min(float(retry_after), _BACKOFF_MAX)
+        return min(_BACKOFF_BASE * (2 ** attempt), _BACKOFF_MAX)
 
     async def chat(
         self,
@@ -102,7 +118,27 @@ class AIService:
                     usage=data.get("metadata", {}).get("usage", {}),
                     raw=data,
                 )
-            except (httpx.HTTPStatusError, httpx.RequestError) as exc:
+            except httpx.HTTPStatusError as exc:
+                last_error = exc
+                status = exc.response.status_code
+                logger.warning(
+                    "AI chat attempt %d/%d failed: agent=%s status=%s",
+                    attempt + 1,
+                    _MAX_RETRIES + 1,
+                    agent.value,
+                    status,
+                )
+                # 确定性错误（key 错/应用不存在/请求非法）重试也必然失败，立即放弃
+                if status in _NON_RETRYABLE_STATUS:
+                    logger.error(
+                        "AI chat 命中确定性错误，不再重试: agent=%s status=%s",
+                        agent.value,
+                        status,
+                    )
+                    break
+                if attempt < _MAX_RETRIES:
+                    await asyncio.sleep(self._retry_delay(attempt, exc))
+            except httpx.RequestError as exc:
                 last_error = exc
                 logger.warning(
                     "AI chat attempt %d/%d failed: agent=%s error=%s",
@@ -112,7 +148,7 @@ class AIService:
                     exc,
                 )
                 if attempt < _MAX_RETRIES:
-                    continue
+                    await asyncio.sleep(self._retry_delay(attempt, exc))
 
         logger.error("AI chat all retries exhausted: agent=%s", agent.value)
         raise last_error  # type: ignore[misc]
