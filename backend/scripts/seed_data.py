@@ -14,9 +14,11 @@
   本地:   cd backend && .venv/Scripts/python -m scripts.seed_data
 """
 import asyncio
+import json
 import random
 from datetime import date, datetime, timedelta
 from itertools import product
+from pathlib import Path
 
 from sqlalchemy import select
 
@@ -141,7 +143,7 @@ BUSINESS_PROJECTS = [
         None,  # 按线路确定
     ),
 ]
-LOCATIONS = ["广州总部教室A", "广州总部教室B", "深圳分部教室", "线上直播", "东莞教学点"]
+# v6.11.42：原 LOCATIONS 常量仅服务于旧活动随机排期，活动改为 EVENT_SCHEDULE 固定地点后已无引用，删除。
 
 # v6.10.6：演示意图码统一到后端契约 9 码（原 5 码为 seed 遗留词汇，与契约/Dify 均不一致）
 INTENT_TYPES = ["program_consult", "course_recommend", "policy_qa", "company_info", "event_query", "faq", "chitchat", "lead_capture"]
@@ -242,34 +244,6 @@ FOLLOW_UP_NEXT_ACTIONS = [
     "安排顾问与家长线上面谈",
     "确认签约时间并准备合同",
 ]
-FAQ_QUESTIONS = [
-    "德国双元制护理项目需要什么条件？",
-    "雅思基础班和强化班有什么区别？",
-    "留学申请一般需要准备哪些材料？",
-    "签约后多久可以拿到院校 offer？",
-    "签证被拒签了还能再申请吗？",
-    "课程费用可以分期付款吗？",
-    "可以先去语言班再申请学校吗？",
-    "你们提供境外住宿安排服务吗？",
-    "申请失败的退款政策是怎样的？",
-    "周末有线下说明会可以参加吗？",
-]
-FAQ_ANSWERS = [
-    "一般要求高中及以上学历、德语 B1 或通过入学语言测试，具体以项目要求为准。",
-    "基础班侧重语法与词汇打基础，强化班侧重题型训练与冲刺提分，可按当前水平选择。",
-    "通常需要学历证明、成绩单、语言成绩、护照及资金证明，顾问会提供完整清单。",
-    "材料齐全且院校审理顺利的情况下，一般 4-8 周可收到 offer。",
-    "可以，需根据拒签原因补充材料后重新递交，顾问会协助复盘。",
-    "支持分期付款，具体期数可与顾问沟通确认。",
-    "可以，语言班结束后可衔接正式课程申请。",
-    "提供接机、住宿与落地指导等境外服务，详情咨询顾问。",
-    "未获录取按合同约定退还相应服务费用，具体以签约条款为准。",
-    "每周六下午在广州总部有线下说明会，可在线预约名额。",
-]
-FAQ_KEYWORDS = [
-    "双元制,护理,条件", "雅思,基础班,强化班", "留学,材料,清单", "offer,周期", "拒签,再申请",
-    "费用,分期", "语言班,衔接", "住宿,接机", "退款,政策", "说明会,预约",
-]
 SESSION_TITLES = [
     "咨询德国双元制护理项目", "询问雅思课程与开课时间", "了解澳洲本科预科申请条件",
     "咨询加拿大高中留学费用", "询问留学签证材料", "了解英国硕士申请流程",
@@ -305,6 +279,25 @@ EVENT_DESCRIPTIONS = [
     "邀请在读学长分享香港硕士申请与就读经验。",
     "介绍暑期科研、竞赛与志愿者项目的参与方式。",
     "签证材料准备、行前清单与境外生活指导。",
+]
+# v6.11.42：活动排期表，与 EVENT_NAMES / EVENT_DESCRIPTIONS 一一对应（各 10 条）。
+# 字段顺序：(类型, 地点, 开始距今天数, 持续天数, 容量, 已报名, 状态)
+# 原实现用 range(20) 循环取 10 个名称/描述（各重复一遍），且 start/end/容量/人数/状态各自
+# 独立 random，会出现 end_time 早于 start_time、已报名人数超过容量、状态与日期互相矛盾，
+# 类型也是随机抽的（「XX说明会」可能被标成「沙龙」）。
+# 改为固定排期后：类型与活动名称一致、end_time = start_time + 持续天数（恒晚于开始）、
+# 已报名 ≤ 容量、过去的活动为「已结束」、报名数达容量的为「已满员」、其余为「报名中」。
+EVENT_SCHEDULE = [
+    ("说明会", "广州总部教室A", -21, 1, 120, 98, "已结束"),
+    ("公开课", "线上直播", -12, 1, 300, 245, "已结束"),
+    ("讲座", "线上直播", 3, 1, 300, 260, "报名中"),
+    ("分享会", "深圳分部教室", 6, 1, 60, 60, "已满员"),
+    ("工作坊", "广州总部教室B", 9, 1, 40, 27, "报名中"),
+    ("说明会", "广州总部教室A", 13, 1, 120, 58, "报名中"),
+    ("说明会", "东莞教学点", 17, 1, 200, 200, "已满员"),
+    ("分享会", "深圳分部教室", 21, 1, 80, 34, "报名中"),
+    ("沙龙", "广州总部教室B", 26, 1, 40, 19, "报名中"),
+    ("开放日", "东莞教学点", 32, 1, 200, 121, "报名中"),
 ]
 DAILY_REPORT_CONTENTS = [
     "今日回访客户 6 位，新增意向客户 2 位，跟进德国双元制项目 1 单。",
@@ -610,14 +603,19 @@ async def seed():
                 next_date=datetime.now() - timedelta(days=i),
             ))
 
-        # ── M2: CS ──
-        for i in range(105):
+        # ── M2: CS FAQ（内容源见 scripts/cs_faq_seed.json） ──
+        # v6.11.42：原实现用 10 组问答循环 range(105) 生成，真实问题只有 10 个、各重复约 10 遍，
+        # 公开站「常见问题」页表现为同样 10 个问题重复 10 次（看上去像前端写死的凑数数据）。
+        # 现改为直接落库官方问答对（37 条，与客服 FAQ 召回同源），条数 = 真实条数，零重复。
+        faq_rows = json.loads(Path(__file__).with_name("cs_faq_seed.json").read_text(encoding="utf-8"))
+        for sort_order, faq in enumerate(faq_rows):
             session.add(CsFaq(
-                category=random.choice(["课程", "费用", "留学", "活动", "生活"]),
-                question=FAQ_QUESTIONS[i % len(FAQ_QUESTIONS)],
-                answer=FAQ_ANSWERS[i % len(FAQ_ANSWERS)],
-                keywords=FAQ_KEYWORDS[i % len(FAQ_KEYWORDS)],
-                sort_order=i,
+                category=faq.get("category"),
+                question=faq["question"],
+                answer=faq["answer"],
+                keywords=faq.get("keywords"),
+                sort_order=sort_order,
+                enabled=True,
             ))
 
         sessions = []
@@ -651,19 +649,22 @@ async def seed():
                 converted=random.random() > 0.7,
             ))
 
-        # ── Events ──
+        # ── Events（v6.11.42：10 条，字段自洽；见 EVENT_SCHEDULE 说明）──
         events = []
-        for i in range(20):
+        event_base = datetime.now().replace(minute=0, second=0, microsecond=0)
+        for ev_name, ev_desc, ev_plan in zip(EVENT_NAMES, EVENT_DESCRIPTIONS, EVENT_SCHEDULE):
+            ev_type, ev_loc, start_offset, duration_days, capacity, joined, ev_status = ev_plan
+            start = event_base + timedelta(days=start_offset)
             ev = EventLecture(
-                event_name=EVENT_NAMES[i % len(EVENT_NAMES)],
-                event_type=random.choice(["讲座", "开放日", "说明会", "沙龙"]),
-                start_time=datetime.now() + timedelta(days=random.randint(-30, 60)),
-                end_time=datetime.now() + timedelta(days=random.randint(1, 90)),
-                location=random.choice(LOCATIONS),
-                max_participants=random.choice([30, 50, 100, 200]),
-                current_participants=random.randint(0, 50),
-                description=EVENT_DESCRIPTIONS[i % len(EVENT_DESCRIPTIONS)],
-                status=random.choice(["报名中", "已满员", "已结束"]),
+                event_name=ev_name,
+                event_type=ev_type,
+                start_time=start,
+                end_time=start + timedelta(days=duration_days),
+                location=ev_loc,
+                max_participants=capacity,
+                current_participants=joined,
+                description=ev_desc,
+                status=ev_status,
             )
             session.add(ev)
             events.append(ev)
@@ -1031,8 +1032,8 @@ async def seed():
     print(f"  用户: 120 (ADMIN/MANAGER/EMPLOYEE/STUDENT/PROSPECT)")
     print(f"  客户主表: 127（含核心员工 13810000003 名下 4 个意向客户 + 3 位在读学员）, 待补全线索: 15")
     print(f"  CRM线索: 110, 研判: 150, 跟进: 123（含 3 条核心员工已到期跟进）")
-    print(f"  FAQ: 105, 会话: 110, 消息: 200, 意图: 100, 推荐日志: 150")
-    print(f"  活动: 20, 报名: 100, 业务项目: {len(BUSINESS_PROJECTS)}（四条核心业务线）")
+    print(f"  FAQ: 37（官方问答对，零重复）, 会话: 110, 消息: 200, 意图: 100, 推荐日志: 150")
+    print(f"  活动: 10, 报名: 100, 业务项目: {len(BUSINESS_PROJECTS)}（四条核心业务线）")
     print(f"  政策资讯: {policy_seed_count}")
     print(f"  组织架构: 10, 日报: 120, 待办: 100, 成绩: 100")
     print(f"  学生服务: 100, 心理画像: 100, 心理预警: 103（含核心员工名下在读学员 3 条）, 反馈工单: 100, 工单AI分析: ~80")

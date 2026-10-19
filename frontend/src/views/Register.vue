@@ -44,7 +44,7 @@ async function submit() {
   <div class="register-shell">
     <section class="register-intro"><span class="badge">30秒注册</span><h1>开启专属<br />留学规划</h1><p>注册成功后即可登录使用，无需等待管理员审批。</p><ul><li>课程与项目预约</li><li>活动报名</li><li>咨询进度查询</li></ul></section>
     <main class="register-panel">
-      <div class="register-card"><h2>创建账号</h2><p class="muted">必填 5 项基础资料 · 选填 1 项（微信号）· 提交后即可登录使用</p>
+      <div class="register-card"><router-link to="/" class="back-home">← 返回官网首页</router-link><h2>创建账号</h2><p class="muted">必填 5 项基础资料 · 选填 1 项（微信号）· 提交后即可登录使用</p>
         <el-form label-position="top" @submit.prevent="submit">
           <div class="form-grid">
             <el-form-item label="姓名" required><el-input v-model="form.real_name" /></el-form-item>
@@ -57,7 +57,7 @@ async function submit() {
           </div>
           <el-button type="primary" size="large" :loading="loading" native-type="submit" style="width:100%">提交注册</el-button>
         </el-form>
-        <p class="agreement"><router-link to="/">← 返回官网首页</router-link><span class="agreement-dot">·</span>提交即表示同意《服务协议》与《隐私政策》。<router-link to="/login">已有账号，去登录</router-link></p>
+        <p class="agreement">提交即表示同意《服务协议》与《隐私政策》。<router-link to="/login">已有账号，去登录</router-link></p>
       </div>
     </main>
   </div>
@@ -75,7 +75,9 @@ async function submit() {
 .register-card h2 { margin: 0; color: var(--ink-deep); font-size: 35px; }
 .form-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0 18px; margin: 22px 0; }
 .agreement { color: var(--muted); text-align: center; font-size: 12px; }.agreement a { color: var(--violet); }
-.agreement-dot { margin: 0 8px; color: #c9c8dd; }
+/* v6.11.42：返回官网首页改为卡片顶部实心胶囊按钮，原页脚小字链接太不显眼 */
+.back-home { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 14px; padding: 9px 20px; font-size: 14px; font-weight: 800; color: #fff; background: var(--violet); border-radius: 999px; box-shadow: 0 8px 20px rgba(108, 103, 193, .35); transition: transform .2s, box-shadow .2s; }
+.back-home:hover { color: #fff; transform: translateY(-1px); box-shadow: 0 12px 26px rgba(108, 103, 193, .45); }
 @media (max-width: 850px) { .register-shell { grid-template-columns: 1fr; }.register-intro { display: none; }.form-grid { grid-template-columns: 1fr; } }
 </style>
 
