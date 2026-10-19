@@ -93,6 +93,8 @@ services:
     volumes:
       - ./dify/apps:/apps:ro
       - dify_app_keys:/shared
+      # 脚本直接挂载仓库最新版：镜像陈旧也不会跑旧逻辑（LOG-094 中文 key 格式教训，LOG-096）
+      - ./dify/docker/dify_init.py:/app/dify_init.py:ro
     depends_on:
       api:
         condition: service_healthy

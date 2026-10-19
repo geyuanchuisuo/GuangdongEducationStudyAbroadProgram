@@ -18,6 +18,7 @@ import base64
 import glob
 import json
 import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -55,6 +56,44 @@ APP_KEY_ENV_MAP = {
 }
 # 留档版应用不输出 key（与"4 个应用 key（除留档版外）"口径一致）
 ARCHIVED_APPS = {"智能报告__agent-chat"}
+# 核心三 Agent 的 key 为空时初始化必须失败（阻塞 backend 启动），报告 Agent 允许留空（恒 unavailable）
+REQUIRED_KEY_ENVS = {"DIFY_CUSTOMER_AGENT_KEY", "DIFY_STUDENT_AGENT_KEY", "DIFY_EMPLOYEE_AGENT_KEY"}
+
+# ── HTTP 节点后端地址自愈（v6.11.37，LOG-096） ─────────────
+# Chatflow 的 HTTP 节点在 Dify 容器网络内访问宿主机后端；旧地址（VMware NAT 时代写死的
+# 192.168.184.1 等）容器内不可达，每轮对话白等连接超时，是「客服响应慢」的根因。
+# 初始化时把草稿图中所有指向后端 :8000 的旧地址自动改写为 DIFY_BACKEND_URL。
+DIFY_BACKEND_URL = os.environ.get("DIFY_BACKEND_URL", "http://host.docker.internal:8000").rstrip("/")
+_UNREACHABLE_BACKEND_PREFIXES = (
+    "http://192.168.",
+    "http://172.17.0.1:",
+    "http://172.18.0.1:",
+    "http://localhost:",
+    "http://127.0.0.1:",
+)
+
+
+def _rewrite_backend_endpoint(url) -> str | None:
+    """容器内不可达的后端旧地址 → DIFY_BACKEND_URL + 原路径；无需改写返回 None。"""
+    if not isinstance(url, str) or not url:
+        return None
+    if not url.startswith(_UNREACHABLE_BACKEND_PREFIXES) or ":8000/" not in url:
+        return None
+    path = url.split(":8000", 1)[1]
+    return DIFY_BACKEND_URL + path
+
+
+def _existing_key_tokens() -> set[str]:
+    """读取上一次写出的 app_keys.env 中的 token，同名应用去重时保持 key 连续性。"""
+    try:
+        text = Path(APP_KEYS_FILE).read_text(encoding="utf-8")
+    except OSError:
+        return set()
+    return {
+        line.split("=", 1)[1].strip()
+        for line in text.splitlines()
+        if "=" in line and not line.lstrip().startswith("#") and line.split("=", 1)[1].strip()
+    }
 
 
 def _env_name_for(app_name: str) -> str | None:
@@ -290,9 +329,14 @@ def setup_model_provider(client: httpx.Client, token: str) -> None:
         },
         timeout=60,
     )
-    if r.status_code not in (200, 201):
+    if r.status_code in (200, 201):
+        log(f"✅ 模型供应商凭证已{action}（base_url={DIFY_MODEL_BASE_URL}）")
+    elif "provider_credential_schema" in r.text:
+        # openai_api_compatible 是模型级凭证插件，供应商级凭证接口天然不支持（结构差异，非配置错误）；
+        # 实际生效的凭证在下方模型级 credentials 中注册/刷新
+        log(f"    ⚠️ {MODEL_PROVIDER} 为模型级凭证插件，跳过供应商级凭证（模型级凭证在下方注册/刷新）")
+    else:
         fail(f"{action}模型供应商失败: {r.status_code} {r.text[:300]}")
-    log(f"✅ 模型供应商凭证已{action}（base_url={DIFY_MODEL_BASE_URL}）")
 
     # 查询该供应商下的可用模型，确认模型名存在
     r = client.get(
@@ -304,40 +348,73 @@ def setup_model_provider(client: httpx.Client, token: str) -> None:
     if r.status_code == 200:
         models = r.json().get("data", []) or []
         model_names = [m.get("model") for m in models]
-    if DIFY_MODEL_NAME not in model_names:
-        # 自定义模型型供应商：需单独注册模型（Dify 1.16 models/credentials；数值字段为字符串）
-        log(f"注册自定义模型 {DIFY_MODEL_NAME} ...")
-        r = client.post(
-            f"{DIFY_API_URL}/console/api/workspaces/current/model-providers/{MODEL_PROVIDER}/models/credentials",
-            headers=headers,
-            json={
-                "model": DIFY_MODEL_NAME,
-                "model_type": "llm",
-                "credentials": {
-                    "api_key": DIFY_MODEL_API_KEY,
-                    "endpoint_url": DIFY_MODEL_BASE_URL,
-                    "mode": MODEL_MODE,
-                    "context_size": "8192",
-                    "max_tokens_to_sample": "4096",
-                },
+    # 自定义模型供应商：模型级凭证是实际生效的鉴权（Dify 1.16 models/credentials；数值字段为字符串）。
+    # 始终 POST 一次：若接口为 upsert 则完成凭证刷新（.env 改 api_key 后重拉起即生效）；
+    # 若对已存在模型报错，等价于凭证在位，不视为失败。仅当模型不存在且注册失败才阻断初始化。
+    log(f"注册/刷新自定义模型 {DIFY_MODEL_NAME} 凭证 ...")
+    r = client.post(
+        f"{DIFY_API_URL}/console/api/workspaces/current/model-providers/{MODEL_PROVIDER}/models/credentials",
+        headers=headers,
+        json={
+            "model": DIFY_MODEL_NAME,
+            "model_type": "llm",
+            "credentials": {
+                "api_key": DIFY_MODEL_API_KEY,
+                "endpoint_url": DIFY_MODEL_BASE_URL,
+                "mode": MODEL_MODE,
+                "context_size": "8192",
+                "max_tokens_to_sample": "4096",
             },
-            timeout=60,
-        )
-        if r.status_code in (200, 201):
-            log(f"✅ 自定义模型 {DIFY_MODEL_NAME} 注册成功")
-        else:
-            fail(f"注册自定义模型失败: {r.status_code} {r.text[:300]}")
+        },
+        timeout=60,
+    )
+    if r.status_code in (200, 201):
+        log(f"✅ 自定义模型 {DIFY_MODEL_NAME} 凭证已注册/刷新")
+    elif DIFY_MODEL_NAME not in model_names:
+        fail(f"注册自定义模型失败: {r.status_code} {r.text[:300]}")
+    else:
+        log(f"    ✅ 自定义模型 {DIFY_MODEL_NAME} 已存在（凭证接口返回 {r.status_code}，视为凭证在位）")
 
 
 # ── 步骤 4：导入应用 yml ──────────────────────────────────
 def list_existing_apps(client: httpx.Client, token: str) -> dict:
-    """返回 {app_name: app_id}"""
+    """返回 {app_name: app_id}；同名多应用（历史重复导入）时确定性选定一个。
+
+    v6.11.37（LOG-096）：原先 dict 直接收敛，同名应用谁排后面谁生效，
+    重拉起后导出的 key 可能漂移到旧应用（后端调用错应用=交付事故）。
+    现按「已签发 API key 优先 → 与上次 app_keys.env 中 token 一致者优先 → 创建最新」确定性选定。
+    """
     headers = build_headers(client, token)
     r = client.get(f"{DIFY_API_URL}/console/api/apps?page=1&limit=100", headers=headers, timeout=30)
     if r.status_code != 200:
         fail(f"查询应用列表失败: {r.status_code} {r.text[:300]}")
     apps = r.json().get("data", []) or []
-    return {a["name"]: a["id"] for a in apps}
+    by_name: dict[str, list] = {}
+    for a in apps:
+        by_name.setdefault(a["name"], []).append(a)
+
+    known_tokens = _existing_key_tokens()
+    result: dict[str, str] = {}
+    for name, group in by_name.items():
+        if len(group) == 1:
+            result[name] = group[0]["id"]
+            continue
+        keyed: list[tuple[dict, str]] = []
+        for a in group:
+            kr = client.get(f"{DIFY_API_URL}/console/api/apps/{a['id']}/api-keys", headers=headers, timeout=30)
+            if kr.status_code == 200:
+                for k in (kr.json().get("data") or []):
+                    if k.get("token"):
+                        keyed.append((a, k["token"]))
+                        break
+        if keyed:
+            live = [a for a, t in keyed if t in known_tokens] or [a for a, _ in keyed]
+            chosen = live[0]
+        else:
+            chosen = max(group, key=lambda a: a.get("created_at") or 0)
+        result[name] = chosen["id"]
+        log(f"  ⚠️ 同名应用 {name} ×{len(group)}，确定性选定 {chosen['id']}（已签发 key/延续 token 优先）")
+    return result
 
 
 def _dsl_app_name(dsl_content: str) -> str:
@@ -410,13 +487,21 @@ def _align_workflow_model(client: httpx.Client, headers: dict, name: str, app_id
     nodes = (draft.get("graph") or {}).get("nodes") or []
     changed = 0
     for node in nodes:
-        model = (node.get("data") or {}).get("model") or {}
+        data = node.get("data") or {}
+        model = data.get("model") or {}
         if model.get("name") and model.get("name") != DIFY_MODEL_NAME:
             model["name"] = DIFY_MODEL_NAME
             model["provider"] = MODEL_PROVIDER
             changed += 1
+        # HTTP 节点后端地址自愈（v6.11.37，LOG-096）：容器内不可达的旧地址 → DIFY_BACKEND_URL
+        if data.get("type") == "http-request":
+            new_url = _rewrite_backend_endpoint(data.get("url", ""))
+            if new_url:
+                log(f"    ✅ {name} HTTP 节点地址自愈: {data['url']} → {new_url}")
+                data["url"] = new_url
+                changed += 1
     if not changed:
-        log(f"    ✅ {name} 节点模型已是 {DIFY_MODEL_NAME}")
+        log(f"    ✅ {name} 节点模型与端点地址均已正确")
         return True
     # Dify 乐观锁：不回传 hash 会返回 409 draft_workflow_not_sync
     r = client.post(
@@ -434,7 +519,7 @@ def _align_workflow_model(client: httpx.Client, headers: dict, name: str, app_id
     if r.status_code not in (200, 201):
         log(f"    ⚠️  {name} 工作流模型改写失败: {r.status_code} {r.text[:200]}")
         return True
-    log(f"    ✅ {name} 已对齐 {changed} 个 LLM 节点（由后续「发布工作流」生效）")
+    log(f"    ✅ {name} 已改写 {changed} 处（节点模型/端点地址，由后续「发布工作流」生效）")
     return True
 
 
@@ -530,6 +615,13 @@ def export_app_keys(client: httpx.Client, token: str, apps: dict) -> None:
         if not env_name:
             log(f"    （{name} 为留档版或未登记环境变量名，跳过 key 输出）")
             continue
+        # 防御（LOG-094）：键名必须是合法 POSIX shell 变量名，中文名会使 backend 的 sh source 崩溃
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", env_name):
+            fail(f"app key 环境变量名非法（必须为 POSIX shell 变量名）: {env_name!r}（应用: {name}）")
+        if not key:
+            if env_name in REQUIRED_KEY_ENVS:
+                fail(f"核心应用 {name} 的 API key 为空，拒绝写出残缺配置（会阻断 backend 启动）")
+            log(f"    ⚠️ {name} 的 API key 为空（允许留空，对应能力恒 unavailable）")
         lines.append(f"{env_name}={key}")
 
     output = "\n".join(lines) + "\n"

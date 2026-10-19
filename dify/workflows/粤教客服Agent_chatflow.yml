@@ -11,9 +11,11 @@
 #
 # 导入方式：Dify 控制台 → 工作室 → 导入 DSL 文件
 # 导入后必查：
-#   1. 「客服应答」LLM 节点 → 重新选择已配置的模型供应商与模型名（如 deepseek-flash）
+#   1. 「客服应答」LLM 节点 → 重新选择已配置的模型供应商与模型名（如 mimo-v2.6-flash）
 #   2. 「拉取课程列表」「拉取活动列表」HTTP 节点 → 确认 URL 指向后端：
-#      默认 http://192.168.184.1:8000（VMware NAT 下 VM 访问宿主机的地址）。
+#      默认 http://host.docker.internal:8000（Docker Desktop 容器访问宿主机的标准地址；
+#      v6.11.37 修复：原 192.168.184.1:8000 是 VMware NAT 时代的宿主机地址，容器内不可达，
+#      每轮对话白等 ~10s 连接超时，是客服响应慢的根因，见 LOG-096）。
 #      后端若换机器/端口请同步修改。
 #      ⚠ 前置条件：后端 uvicorn 需绑 0.0.0.0（不能只绑 127.0.0.1），
 #        且 Windows 防火墙放行 8000 端口入站（netsh 见下）。
@@ -154,7 +156,7 @@ workflow:
           write: 10
         title: 拉取课程列表
         type: http-request
-        url: http://192.168.184.1:8000/api/v1/courses?page_size=50
+        url: http://host.docker.internal:8000/api/v1/courses?page_size=50
         variables: []
       height: 90
       id: node_http_courses
@@ -194,7 +196,7 @@ workflow:
           write: 10
         title: 拉取活动列表
         type: http-request
-        url: http://192.168.184.1:8000/api/v1/events?page_size=50
+        url: http://host.docker.internal:8000/api/v1/events?page_size=50
         variables: []
       height: 90
       id: node_http_events
@@ -224,8 +226,8 @@ workflow:
           completion_params:
             temperature: 0.7
           mode: chat
-          name: deepseek-flash
-          provider: openai_api_compatible
+          name: mimo-v2.6-flash
+          provider: langgenius/openai_api_compatible/openai_api_compatible
         prompt_template:
         - id: sys_prompt_id
           role: system

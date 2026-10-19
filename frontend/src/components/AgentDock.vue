@@ -66,7 +66,11 @@ async function send(text = input.value) {
       const result: any = await platformApi.employee.agentChat({ message: value, session_id: sessionId.value })
       sessionId.value = result?.session_id || sessionId.value
       reply = result?.reply || reply
+    } else if (await streamCustomer(value)) {
+      // v6.11.37：流式路径已自行渲染（token 增量 + done 结构化数据），无需走统一落屏
+      return
     } else {
+      // 流式失败自动回退非流式接口（既有降级体验不变）
       const result: any = await platformApi.csChat({
         message: value,
         conversation_id: sessionId.value === 'new' ? null : sessionId.value,
@@ -90,6 +94,60 @@ async function send(text = input.value) {
         ? '助手响应较慢，本轮回答未及时返回，请稍候片刻后重新发送（会话记录会保留）。'
         : '当前助手服务暂不可用，请稍后重试。',
     })
+  }
+}
+
+// v6.11.37：客服流式对话（SSE，token 增量渲染，感知延迟=首字时间）。
+// 成功（含部分输出后中断）返回 true；完全无输出返回 false 由调用方回退非流式接口。
+async function streamCustomer(value: string): Promise<boolean> {
+  const target = (import.meta.env.VITE_API_BASE_URL || '/api/v1') + '/ai/customer-service/chat/stream'
+  const msg: any = { role: 'agent', text: '' }
+  messages.value.push(msg)
+  try {
+    const resp = await fetch(target, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: value,
+        conversation_id: sessionId.value === 'new' ? null : sessionId.value,
+        user_id: userStore.userInfo?.id ?? null,
+      }),
+    })
+    if (!resp.ok || !resp.body) throw new Error('stream-unavailable')
+    const reader = resp.body.getReader()
+    const decoder = new TextDecoder('utf-8')
+    let buf = ''
+    for (;;) {
+      const { done, value: chunk } = await reader.read()
+      if (done) break
+      buf += decoder.decode(chunk, { stream: true })
+      const parts = buf.split('\n\n')
+      buf = parts.pop() || ''
+      for (const part of parts) {
+        const ev = /^event: (.+)$/m.exec(part)
+        const data = /^data: (.+)$/m.exec(part)
+        if (!ev || !data) continue
+        const payload = JSON.parse(data[1])
+        if (ev[1] === 'token' && payload.delta) {
+          msg.text += payload.delta
+        } else if (ev[1] === 'meta') {
+          sessionId.value = payload.conversation_id || sessionId.value
+        } else if (ev[1] === 'done') {
+          sessionId.value = payload.conversation_id || sessionId.value
+          if (payload.answer) msg.text = payload.answer
+          msg.recs = payload.recommendations || undefined
+          const card: any = payload.card_data
+          msg.faq = card?.faq || undefined
+          msg.register = card?.register || undefined
+        }
+      }
+    }
+    if (!msg.text) msg.text = '当前助手服务未返回内容，请稍后重试。'
+    return true
+  } catch {
+    if (msg.text) return true // 已有部分内容：保留展示，不再重复请求
+    messages.value.pop()
+    return false
   }
 }
 

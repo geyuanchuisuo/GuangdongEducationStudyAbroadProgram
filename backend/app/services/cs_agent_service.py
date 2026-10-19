@@ -12,6 +12,7 @@ import asyncio
 import json
 import logging
 import re
+from collections.abc import AsyncIterator
 from typing import Any
 
 import httpx
@@ -158,7 +159,28 @@ class AiService:
     async def chat(self, request: ChatRequest) -> ChatResponse:
         if not settings.DIFY_CUSTOMER_AGENT_KEY:
             raise BusinessError(code=50001, message="客服 Agent 未配置（DIFY_CUSTOMER_AGENT_KEY 为空）")
+        session, faq_resp = await self._begin_turn(request)
+        if faq_resp is not None:
+            return faq_resp
+        try:
+            dify_resp = await self.dify.chat(
+                query=request.message,
+                user=str(request.user_id or "anonymous"),
+                conversation_id=session.dify_conversation_id,
+            )
+        except httpx.HTTPError as exc:
+            # v6.11.30：Dify 超时/不可用不再直接抛 50001，走三级降级链（Dify→直连模型→本地话术），
+            # 保证本轮一定有回复，避免前端弹"当前助手服务暂不可用"
+            logger.warning("客服 Dify 调用失败（%s），走模型/本地降级", type(exc).__name__)
+            fallback_answer = await self._fallback_answer(request.message, session)
+            dify_resp = {"answer": fallback_answer, "conversation_id": session.dify_conversation_id or ""}
+        return await self._finalize_turn(request, session, dify_resp)
 
+    async def _begin_turn(self, request: ChatRequest):
+        """会话准备 + FAQ 秒回判定 + 多轮上限 + 用户消息落库。返回 (session, FAQ响应|None)。
+
+        v6.11.37 抽出供 chat() 与 chat_stream() 共用，逻辑与原实现逐行一致。
+        """
         session = await self._get_or_create_session(request)
 
         # P5 FAQ 前置匹配：命中即秒回 FAQ 原文（不经 Dify，保证与甲方原文一致且响应更快）
@@ -176,7 +198,7 @@ class AiService:
             await self.repo.add_message(
                 session.id, role="assistant", content=faq_hit.answer, intent="faq", card_data=faq_card
             )
-            return ChatResponse(
+            return session, ChatResponse(
                 answer=faq_hit.answer, conversation_id=str(session.id), intent="faq", card_data=faq_card
             )
 
@@ -187,20 +209,13 @@ class AiService:
             session = await self.repo.create_session(request.user_id)
 
         await self.repo.add_message(session.id, role="user", content=request.message)
+        return session, None
 
-        try:
-            dify_resp = await self.dify.chat(
-                query=request.message,
-                user=str(request.user_id or "anonymous"),
-                conversation_id=session.dify_conversation_id,
-            )
-        except httpx.HTTPError as exc:
-            # v6.11.30：Dify 超时/不可用不再直接抛 50001，走三级降级链（Dify→直连模型→本地话术），
-            # 保证本轮一定有回复，避免前端弹"当前助手服务暂不可用"
-            logger.warning("客服 Dify 调用失败（%s），走模型/本地降级", type(exc).__name__)
-            fallback_answer = await self._fallback_answer(request.message, session)
-            dify_resp = {"answer": fallback_answer, "conversation_id": session.dify_conversation_id or ""}
+    async def _finalize_turn(self, request: ChatRequest, session, dify_resp: dict) -> ChatResponse:
+        """Dify 应答（或降级应答）统一收尾：标记剥离、转线索、推荐落库、敏感过滤、消息留档。
 
+        v6.11.37 抽出供 chat() 与 chat_stream() 共用，逻辑与原实现逐行一致。
+        """
         answer = dify_resp.get("answer") or ""
         # 剥离 reasoning 模型的 <think> 思考块，防止污染标记解析与前端展示
         answer = THINK_RE.sub("", answer).strip()
@@ -309,6 +324,81 @@ class AiService:
             recommendations=recommendations,
             card_data=card_data,
         )
+
+    # ── v6.11.37：流式对话（SSE 增量下发，感知延迟=首字时间） ──────────
+    _STREAM_OPENERS = ("[intent:", "[RECOMMEND", "[SLOTS", "[REGISTER")
+
+    @classmethod
+    def _stream_advance(cls, buf: str, cursor: int) -> tuple[str, int]:
+        """把 [cursor, len(buf)) 中「可公开下发」的部分返回并推进游标。
+
+        - `<think>...` 思考块整体跳过（未闭合时等待，不下发）；
+        - 标记区（[intent:] 等，契约规定位于正文之后）起点起永久扣留，
+          由 _finish_turn 的既有剥离管线统一解析落库，不污染前端展示。
+        """
+        out: list[str] = []
+        i, n = cursor, len(buf)
+        while i < n:
+            if buf.startswith("<think>", i):
+                j = buf.find("`", i)
+                if j < 0:
+                    return "".join(out), i
+                i = j + 2
+                continue
+            if buf.startswith(cls._STREAM_OPENERS, i):
+                return "".join(out), i
+            out.append(buf[i])
+            i += 1
+        return "".join(out), i
+
+    async def chat_stream(self, request: ChatRequest) -> AsyncIterator[dict]:
+        """流式客服对话：逐段下发正文增量，结束下发 done（含标记解析后的结构化数据）。
+
+        事件：{"event":"meta","conversation_id"} / {"event":"token","delta"} / {"event":"done","data"}。
+        Dify 流失败即走降级链（流未开始→模型/本地话术一次性下发；流中断→按已收内容收尾），
+        保证前端必收 done 事件。
+        """
+        if not settings.DIFY_CUSTOMER_AGENT_KEY:
+            raise BusinessError(code=50001, message="客服 Agent 未配置（DIFY_CUSTOMER_AGENT_KEY 为空）")
+        session, faq_resp = await self._begin_turn(request)
+        if faq_resp is not None:
+            yield {"event": "done", "data": faq_resp.model_dump()}
+            return
+        yield {"event": "meta", "conversation_id": str(session.id)}
+
+        buf = ""
+        cursor = 0
+        dify_conv_id: str | None = None
+        stream_error: Exception | None = None
+        try:
+            async for chunk in self.dify.chat_stream(
+                query=request.message,
+                user=str(request.user_id or "anonymous"),
+                conversation_id=session.dify_conversation_id,
+            ):
+                delta = chunk.get("delta")
+                if delta:
+                    buf += delta
+                    emit, cursor = self._stream_advance(buf, cursor)
+                    if emit:
+                        yield {"event": "token", "delta": emit}
+                elif chunk.get("conversation_id"):
+                    dify_conv_id = chunk["conversation_id"]
+        except httpx.HTTPError as exc:
+            stream_error = exc
+
+        conv_id = dify_conv_id or session.dify_conversation_id or ""
+        if stream_error is not None and not buf:
+            logger.warning("客服 Dify 流式调用失败（%s），走模型/本地降级", type(stream_error).__name__)
+            fallback_answer = await self._fallback_answer(request.message, session)
+            dify_resp = {"answer": fallback_answer, "conversation_id": conv_id}
+        else:
+            if stream_error is not None:
+                logger.warning("客服 Dify 流中断（%s），按已收内容收尾", type(stream_error).__name__)
+            dify_resp = {"answer": buf, "conversation_id": conv_id}
+
+        resp = await self._finalize_turn(request, session, dify_resp)
+        yield {"event": "done", "data": resp.model_dump()}
 
     async def _get_or_create_session(self, request: ChatRequest):
         session_id: int | None = None
