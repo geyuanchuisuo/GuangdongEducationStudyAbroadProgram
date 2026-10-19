@@ -28,7 +28,9 @@ class DifyClient:
         }
         if conversation_id:
             payload["conversation_id"] = conversation_id
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        # v6.11.30：超时 60s→25s——Chatflow 多 LLM 节点串行耗时波动大（19~60s+），
+        # 25s 未返回即让调用方走模型/本地降级，避免前端 30s 超时弹"暂不可用"后端还挂 60s
+        async with httpx.AsyncClient(timeout=25.0) as client:
             resp = await client.post(url, json=payload, headers=headers)
             resp.raise_for_status()
             return resp.json()

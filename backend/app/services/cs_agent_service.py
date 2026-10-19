@@ -8,6 +8,7 @@ M3/M4 的 `from app.services.ai_service import AgentType, ai_service` 零改动�
 逻辑与原实现逐行一致（4 出口 + [SLOTS] 槽位 + 本地提取兜底），仅文件位置变化。
 """
 
+import asyncio
 import json
 import logging
 import re
@@ -194,7 +195,11 @@ class AiService:
                 conversation_id=session.dify_conversation_id,
             )
         except httpx.HTTPError as exc:
-            raise BusinessError(code=50001, message=f"客服 Agent 服务不可用：{type(exc).__name__}")
+            # v6.11.30：Dify 超时/不可用不再直接抛 50001，走三级降级链（Dify→直连模型→本地话术），
+            # 保证本轮一定有回复，避免前端弹"当前助手服务暂不可用"
+            logger.warning("客服 Dify 调用失败（%s），走模型/本地降级", type(exc).__name__)
+            fallback_answer = await self._fallback_answer(request.message, session)
+            dify_resp = {"answer": fallback_answer, "conversation_id": session.dify_conversation_id or ""}
 
         answer = dify_resp.get("answer") or ""
         # 剥离 reasoning 模型的 <think> 思考块，防止污染标记解析与前端展示
@@ -486,6 +491,26 @@ class AiService:
             if value not in (None, ""):
                 kwargs[field] = value.strip() if isinstance(value, str) else value
         return kwargs
+
+    # ── v6.11.30：Dify 失败降级链（直连模型 → 本地话术） ──────────────
+    async def _fallback_answer(self, message: str, session) -> str:
+        """Dify 超时/不可用时的兜底回复：先试直连模型（OpenAI-compatible），失败用本地话术。
+
+        模型调用限 35s（Dify 25s + 模型 35s = 60s < 前端 70s 超时），保证前端一定收到回复。
+        """
+        try:
+            from app.services.model_ai_service import model_ai_service
+
+            result = await asyncio.wait_for(model_ai_service.chat(message, str(session.id), None), timeout=35)
+            reply = (result.get("reply") or "").strip()
+            if reply:
+                return reply
+        except Exception as model_exc:
+            logger.warning("客服模型降级失败，改本地话术: %s", model_exc)
+        return (
+            "抱歉，智能助手本轮响应较慢，未能及时给出回答。您可以稍后重新发送，"
+            "或留下联系方式与具体需求，我们会安排顾问跟进。"
+        )
 
     # ── P5 FAQ 前置匹配 ──────────────────────────────────────────
     async def _match_faq(self, message: str):

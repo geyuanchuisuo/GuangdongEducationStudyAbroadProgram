@@ -101,15 +101,50 @@ if %_tries% geq 20 (
 ping -n 3 127.0.0.1 >nul
 goto :wait_frontend
 :frontend_ready
+
+echo [7/7] Starting public tunnel for remote visitors...
+rem Visitors come from the public internet, so tunneling is part of the main flow.
+rem Prefer the Docker nginx build on 8080; fall back to the vite dev server on 5173.
+set PORT=
+curl.exe -s -o nul --max-time 2 http://localhost:8080/
+if not errorlevel 1 set PORT=8080
+if not defined PORT set PORT=5173
+echo        Tunnel target port: %PORT%
+if not exist "%~dp0logs" mkdir "%~dp0logs"
+del /q "%~dp0logs\tunnel.log" 2>nul
+start "Yuejiao Tunnel" cmd /k "npx --yes localtunnel --port %PORT% > "%~dp0logs\tunnel.log" 2>&1"
+rem Poll the tunnel log for the public URL (up to 60s; first run downloads localtunnel)
+set /a _tries=0
+set PUBLIC_URL=
+:wait_tunnel
+for /f "tokens=4" %%u in ('findstr /c:"your url is:" "%~dp0logs\tunnel.log" 2^>nul') do set PUBLIC_URL=%%u
+if defined PUBLIC_URL goto :tunnel_ready
+set /a _tries+=1
+if %_tries% geq 30 (
+  echo [WARN] Tunnel URL not detected within 60s. Check the "Yuejiao Tunnel" window.
+  goto :tunnel_done
+)
+ping -n 3 127.0.0.1 >nul
+goto :wait_tunnel
+:tunnel_ready
+echo        Public URL: %PUBLIC_URL%
+rem localtunnel shows visitors a password page; the password is this machine's public IP
+set TUNNEL_PWD=
+for /f "delims=" %%p in ('curl.exe -s --max-time 5 https://loca.lt/mytunnelpassword') do set TUNNEL_PWD=%%p
+:tunnel_done
 start "" "http://localhost:5173"
 
 echo.
 echo Startup completed.
-echo Website:  http://localhost:5173  (opened automatically)
+echo Local:    http://localhost:5173  (opened automatically)
 echo Backend:  http://localhost:8000  (API docs: http://localhost:8000/docs)
-echo Keep the Backend and Frontend windows open.
-echo.
-echo Need public access? Run start-tunnel.bat in the project root for one-click tunneling.
+if defined PUBLIC_URL (
+  echo Public:   %PUBLIC_URL%  ^(share with remote visitors^)
+  if defined TUNNEL_PWD echo Tunnel password for visitors: %TUNNEL_PWD%
+) else (
+  echo Public:   tunnel not ready - see the "Yuejiao Tunnel" window, or run start-tunnel.bat
+)
+echo Keep the Backend, Frontend and Tunnel windows open.
 echo.
 echo Test accounts:
 echo   PROSPECT  13810000001 / Test@123456

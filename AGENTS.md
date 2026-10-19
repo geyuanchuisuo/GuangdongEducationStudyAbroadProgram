@@ -6,6 +6,17 @@
 
 ## 零、快速定位（打开项目先看这里）
 
+> v6.11.30（2026-10-19，longtrying_test）：**客服"暂不可用"间歇故障修复**——三层超时错位（前端 30s<后端 60s<Dify 19~60s+ 波动）导致响应慢被谎报为不可用；前端对话端点 70s+文案细分（超时≠不可用），后端 Dify 25s+三级降级链（模型≤35s→本地话术），60s<70s 必达。详见更新记录 v6.11.30 / LOG-088。
+> v6.11.29（2026-10-19，longtrying_test）：**第十五次同步 master**——master 前端断链修复全量并入（管理层待审批恒空修复/待办 handleTodo/组织联系人搜索/创建员工/权限配置版/changePassword）；同功能双实现统一（变更归属→对话框流+刷新差异字段、真实接口>演示实现）；公共模块经批准吸收 docker-compose --reload-dir + nginx 缓存头，dify_init.py 保留本线；pytest 170/170 + build ✓。详见更新记录 v6.11.29 / LOG-087。
+> v6.11.28（2026-10-19，longtrying_test）：**内网穿透并入主启动流程**——start-project.bat 新增 [7/7] 自动穿透（探测 8080/5173→localtunnel 后台写 logs/tunnel.log→轮询抓公网 URL→loca.lt 取访客密码一并展示），推翻 v6.11.19"可选演示能力"决策（用户：「异地访问是属于主流程」）；同步修复全量文档审查发现的 5 处不同步（表数 35/路由 110/契约 v2.11.26/需求文档版本号/清单销账标注）。详见更新记录 v6.11.28 / LOG-086。
+> v6.11.27（2026-10-19，longtrying_test）：**管理层"变更归属"缺陷修复**——客户抽屉单客户"变更归属"误调批量接口（会把原员工名下全部客户转走），新增 `reassignOne` 单客户语义（from 取行内归属、customer_ids 单个）；后端实测无辜（3→4→3 闭环），纯前端语义错位（LOG-085）。
+>
+> v6.11.26（2026-10-19，longtrying_test）：**员工/管理层 Agent 修复**——agent_chat 注入真实业务快照（待办 top5/客户数/待审批数）+ 禁编造/禁 JSON 规则 + `_strip_agent_json` 兜底，编造（李女士/澳洲签证）与 JSON 泄漏清零，问待办答真实数据、无数据如实声明（LOG-084）。仅改 employee_service.py，Dify/key 零变动。
+>
+> v6.11.25（2026-10-19，longtrying_test）：**客服 Agent 修复落地**——第十四次同步 master（anhoa 客服修复本体：完整版 Chatflow yml + FAQ 检索 + 多标记剥离 + GET /customers/me，pytest 170/170）；完整版工作流上线（Dify 1.16 无 draft 更新端点→导入新应用 86a2f351 **换 key**，旧骨架版 d05af668 停用），客服问答验收对题。详见更新记录 v6.11.25 / LOG-083。
+>
+> v6.11.23（2026-10-19，longtrying_test）：**Policies 政策页建表接库 + B 类假动作全接真实接口**——新增 `policy` 表（迁移 007_policy 幂等）+ `GET /cs/policies` 公开接口 + 18 条政策种子（幂等脚本）；学生请假/删除跟进（新 `DELETE /employee/crm/follow-ups/{id}`）/客户抽屉跟进与状态/查看完整号码/批量再分配/权限保存/导出 CSV/组织树/学生 DDL 与申请进度/跟进柱状图 10 处假动作全部改真实接口（路由 107→109）。build ✓ ×2 + API 拨测 10 项 + pytest 164/164。**运维补充**：Dify 18 个应用已全量盘点标注（当前调用 4 个以 backend/.env key 命中为判据，控制台描述已写明；14 个可删待批，重复根因=dify_init 去重失效，见 Dify 指南 §零）。详见更新记录 v6.11.23 / LOG-081。
+>
 > v6.11.18（2026-10-19，ZNBG 本机线）：**角色工作台三类断链清零（P0~P4 收官 + 测试反馈 Q21）**——①**有接口未接**：待办「处理」按钮（原无 `@click`）、消息中心通知行（原纯 div）、管理层「关键操作日志」（原写死空状态）全部接真实接口（`PUT /employee/todos/{id}`、`PUT /notifications/{id}/read` 与 `/read-all`、新增 `platformApi.operationLogs` → `GET /operation-logs`）；②**无源写死**：STUDENT 心理页 72 分、EMPLOYEE 组织页固定手机号、员工首页「客户跟进提醒」改绑真实接口/显式「暂无」；③**种子缺口**：`seed_data.py` 内建 `USER_PERMISSIONS`、`crm_follow_up.next_date` 改含过去/今天并为核心员工固定补 3 条到期跟进、核心演示账号固定补站内通知；④**兜底显式化**：`platformApi` 静默回落 mock → `fallbackState` + 页面黄条「接口不可用，以下内容为演示数据」，mock 改动态 `import()` 不进主包；⑤接口 500 修复：`CustomerQueryItem.recommended` 注解 `dict`→`list`；⑥`nginx.conf`：`index.html` no-store + `/assets/` immutable（发版不再需手动强刷）。回归 compileall + verify_all 29/29 + pytest 164/164 + 前端 build ✅；详见更新记录 v6.11.18 与 LOG-075（ZNBG）。
 >
 > 第十二次同步 origin/master→master_ZNBG（2026-10-19，ZNBG 本机线，全线第十八次）：**上游 v6.11.19~v6.11.24 全量并入**——M0 审批引擎/事件总线/AI 网关/通知中心**零改动**；M1 并入 `GET /customers/me`（本人客户档案 + convert_status 只读查 approval_instance）及 `customers.py`/`customer_repo.py`/`schemas/customer.py`/`customer_service.py`/`cs_agent_service.py` 与新增用例 `tests/test_customers_me.py`。**冲突 3 处经用户逐项确认**：①`RoleWorkspace.vue` 脚本区**并集**（本线权限配置/创建员工/学生 DDL 与上游 `myCustomer`/`CUSTOMER_STATUS_CN`/`isConverted`/`reloginAsStudent` 全保留）②同文件 `EMPLOYEE convert` 模板区以本线 `publicProjects` 为基准 + 采纳上游空态文案与 `item.t`/`item.s` 兜底 ③`api/platform.ts` 保留本线 `customers` 写法 + 新增上游 `myCustomer`（上游写法引用未导入的裸变量，原样并入会编译失败）。**并集陷阱**：git 把两侧共用的闭合 `}` 排在冲突区之外，拼接后上游声明段落入 `submitCreateUser` 函数体内，其后所有声明脱离顶层作用域（vue-tsc 报 25+ 处 `TS2304` / `does not exist on ComponentPublicInstance`），补回 `}` 后通过。回归 compileall 0 错 + pytest **170/170** + verify_all **29/29** + `npm run build` ✓；`master` 与 `master_ZNBG` 已同步至同一提交并推送。详见更新记录 v6.11.25 与 LOG-083（ZNBG）。
@@ -35,8 +46,6 @@
 > v6.11.22（2026-10-19，anhoa）：**多轮 [intent:] 标记全剥离修复+「重复答案」排查闭环**——排查「还是只重复回答一个答案」：链路分层验证（后端直连/Dify 直连/vite 代理空载）均正常，所见重复文案实为前端 AgentDock 固定兜底（v6.11.21 发布+压测维护窗口致超时/空回答触发）；顺手修复多轮标记泄漏——Dify 会话历史含原始标记致模型模仿输出多个 [intent:]，`_extract_intent` 由剥首个改为 `INTENT_RE.sub` 全剥离；3 轮实测回答各异、意图正确、marker_leaked=False×3；详见更新记录 v6.11.22 与 LOG-078（anhoa）。
 >
 > v6.11.23（2026-10-19，anhoa）：**第十六次同步 origin/master→anhoa**——并入 master 7 提交（v6.11.14~16 Dify 1.16 基建；无 backend 业务变更），公共模块（dify_init.py / start-project.bat / 5 yml）经用户批准；就 dify_init.py 两套实现与 yml mode 互斥问题请示后**用户裁定选项 A（保持 master 方案）**；解 2 冲突（客服 yml 保留 anhoa 完整版、更新记录并集）；回归 compileall + verify_all 29/29 + 前端 build ✅，pytest 169/1（失败项为既有时间相关 flaky，见 LOG-079）；详见更新记录 v6.11.23 与 LOG-079（anhoa）。
->
-> v6.11.24（2026-10-19，anhoa）：**第十七次同步 origin/master→anhoa（pytest 170/170 全绿）**——并入 master 6 提交（v6.11.19~22 全量），公共模块 A~F（`.gitattributes` / `dify_init.py` APP_KEY_ENV_MAP / seed_data.py / seed_owner_rebalance / start*.bat / nginx.conf）经用户批准；解 3 冲突（RoleWorkspace.vue **两边代码全部保留**——master 管理层看板真实接口 + anhoa PROSPECT 客户档案并入同一 role 分支）；回归 compileall + verify_all 29/29 + 前端 build ✅ + pytest **170/170 全绿**（master 顺手修了 M5 时间相关 flaky！）；详见更新记录 v6.11.24 与 LOG-081（anhoa）。
 
 > v6.11.16（2026-10-19，ZNBG 线，与本线 v6.11.16 同号异义）：Dify 1.16 首启脚本修正到 `/console/api/*` 并使用 cookie/CSRF 登录，补入智能报告 app key 映射；Agnes 模型配置仅保存在忽略的 `dify/docker/.env`。Dify API/Postgres/Redis/Sandbox 健康且管理员已创建，但 OpenAI 兼容插件和 DSL 依赖需访问 Marketplace；当前本机及容器均收到 403，dify-init 停在供应商配置，app keys 尚未生成。详见更新记录 v6.11.16、LOG-073。
 
@@ -73,7 +82,7 @@
 5. ✅ ~~ZNBG 分支本地提交未推送~~ **已推送**（v6.9.3 起本分支已同步远端；git 凭据本机已恢复，`git ls-remote` 免交互即通）
 6. ✅ ~~两条 P1（v6.9.3 实测发现，M5，阻断切 production）~~ **v6.9.6 已修复**：a) 缺省周期改用 `default_completed_week(now)`=上一完整自然周 `[上周一00:00, 本周一00:00)`（原为 `week_range(now)` 恒落未来 → 必 40002）b) `normalize_customer_status()` 复用 M1 词表 `STATUS_CN_TO_EN` 做中英归一 + `fetch_customers` 逐行容错（脏行跳过并写入口径说明，不再拖垮 5 类报告）。**仍留 P2（他模块）**：`seed_data.py` ai_report 段秒级 DATETIME 随机碰撞（2 跑 1 败，共用脚本需确认）、前端 `RoleWorkspace.vue` 部分区块仍为静态演示值（管理层看板 183/21.4%/689/3.2%、学生首屏「李同学」与登录账号不符，作者 ge yuan，属 M3 看板区块）
 7. ✅ ~~M5 报告 AI 只用模拟~~ **v6.9.5 已统一到共用网关**：`ReportAIService` 内部走 `model_ai_service`（共用模块名称），失败回落 mock；报告内容新增差异字段 `ai_source`（model/mock/unavailable）并与 `ai_status` 并存，PDF 头部/前端详情按来源标注；契约 §7 已同步。**v6.9.6 补**：三处下钻改为与报告**同源**（`_drilldown_dataset` 按 `data_source_status` 分流），前端「明细下钻」说明同步。**待办**：`DIFY_MODEL_API_KEY` 需在 `backend/.env` 配置后才可验证真实模型链路（当前自动回落 mock，不影响测试）；M3 `employee_service.py` 的 logger 导入为合并期最小修复，待 M3 负责人复审
-**数据库**：34张表（含 M5 ai_report_drill、ticket_ai_analysis 等），107条路由路径（106 API + 1 health；含 M1 /crm/assessments/file），MVC分层结构就绪；Docker 数据库、Redis、后端服务按 compose 配置运行；数据库凭据见本机环境配置。
+**数据库**：35张表（含 M5 ai_report_drill、ticket_ai_analysis 与 v6.11.23 新增 policy 等），110条路由路径（109 API + 1 health；v6.11.23 增 /cs/policies + DELETE follow-ups，v6.11.25 增 /customers/me），MVC分层结构就绪；Docker 数据库、Redis、后端服务按 compose 配置运行；数据库凭据见本机环境配置。
 **测试账号（v6.10.0 起规范）**：核心角色固定 `username=手机号`——`13810000001` PROSPECT / `13810000002` STUDENT / `13810000003` EMPLOYEE / `13810000004` MANAGER，**密码统一 `Test@123456`**；其余 `user000~user115` 同密码（角色按 `i % 8` 确定：0=ADMIN、1=MANAGER、2~4=EMPLOYEE、5~6=STUDENT、7=PROSPECT）。`scripts/seed_data.py` 会 `drop_all+create_all` 重建全库（`random.seed(42)` 可复现），重跑前注意数据留存；Docker E2E 已按此规范更新账号常量
 **主基线文档**：`promts/lon/提示词整合测试_demo/docs/基础架构方案_五人并行开发.md`（v1.2.0，28项决策）
 
@@ -82,8 +91,8 @@
 2. `docs/项目需求文档.md` — 完整业务需求
 3. `promts/lon/提示词整合测试_demo/docs/基础架构方案_五人并行开发.md` — **主基线，权重最高**
 4. `docs/开发路线图.md` — 当前进度、下一步任务
-5. `docs/接口契约v1.md` — API接口契约（v2.11.3，M3 成绩三件套 + v2.9.9 注册免审批反转/Dify 配置基线）
-6. `docs/更新记录.md` — 最近变更（v6.11.13 Dify 1.16 环境实跑+dify_init.py 重写 + v6.11.9 全文档配置同步 + v6.11.5~8 Dify 一体化/dify-init + merge master 公共模块 + v6.11.3/v6.11.4）
+5. `docs/接口契约v1.md` — API接口契约（v2.11.26，110 paths；v2.11.23 政策/删跟进 +2、v2.11.25 /customers/me +1）
+6. `docs/更新记录.md` — 最近变更（v6.11.27 变更归属修复 + v6.11.26 员工Agent真实数据注入 + v6.11.25 客服Agent完整版上线 + v6.11.23 政策建表/B类清零 + v6.11.22 种子归属重分配 + v6.11.21 第十三次同步master）
 
 **重要规则**：
 - 主基线文档（基础架构方案）权重 > 其他参考文档（共用基座方案、公共框架等）
@@ -181,7 +190,9 @@ GuangdongEducationStudyAbroadProgram/
 │   └── package.json
 │
 ├── dify/                       # Dify配置
-│   ├── workflows/             # Agent工作流
+│   ├── apps/                  # 业务应用 DSL（5 个：3 Agent + 智能报告 advanced-chat + 留档 agent-chat）
+│   ├── docker/                # Dify 1.16 一体化打包（docker-compose.yaml + dify_init.py 一键初始化 + .env.example）
+│   ├── workflows/             # Agent工作流（历史/备份）
 │   └── knowledge_base/        # 知识库文档
 │
 ├── docs/                       # 项目文档
@@ -812,11 +823,11 @@ chore: 构建
 | **AGENTS.md** | **./AGENTS.md**（根目录） | **项目接手指南（agent自动读取，这是主文件）** |
 | AGENTS.md 副本 | docs/AGENTS.md | 与根目录保持同步的副本 |
 | 项目需求文档 | docs/项目需求文档.md | 完整需求、架构、接口、数据库 |
-| 更新记录 | docs/更新记录.md | 版本变更记录（当前 v6.9.0 anhoa M2 二期 + 主线 v6.8.6/v6.8.7 条目） |
+| 更新记录 | docs/更新记录.md | 版本变更记录（当前 v6.11.27） |
 | 开发路线图 | docs/开发路线图.md | 分期任务表（Phase 0已完成，M3 收官，M1/M2 v6.8.0 补齐，M4/M5 后端已交付，AI 已接通） |
-| 运行日志 | docs/运行日志.md | 排查记录与教训（当前 LOG-025） |
+| 运行日志 | docs/运行日志.md | 排查记录与教训（当前 LOG-085） |
 | 测试报告 | docs/测试报告_v6.8.2_M3M4端到端.md | v6.8.2 Docker E2E 69/69 检查明细+7项缺陷+7轮迭代留档 |
-| 接口契约v2 | docs/接口契约v1.md | API接口契约（v2.11.6，34张表，107路由路径=106 API+1 health） |
+| 接口契约v2 | docs/接口契约v1.md | API接口契约（v2.11.26，35张表，110路由路径=109 API+1 health） |
 | **基础架构方案** | **promts/lon/提示词整合测试_demo/docs/基础架构方案_五人并行开发.md** | **主基线文档（v1.2.0，28项决策），所有参考文档权重低于此文件** |
 
 > **文档优先级**：基础架构方案_五人并行开发.md > 其他参考文档（共用基座方案、公共框架等）

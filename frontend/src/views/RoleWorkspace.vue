@@ -139,28 +139,6 @@ const studentDdlRows = computed(() => itemsOf(studentReminders.value?.academic_d
   due: String(item.due_time || '').slice(0, 10) || '—',
   tone: (item.days_left ?? 99) <= 1 ? 'coral' : (item.days_left ?? 99) <= 2 ? 'amber' : 'blue',
 })))
-// 学生学业页：DDL 列表取 academic_items；统计卡由 academic_items/score_summary 真实字段推导
-const studentAcademicItems = computed(() => itemsOf(studentAcademic.value?.academic_items))
-const studentAcademicStats = computed(() => {
-  const now = Date.now()
-  const week = 7 * 24 * 60 * 60 * 1000
-  const items = studentAcademicItems.value
-  const dueWithin7d = items.filter((i: any) => {
-    const t = new Date(i.due_time).getTime()
-    return !isNaN(t) && t >= now && t - now <= week
-  }).length
-  const pending = items.filter((i: any) => i.item_type === '作业' && new Date(i.due_time).getTime() >= now).length
-  const pushed = items.filter((i: any) => i.reminder_sent).length
-  const summary = studentAcademic.value?.score_summary || {}
-  return {
-    due7d: dueWithin7d,
-    pending,
-    gpa: summary.average != null ? String(summary.average) : '—',
-    pushed,
-    scoreCount: summary.count ?? 0,
-  }
-})
-
 // 学生申请进度：GET /student/progress（真实阶段/状态/备注），按更新时间升序作为步骤顺序
 const studentProgressSteps = computed(() => [...studentProgressRows.value].sort(
   (a: any, b: any) => new Date(a.update_time || 0).getTime() - new Date(b.update_time || 0).getTime(),
@@ -503,6 +481,7 @@ onMounted(async () => {
     await loadDailyReports()
     await loadPendingLeads()
     await loadLeads()
+    await loadFollowUpBars()
   }
   if (role.value === 'MANAGER') {
     await loadApprovals()
@@ -521,8 +500,13 @@ onMounted(async () => {
   if (role.value === 'EMPLOYEE') await loadEmployeeWorkspace()
   if (role.value === 'EMPLOYEE' || role.value === 'MANAGER') await loadOrgTree()
   if (role.value === 'EMPLOYEE') await loadOrgMembers()
-  if (role.value === 'STUDENT') await loadStudentProfile()
-  if (role.value === 'STUDENT') await loadStudentWorkspace()
+  if (role.value === 'STUDENT') {
+    await loadStudentProfile()
+    await loadMyServices()
+    await loadStudentAcademic()
+    await loadStudentProgress()
+    await loadStudentWorkspace()
+  }
   if (role.value === 'EMPLOYEE' || role.value === 'MANAGER') customerRows.value = customerRows.value.map(normalizeCustomer)
 })
 
@@ -985,10 +969,28 @@ async function saveCustomer() {
 }
 
 function removeCustomer(customer: any) {
-  // 后端未提供删除跟进记录接口，不再返回假的“已删除”提示
-  notifyInfo('删除跟进记录接口尚未开放，客户“' + (customer?.name || '') + '”的记录未被修改')
+  // v6.11.23：真删除——删除该客户最近一条跟进记录（DELETE /employee/crm/follow-ups/{id}）
+  confirmWrite('确认删除客户“' + customer.name + '”的最近一条跟进记录吗？删除后无法恢复。', async () => {
+    try {
+      const res: any = await platformApi.employee.listFollowUps({ customer_id: customer.id, page_size: 1 })
+      const items = itemsOf(res)
+      if (!items.length) { notifyInfo('该客户暂无跟进记录'); return }
+      await platformApi.employee.deleteFollowUp(items[0].id)
+      notifySuccess('跟进记录已删除')
+    } catch {
+      notifyInfo('删除失败，请稍后重试')
+    }
+  })
 }
 
+// v6.11.23：学生请假真提交（POST /student/admin-services）+ 我的申请真实列表
+const myServices = ref<any[]>([])
+async function loadMyServices() {
+  try {
+    const res: any = await platformApi.student.listAdminServices({ page_size: 20 })
+    myServices.value = itemsOf(res)
+  } catch {}
+}
 function submitLeave() {
   if (!leaveForm.start || !leaveForm.end || !leaveForm.reason) {
     ElMessage.warning('请补全请假信息')
@@ -997,12 +999,13 @@ function submitLeave() {
   confirmWrite('确认提交请假申请吗？提交后将通知负责员工审批。', async () => {
     try {
       await platformApi.student.submitAdminService({
-        service_type: '请假-' + leaveForm.type,
+        service_type: '请假（' + leaveForm.type + '）',
         start_time: leaveForm.start,
         end_time: leaveForm.end,
         reason: leaveForm.reason,
       })
       leaveDialog.value = false
+      await loadMyServices()
       notifySuccess('请假申请已提交')
     } catch (error: unknown) {
       notifyInfo(errorMessage(error, '请假接口尚未就绪'))
@@ -1176,6 +1179,106 @@ async function startPsychChat() {
   }
 }
 
+async function exportCsv(name: string) {
+  // v6.11.23：真实导出（GET /employee/export/customers CSV blob）
+  try {
+    const blob: any = await platformApi.employee.exportCustomers()
+    const url = URL.createObjectURL(blob instanceof Blob ? blob : new Blob([blob]))
+    const link = document.createElement('a')
+    link.href = url
+    link.download = name + '.csv'
+    link.click()
+    URL.revokeObjectURL(url)
+    notifySuccess('导出任务已生成')
+  } catch {
+    notifyInfo('导出失败，请稍后重试')
+  }
+}
+
+// ── v6.11.23：B 类假动作全接真实接口 ──────────────────────
+// 客户抽屉：添加跟进（真落库）
+async function addActiveFollowUp() {
+  if (!activeCustomer.value) return
+  try {
+    const result = await ElMessageBox.prompt('输入跟进内容', '添加跟进 · ' + (activeCustomer.value.name || ''), {
+      inputType: 'textarea',
+      inputValidator: (v: string) => !!v.trim() || '跟进内容不能为空',
+    })
+    await platformApi.employee.createFollowUp({ customer_id: activeCustomer.value.id, content: result.value.trim() })
+    notifySuccess('跟进记录已添加')
+  } catch (e) {
+    if (e !== 'cancel' && e !== 'close') notifyInfo('添加跟进失败，请稍后重试')
+  }
+}
+// 客户抽屉：更新状态（6 态状态机真流转）
+async function updateActiveStatus() {
+  if (!activeCustomer.value) return
+  try {
+    const result = await ElMessageBox.prompt('输入目标状态（新录入/跟进中/意向强烈/已签约/已入学/已流失）', '更新客户状态', {
+      inputValue: activeCustomer.value.status || '跟进中',
+    })
+    await platformApi.employee.updateCustomerStatus(activeCustomer.value.id, { status: result.value.trim() })
+    activeCustomer.value.status = result.value.trim()
+    notifySuccess('状态已更新')
+  } catch (e) {
+    if (e !== 'cancel' && e !== 'close') notifyInfo('状态更新失败，请稍后重试')
+  }
+}
+// 学生 DDL/进度真实化（/student/academic + /student/progress）
+const academicItems = ref<any[]>([])
+const progressRows = ref<any[]>([])
+async function loadStudentAcademic() {
+  try {
+    const res: any = await platformApi.student.academic()
+    academicItems.value = (res?.academic_items || res?.items || []).slice()
+  } catch {}
+}
+async function loadStudentProgress() {
+  try {
+    const res: any = await platformApi.student.progress()
+    progressRows.value = itemsOf(res).slice().sort((a: any, b: any) =>
+      String(a.update_time || '').localeCompare(String(b.update_time || '')))
+  } catch {}
+}
+const ddlRows = computed(() => academicItems.value
+  .filter((i: any) => i.due_time)
+  .slice()
+  .sort((a: any, b: any) => String(a.due_time).localeCompare(String(b.due_time))))
+const ddlDue7d = computed(() => {
+  const now = Date.now()
+  return ddlRows.value.filter((i: any) => {
+    const t = new Date(i.due_time).getTime()
+    return t >= now && t - now <= 7 * 864e5
+  }).length
+})
+// 进度步骤按 stage 关键字映射（材料→0 申请→1 Offer→2 签证→3 行前→4 入学→5）
+const progressActive = computed(() => {
+  const s = String(progressLatest.value?.stage || '')
+  if (/入学/.test(s)) return 5
+  if (/行前/.test(s)) return 4
+  if (/签证/.test(s)) return 3
+  if (/offer|录取/i.test(s)) return 2
+  if (/申请|提交/.test(s)) return 1
+  return 0
+})
+const progressLatest = computed(() => progressRows.value.length ? progressRows.value[progressRows.value.length - 1] : null)
+// 员工首页：近 7 日跟进柱状图（真实聚合，替换装饰数据）
+const followUpBars = ref<number[]>([])
+const barMax = computed(() => Math.max(...followUpBars.value, 1))
+async function loadFollowUpBars() {
+  try {
+    const res: any = await platformApi.employee.listFollowUps({ page_size: 100 })
+    const counts: number[] = new Array(7).fill(0)
+    for (const it of itemsOf(res)) {
+      const d = new Date(it.created_at || it.create_time || '')
+      if (isNaN(d.getTime())) continue
+      const day = Math.floor((Date.now() - d.getTime()) / 864e5)
+      if (day >= 0 && day < 7) counts[6 - day] += 1
+    }
+    followUpBars.value = counts
+  } catch {}
+}
+
 async function changePassword() {
   try {
     const oldOne = await ElMessageBox.prompt('请输入当前密码', '修改密码', { inputType: 'password', inputValidator: (value: string) => (value ? true : '请输入当前密码') })
@@ -1197,25 +1300,6 @@ async function applyEvent(event: any) {
       notifyInfo(errorMessage(error, '活动报名接口尚未就绪'))
     }
   })
-}
-
-async function addFollowUp() {
-  const customer = activeCustomer.value
-  if (!customer?.id) {
-    notifyInfo('请先选择客户')
-    return
-  }
-  try {
-    const input = await ElMessageBox.prompt('请输入本次跟进内容', '添加跟进记录', {
-      inputPlaceholder: '例如：已电话沟通，家长关注新加坡项目费用',
-      inputValidator: (value: string) => (value && value.trim() ? true : '请输入跟进内容'),
-    })
-    await platformApi.employee.createFollowUp({ customer_id: customer.id, content: input.value.trim() })
-    notifySuccess('跟进记录已添加')
-  } catch (error: unknown) {
-    if (error === 'cancel' || error === 'close') return
-    notifyInfo(errorMessage(error, '跟进接口尚未就绪'))
-  }
 }
 
 function employeeName(id?: number) {
@@ -1262,6 +1346,8 @@ async function doReassign(fromId: number, toId: number, customerIds: number[]) {
       to_employee_id: toId,
       customer_ids: customerIds,
     })
+    // v6.11.27 差异字段并入：转移成功后刷新客户列表（原 reassignOne/reassignAll 的刷新行为）
+    customerRows.value = itemsOf(await platformApi.employeeCustomers())
     notifySuccess('已转移 ' + (result?.moved ?? customerIds.length) + ' 个客户')
     return true
   } catch (error: unknown) {
@@ -1297,17 +1383,6 @@ async function batchReassign() {
   await doReassign(reassignFromId.value, reassignToId.value, selectedCustomerIds.value)
 }
 
-function exportCsv(name: string) {
-  const blob = new Blob(['名称,状态,时间\n客户列表,已导出,2026-10-17'], { type: 'text/csv;charset=utf-8' })
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = name + '.csv'
-  link.click()
-  URL.revokeObjectURL(url)
-  notifySuccess('导出任务已生成')
-}
-
 function revealPhone(member: any) {
   confirmWrite('确认查看 ' + (member.real_name || '该同事') + ' 的完整手机号吗？该敏感操作会写入操作日志。', async () => {
     try {
@@ -1339,7 +1414,7 @@ function revealPhone(member: any) {
     <template v-else-if="role === 'STUDENT' && section === 'admin'">
       <div class="two-column">
         <section class="surface panel"><SectionTitle title="提交请假申请" desc="支持页面提交，也可以直接使用学生助手代办。" /><el-form label-position="top"><div class="form-grid"><el-form-item label="请假类型"><el-select v-model="leaveForm.type" style="width:100%"><el-option v-for="item in ['事假','病假','考试假','其他']" :key="item" :label="item" :value="item" /></el-select></el-form-item><el-form-item label="开始日期"><el-input v-model="leaveForm.start" placeholder="2026-10-18" /></el-form-item><el-form-item label="结束日期"><el-input v-model="leaveForm.end" placeholder="2026-10-20" /></el-form-item><el-form-item label="预计缺课"><el-input placeholder="3节" /></el-form-item></div><el-form-item label="请假事由"><el-input v-model="leaveForm.reason" type="textarea" :rows="4" /></el-form-item><el-button type="primary" size="large" @click="submitLeave">提交请假申请</el-button></el-form></section>
-        <section class="surface panel"><SectionTitle title="申请状态" /><div v-for="item in studentLeaveRows" :key="item.id" class="ticket-row"><div><b>{{ item.service_type || '请假申请' }}</b><small>{{ String(item.create_time || '').slice(0, 10) || '—' }}</small></div><el-tag :type="item.status === '已通过' ? 'success' : item.status === '已拒绝' ? 'danger' : 'warning'">{{ item.status || '待审批' }}</el-tag></div><el-empty v-if="!studentLeaveRows.length" description="暂无请假申请" /></section>
+        <section class="surface panel"><SectionTitle title="申请状态" desc="来自我的行政服务申请（真实记录）" /><el-timeline><el-timeline-item v-for="item in myServices.slice(0, 6)" :key="item.id" :type="item.status === '已通过' ? 'success' : item.status === '已拒绝' ? 'danger' : 'warning'" :timestamp="String(item.create_time || '').slice(0, 16) || '—'">{{ item.service_type || '行政服务' }} · {{ item.status }}</el-timeline-item><el-timeline-item v-if="!myServices.length">暂无申请记录，提交后将在这里跟踪进度</el-timeline-item></el-timeline></section>
       </div>
     </template>
 
@@ -1353,12 +1428,12 @@ function revealPhone(member: any) {
     </template>
 
     <template v-else-if="role === 'STUDENT' && section === 'academic'">
-      <div class="stat-grid"><StatCard label="7日内到期" :value="String(studentAcademicStats.due7d)" tone="coral" /><StatCard label="待提交作业" :value="String(studentAcademicStats.pending)" tone="amber" /><StatCard label="当前 GPA" :value="studentAcademicStats.gpa" :note="'共 ' + studentAcademicStats.scoreCount + ' 门课程'" tone="lime" /><StatCard label="系统已推送" :value="String(studentAcademicStats.pushed)" :note="'到期提醒由系统自动发出'" tone="purple" /></div>
-      <section class="surface panel"><SectionTitle title="DDL 与考试安排" /><div v-for="item in studentAcademicItems" :key="item.id" class="academic-row"><el-tag :type="item.item_type === '考试' ? 'danger' : item.item_type === '作业' ? 'warning' : 'info'">{{ item.item_type }}</el-tag><div><b>{{ item.title }}</b><small>截止时间 {{ String(item.due_time || '').slice(0, 10) || '—' }}</small></div><el-button text type="primary">查看详情</el-button></div><el-empty v-if="!studentAcademicItems.length" description="暂无 DDL 与考试安排" /></section>
+      <div class="stat-grid"><StatCard label="7日内到期" :value="String(ddlDue7d)" tone="coral" /><StatCard label="学业事项" :value="String(academicItems.length)" tone="amber" /><StatCard label="有截止时间" :value="String(ddlRows.length)" tone="lime" /><StatCard label="已设提醒" :value="String(academicItems.filter((i: any) => i.reminder_sent).length)" tone="purple" /></div>
+      <section class="surface panel"><SectionTitle title="DDL 与考试安排" desc="来自我的学业事项（真实记录）" /><div v-for="item in ddlRows" :key="item.id" class="academic-row"><el-tag :type="item.item_type === '考试' ? 'danger' : 'warning'">{{ item.item_type || '事项' }}</el-tag><div><b>{{ item.title }}</b><small>截止时间 {{ String(item.due_time).replace('T', ' ') }}</small></div></div><el-empty v-if="!ddlRows.length" description="暂无带截止时间的学业事项" /></section>
     </template>
 
     <template v-else-if="role === 'STUDENT' && section === 'progress'">
-      <section class="surface panel"><SectionTitle title="留学申请进度追踪" desc="阶段与备注由负责员工更新，展示真实进度记录。" /><el-steps v-if="studentProgressSteps.length" :active="studentProgressSteps.length - 1" align-center><el-step v-for="item in studentProgressSteps" :key="item.stage" :title="item.stage" /></el-steps><div v-if="studentProgressCurrent" class="progress-note"><b>当前阶段：{{ studentProgressCurrent.stage }}</b><p>{{ studentProgressCurrent.notes || '暂无备注' }}</p></div><el-empty v-else description="暂无申请进度记录" /></section>
+      <section class="surface panel"><SectionTitle title="留学申请进度追踪" desc="材料审核 → 申请提交 → 收到 Offer → 签证办理 → 行前准备 → 已入学" /><el-steps :active="progressActive" align-center><el-step title="材料审核" /><el-step title="申请提交" /><el-step title="收到 Offer" /><el-step title="签证办理" /><el-step title="行前准备" /><el-step title="已入学" /></el-steps><div class="progress-note"><b>当前阶段：{{ progressLatest ? (progressLatest.stage + ' · ' + progressLatest.status) : '暂无进度记录' }}</b><p>{{ progressLatest ? (progressLatest.notes || '负责员工会持续更新备注和时间。') : '提交申请后由负责员工更新进度。' }}</p></div><el-timeline v-if="progressRows.length" style="margin-top:16px"><el-timeline-item v-for="item in progressRows" :key="item.id" :timestamp="String(item.update_time || '').slice(0, 16) || '—'">{{ item.stage }} · {{ item.status }}<small v-if="item.notes">（{{ item.notes }}）</small></el-timeline-item></el-timeline></section>
     </template>
 
     <template v-else-if="role === 'STUDENT' && section === 'life'">
@@ -1378,7 +1453,7 @@ function revealPhone(member: any) {
       <section class="welcome surface"><div><span class="badge">EMPLOYEE · {{ userStore.userInfo?.department || '—' }}</span><h2>{{ userStore.userInfo?.real_name || '员工' }}，上午好</h2><p>今日有 {{ reminders.todos_pending ?? 0 }} 项待办，{{ reminders.follow_ups_due ?? 0 }} 项待跟进，当前视图仅显示归属本人的数据。</p></div><el-button type="primary" round @click="customerDialog = true"><el-icon><Plus /></el-icon>录入新客户</el-button></section>
       <div class="stat-grid"><StatCard label="今日待办" :value="String(reminders.todos_pending ?? 0)" note="未完成待办" tone="coral" /><StatCard label="名下客户" :value="String(profileStats.total ?? customerRows.length)" :note="'本月新增 ' + (profileStats.month_new ?? 0)" tone="purple" /><StatCard label="跟进中 / 已转化" :value="(profileStats.following ?? 0) + ' / ' + (profileStats.signed ?? 0)" :note="'已流失 ' + (profileStats.lost ?? 0)" tone="lime" /><StatCard label="待我审批" :value="String(reminders.admin_services_pending ?? 0)" note="待审批行政服务" tone="amber" /></div>
       <div class="quick-grid"><button v-for="item in employeeMenu" :key="item.label" @click="item.action"><el-icon><component :is="item.icon" /></el-icon><span>{{ item.label }}</span><el-icon><ArrowRight /></el-icon></button></div>
-      <div class="two-column"><section class="surface panel"><SectionTitle title="今日待办" /><div v-for="item in todoRows.slice(0, 5)" :key="item.id" class="task-row"><b>!</b><div><strong>{{ item.title }}</strong><small>{{ todoStatusLabel[item.status] || item.status }} · 优先级{{ todoPriorityLabel[item.priority] || item.priority }}</small></div><el-button text type="primary" :disabled="item.status === 'done'" @click="handleTodo(item)">{{ item.status === 'done' ? '已完成' : '处理' }}</el-button></div><el-empty v-if="!todoRows.length" description="暂无待办" /></section><section class="surface panel"><SectionTitle title="客户跟进提醒" /><div v-if="reminders.follow_ups_due" class="task-row"><b>!</b><div><strong>今日应跟进 {{ reminders.follow_ups_due }} 位客户</strong><small>待跟进明细接口尚未开放，可到「客户经营」按最后跟进时间筛选</small></div></div><el-empty v-else description="今日暂无待跟进客户" /></section></div>
+      <div class="two-column"><section class="surface panel"><SectionTitle title="今日待办" /><div v-for="item in todoRows.slice(0, 5)" :key="item.id" class="task-row"><b>!</b><div><strong>{{ item.title }}</strong><small>{{ todoStatusLabel[item.status] || item.status }} · 优先级{{ todoPriorityLabel[item.priority] || item.priority }}</small></div><el-button text type="primary" :disabled="item.status === 'done'" @click="handleTodo(item)">{{ item.status === 'done' ? '已完成' : '处理' }}</el-button></div><el-empty v-if="!todoRows.length" description="暂无待办" /></section><section class="surface panel"><SectionTitle title="客户跟进提醒" /><div class="bars"><div v-for="(cnt, idx) in followUpBars" :key="idx" class="bar" :style="{ height: (cnt * 100 / barMax) + '%' }"></div></div></section></div>
     </template>
 
     <template v-else-if="role === 'EMPLOYEE' && section === 'customers'">
@@ -1387,7 +1462,7 @@ function revealPhone(member: any) {
       <section class="surface table-card"><el-table :data="filteredCustomers" @row-click="(row:any) => activeCustomer = row"><el-table-column prop="name" label="客户" width="130" /><el-table-column prop="phone" label="手机号" width="130" /><el-table-column prop="project" label="意向项目" /><el-table-column prop="score" label="研判结论" width="110"><template #default="{ row }"><el-tag :type="row.score === '符合' ? 'success' : row.score === '待确认' ? 'warning' : 'info'">{{ row.score }}</el-tag></template></el-table-column><el-table-column prop="status" label="状态" width="110" /><el-table-column prop="owner" label="跟进人" width="100" /><el-table-column prop="last" label="最后跟进" width="100" /><el-table-column label="操作" width="180"><template #default="{ row }"><el-button text type="primary" @click.stop="activeCustomer = row">详情</el-button><el-button text type="danger" :icon="Delete" @click.stop="removeCustomer(row)" /></template></el-table-column></el-table></section>
       <section class="surface panel" style="margin-top:20px"><SectionTitle title="待补全线索" desc="访客项目咨询记录（pending_lead），补充手机号后可合并为正式客户" /><el-table :data="pendingLeadRows"><el-table-column prop="name" label="姓名" width="120" /><el-table-column prop="wechat" label="微信" width="130" /><el-table-column prop="raw_info" label="原始信息" /><el-table-column prop="status" label="状态" width="100" /><el-table-column label="操作" width="120"><template #default="{ row }"><el-button v-if="row.status !== 'merged' && !row.merged_customer_id" text type="primary" @click="mergePendingLeadRow(row)">合并</el-button><el-tag v-else size="small" type="success">已合并</el-tag></template></el-table-column></el-table><el-empty v-if="!pendingLeadRows.length" description="暂无待补全线索" /></section>
       <section class="surface panel" style="margin-top:20px"><SectionTitle title="线索管理" desc="CRM 线索跟进与状态流转（GET /crm/leads）" /><el-table :data="leadRows"><el-table-column prop="name" label="姓名" width="110"><template #default="{ row }">{{ row.name || '—' }}</template></el-table-column><el-table-column prop="phone" label="手机号" width="130"><template #default="{ row }">{{ row.phone || row.wechat || '—' }}</template></el-table-column><el-table-column prop="status" label="状态" width="110" /><el-table-column prop="source_channel" label="来源" width="110"><template #default="{ row }">{{ row.source_channel || '—' }}</template></el-table-column><el-table-column label="操作" width="200"><template #default="{ row }"><el-button text type="primary" @click="addLeadFollowUp(row)">添加跟进</el-button><el-button text @click="changeLeadStatus(row)">变更状态</el-button></template></el-table-column></el-table><el-empty v-if="!leadRows.length" description="暂无线索" /></section>
-      <el-drawer v-model="activeCustomer" title="客户详情" size="min(620px, 94vw)"><template v-if="activeCustomer"><div class="customer-head"><div><h2>{{ activeCustomer.name }}</h2><p>{{ activeCustomer.project }} · {{ activeCustomer.phone }}</p></div><el-tag type="success">{{ activeCustomer.score }}</el-tag></div><h3>研判结果</h3><div class="assessment"><div><small>新加坡项目</small><b>{{ activeCustomer.score }}</b><p>学历、年龄和目标方向已形成初步匹配，缺失信息已列入跟进建议。</p></div><div><small>中德项目</small><b>待确认</b><p>德语能力、封闭实训接受度和无犯罪记录需要电话核实。</p></div></div><h3>推荐项目</h3><el-tag v-for="item in ['新加坡国际本硕升学计划','中德精英人才共建计划']" :key="item" class="recommend">{{ item }}</el-tag><h3>跟进记录</h3><el-timeline><el-timeline-item>官网注册留资 · 2026-10-13</el-timeline-item><el-timeline-item>Agent 自动采集 · 2026-10-13</el-timeline-item><el-timeline-item>员工首次跟进 · 2026-10-14</el-timeline-item></el-timeline><div class="drawer-actions"><el-button type="primary" @click="confirmWrite('确认添加一条跟进记录吗？', () => notifySuccess('跟进记录已添加'))">添加跟进</el-button><el-button @click="confirmWrite('确认更新客户状态吗？', () => notifySuccess('状态已更新'))">更新状态</el-button></div></template></el-drawer>
+      <el-drawer v-model="activeCustomer" title="客户详情" size="min(620px, 94vw)"><template v-if="activeCustomer"><div class="customer-head"><div><h2>{{ activeCustomer.name }}</h2><p>{{ activeCustomer.project }} · {{ activeCustomer.phone }}</p></div><el-tag type="success">{{ activeCustomer.score }}</el-tag></div><h3>研判结果</h3><div class="assessment"><div><small>新加坡项目</small><b>{{ activeCustomer.score }}</b><p>学历、年龄和目标方向已形成初步匹配，缺失信息已列入跟进建议。</p></div><div><small>中德项目</small><b>待确认</b><p>德语能力、封闭实训接受度和无犯罪记录需要电话核实。</p></div></div><h3>推荐项目</h3><el-tag v-for="item in ['新加坡国际本硕升学计划','中德精英人才共建计划']" :key="item" class="recommend">{{ item }}</el-tag><h3>跟进记录</h3><el-timeline><el-timeline-item>官网注册留资 · 2026-10-13</el-timeline-item><el-timeline-item>Agent 自动采集 · 2026-10-13</el-timeline-item><el-timeline-item>员工首次跟进 · 2026-10-14</el-timeline-item></el-timeline><div class="drawer-actions"><el-button type="primary" @click="addActiveFollowUp">添加跟进</el-button><el-button @click="updateActiveStatus">更新状态</el-button></div></template></el-drawer>
     </template>
 
     <template v-else-if="role === 'EMPLOYEE' && section === 'scores'">
@@ -1732,7 +1807,7 @@ function revealPhone(member: any) {
           <div class="assessment"><div><small>新加坡项目</small><b>{{ activeCustomer.score }}</b><p>画像匹配结果、缺失信息和跟进建议。</p></div><div><small>中德项目</small><b>待确认</b><p>需要核实德语能力、实训接受度和无犯罪记录。</p></div></div>
           <h3>跟进与归属</h3>
           <p class="muted">当前跟进人：{{ activeCustomer.owner }} · 支持管理层变更归属</p>
-          <div class="drawer-actions"><el-button type="primary" @click="addFollowUp">添加跟进</el-button><el-button @click="openReassign(activeCustomer)">变更归属</el-button></div>
+          <div class="drawer-actions"><el-button type="primary" @click="addActiveFollowUp">添加跟进</el-button><el-button @click="openReassign(activeCustomer)">变更归属</el-button></div>
         </template>
       </el-drawer>
       <el-dialog v-model="reassignDialog" title="变更客户归属" width="min(420px, 92vw)">

@@ -81,8 +81,15 @@ async function send(text = input.value) {
     }
     if (!reply) reply = '当前助手服务未返回内容，请稍后重试。'
     messages.value.push({ role: 'agent', text: reply, recs, faq, register })
-  } catch {
-    messages.value.push({ role: 'agent', text: '当前助手服务暂不可用，请稍后重试。' })
+  } catch (error: any) {
+    // v6.11.30：区分"超时"与"不可用"——超时是响应慢（可重试续上），不应谎报服务不可用
+    const isTimeout = error?.code === 'ECONNABORTED' || /timeout/i.test(String(error?.message || ''))
+    messages.value.push({
+      role: 'agent',
+      text: isTimeout
+        ? '助手响应较慢，本轮回答未及时返回，请稍候片刻后重新发送（会话记录会保留）。'
+        : '当前助手服务暂不可用，请稍后重试。',
+    })
   }
 }
 

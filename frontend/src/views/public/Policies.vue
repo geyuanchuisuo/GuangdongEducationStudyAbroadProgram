@@ -1,11 +1,16 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import SectionTitle from '../../components/SectionTitle.vue'
-import { policies } from '../../data/mock'
+import { platformApi } from '../../api/platform'
 
+// v6.11.23：政策资讯接库（GET /cs/policies），失败才降级演示数据
 const country = ref('全部')
 const countries = ['全部', '德国', '新加坡', '综合']
-const filtered = computed(() => policies.filter((item) => country.value === '全部' || item.country === country.value))
+const list = ref<any[]>([])
+onMounted(async () => {
+  list.value = await platformApi.policies()
+})
+const filtered = computed(() => list.value.filter((item) => country.value === '全部' || item.country === country.value))
 </script>
 
 <template>
