@@ -32,8 +32,10 @@ from app.schemas.student import (
 )
 from app.utils.logger import logger
 
-# ── 进度追踪阶段枚举（一期固定 7 段） ──
-PROGRESS_STAGES = ["选校", "文书", "申请", "面试", "offer", "签证", "入学"]
+# ── 进度追踪阶段枚举（一期固定 6 段） ──
+# v6.11.51：原为 7 段（选校/文书/申请/面试/offer/签证/入学），与《项目需求文档》3.3.5
+# 及前端步骤条口径不一致，学生端「进度追踪」步骤条常年对不上数据；现统一为需求文档的 6 段。
+PROGRESS_STAGES = ["材料审核", "申请提交", "收到Offer", "签证办理", "行前准备", "已入学"]
 
 # ── 生活支持 FAQ（本地静态，Dify 知识库就绪后接 RAG） ──
 LIFE_FAQS = [

@@ -351,10 +351,19 @@ TICKET_DETAILS = [
     "客户反映课后作业批改与反馈缺失，希望补齐。",
     "客户希望看到完整的费用构成明细，避免隐性收费。",
 ]
-ACADEMIC_TITLES = [
-    "德语 B1 阶段测试", "雅思模拟考试（第 3 次）", "护理基础课程作业提交",
-    "选课：德语口语强化", "期末成绩公布", "线上课程出勤确认",
-    "实践报告提交", "专业词汇测评", "小组作业汇报", "学籍信息核对",
+# v6.11.51：原先 item_type 与 title 各自随机组合（会出现「作业 / 选课：德语口语强化」这类语义错配），
+# 且 description 从不写入，学生端「学业考务」点开什么都看不到。改为「类型 + 名称 + 说明」绑定的三元组。
+ACADEMIC_ITEMS = [
+    ("考试", "德语 B1 阶段测试", "覆盖听说读写四项，成绩计入阶段评估；请提前 15 分钟到考场。"),
+    ("考试", "雅思模拟考试（第 3 次）", "含听力 40 分钟、阅读 60 分钟、写作 60 分钟，口语另行预约。"),
+    ("作业", "护理基础课程作业提交", "提交第 3 章课后练习，PDF 格式，文件命名「学号_姓名」。"),
+    ("选课", "德语口语强化（小班）", "面向 B1 在读学生的小班口语课，每周二、四 19:00 上课，缺勤需提前请假。"),
+    ("成绩", "上学期期末成绩公布", "各科成绩已上传教务系统，请在「成绩查询」查看；如有异议请在 3 日内提出。"),
+    ("作业", "线上课程出勤确认", "请核对第 5-8 周直播课出勤记录，如有缺漏请在本周内联系教务老师。"),
+    ("作业", "实践报告提交", "提交不少于 1500 字的实践报告，需附实习单位签章页。"),
+    ("考试", "专业词汇测评", "范围为护理核心词汇 300 个，测评时长 30 分钟，可在线上完成。"),
+    ("作业", "小组作业汇报", "以小组为单位提交 PPT 并做 10 分钟汇报，由组长汇总分工。"),
+    ("选课", "学籍信息核对", "请在教务系统核对姓名、证件号与联系方式，确认无误后提交。"),
 ]
 APPROVAL_TITLES = [
     "学生请假申请（事假）", "学生请假申请（病假）", "客户转化申请",
@@ -872,19 +881,24 @@ async def seed():
             ))
 
         for i in range(100):
+            item_type, title, description = ACADEMIC_ITEMS[i % len(ACADEMIC_ITEMS)]
             session.add(StudentAcademic(
                 student_id=random.choice(student_ids),
-                item_type=random.choice(["考试", "作业", "选课", "成绩"]),
-                title=ACADEMIC_TITLES[i % len(ACADEMIC_TITLES)],
+                item_type=item_type,
+                title=title,
+                description=description,
                 course_name=random.choice(COURSE_NAMES),
                 due_time=datetime.now() + timedelta(days=random.randint(-30, 30)),
             ))
 
+        # v6.11.51：阶段与状态原先用（材料准备/申请递交/面试/签证/行前准备 + 英文 in_progress/completed/waiting），
+        # 既对不上《项目需求文档》3.3.5 的 6 段，也让学生端时间线直接显示英文状态。
+        # 现统一为 student_service.PROGRESS_STAGES 的 6 段 + 中文状态。
         for i in range(100):
             session.add(StudentApplicationProgress(
                 student_id=random.choice(student_ids),
-                stage=random.choice(["材料准备", "申请递交", "面试", "签证", "行前准备"]),
-                status=random.choice(["in_progress", "completed", "waiting"]),
+                stage=random.choice(["材料审核", "申请提交", "收到Offer", "签证办理", "行前准备", "已入学"]),
+                status=random.choice(["进行中", "已完成", "等待中"]),
             ))
 
         # ── M5: 智能报告 ──────────────────────────────────────

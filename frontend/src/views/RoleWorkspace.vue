@@ -29,6 +29,14 @@ const keyword = ref('')
 const customerDialog = ref(false)
 const leaveDialog = ref(false)
 const psychScore = ref<number | string>('—')
+// v6.11.51：情绪对话改为可见的交互式对话。此前 startPsychChat 只更新评分并弹「已开始」toast，
+// 把后端返回的 reply（AI 回复正文）整个丢弃，用户点完看不到任何回应，误以为按钮没接上接口。
+const psychDialog = ref(false)
+const psychSessionId = ref('new')
+const psychMessages = ref<Array<{ role: 'user' | 'ai'; text: string }>>([])
+const psychSending = ref(false)
+const psychDegraded = ref(false)
+const psychInput = ref('')
 const customerForm = reactive({ name: '', phone: '', gender: '', age: '', education: '', project: '新加坡本硕', note: '' })
 const leaveForm = reactive({ type: '事假', start: '', end: '', reason: '', missed: '' })
 const ticketForm = reactive({ type: '服务咨询', title: '', detail: '', formal: false })
@@ -42,6 +50,9 @@ const publicProjects = ref<any[]>([])
 const publicEvents = ref<any[]>([])
 // v6.11.49：当前意向客户已报名的活动 id（GET /events/my-registrations），用于把按钮显示为「已报名」
 const myEventIds = ref<number[]>([])
+// v6.11.51：意向客户「活动报名」页补「我的报名」清单——此前报名后仅按钮变「已报名」，
+// 无法确认一共报了哪些活动；这里按已报名 id 从公开活动列表回填标题与排期。
+const myRegisteredEvents = computed(() => publicEvents.value.filter((item: any) => myEventIds.value.includes(item.id)))
 const selectedCustomerIds = ref<number[]>([])
 const reassignFromId = ref<number | undefined>()
 const reassignToId = ref<number | undefined>()
@@ -57,6 +68,24 @@ const studentProfile = ref<any>({})
 const studentTickets = ref<any[]>([])
 const lifeFaqRows = ref<any[]>([])
 const moreServiceRows = ref<any[]>([])
+// v6.11.51：生活支持「查看指南」/ 更多服务「了解详情」此前是无 @click 的空按钮，点了没反应
+const lifeGuideDialog = ref(false)
+const lifeGuideItem = ref<any>(null)
+const moreServiceDialog = ref(false)
+const moreServiceItem = ref<any>(null)
+function openLifeGuide(item: any) {
+  lifeGuideItem.value = item || null
+  lifeGuideDialog.value = true
+}
+function openMoreService(item: any) {
+  moreServiceItem.value = item || null
+  moreServiceDialog.value = true
+}
+function goSection(key: string) {
+  lifeGuideDialog.value = false
+  moreServiceDialog.value = false
+  router.push('/app/' + role.value.toLowerCase() + '/' + key)
+}
 const studentReminders = ref<any>({})
 const studentAcademic = ref<any>({})
 const studentProgressRows = ref<any[]>([])
@@ -1340,14 +1369,38 @@ async function submitTicket() {
   })
 }
 
-async function startPsychChat() {
+// v6.11.51：把后端返回的 reply / emotion_tag / emotion_score / degraded 完整呈现出来
+async function sendPsychMessage(text: string) {
+  const message = String(text || '').trim()
+  if (!message || psychSending.value) return
+  psychMessages.value = [...psychMessages.value, { role: 'user', text: message }]
+  psychInput.value = ''
+  psychSending.value = true
   try {
-    const result: any = await platformApi.student.psychChat({ message: '我想聊聊最近的心情', session_id: 'new' })
-    if (typeof result?.emotion_score === 'number') psychScore.value = result.emotion_score
-    notifySuccess('情绪对话已开始')
-  } catch {
-    notifyInfo('心理关怀接口尚未就绪')
+    const result: any = await platformApi.student.psychChat({ message, session_id: psychSessionId.value })
+    if (result?.session_id) psychSessionId.value = result.session_id
+    psychMessages.value = [...psychMessages.value, { role: 'ai', text: result?.reply || '（本次未返回回复内容）' }]
+    if (typeof result?.emotion_score === 'number') {
+      psychScore.value = result.emotion_score
+      // 同步刷新页面上的评分环与情绪标签，无需重新进页面
+      studentProfile.value = { ...studentProfile.value, emotion_score: result.emotion_score, latest_emotion_tag: result.emotion_tag }
+    }
+    psychDegraded.value = Boolean(result?.degraded)
+    if (result?.alert_created) notifyInfo('已记录本次情况，负责老师会尽快与你联系')
+  } catch (error: unknown) {
+    psychMessages.value = [...psychMessages.value, { role: 'ai', text: errorMessage(error, '心理关怀接口暂时不可用，请稍后再试') }]
+  } finally {
+    psychSending.value = false
   }
+}
+
+function startPsychChat() {
+  psychMessages.value = []
+  psychSessionId.value = 'new'
+  psychDegraded.value = false
+  psychInput.value = ''
+  psychDialog.value = true
+  sendPsychMessage('我想聊聊最近的心情')
 }
 
 async function exportCsv(name: string) {
@@ -1398,6 +1451,13 @@ async function updateActiveStatus() {
 // 学生 DDL/进度真实化（/student/academic + /student/progress）
 const academicItems = ref<any[]>([])
 const progressRows = ref<any[]>([])
+// v6.11.51：学业事项详情弹窗——此前列表项不可点、description 从不展示，学生看不到事项具体内容
+const academicDialog = ref(false)
+const academicDetail = ref<any>(null)
+function openAcademic(item: any) {
+  academicDetail.value = item || null
+  academicDialog.value = true
+}
 async function loadStudentAcademic() {
   try {
     const res: any = await platformApi.student.academic()
@@ -1422,15 +1482,12 @@ const ddlDue7d = computed(() => {
     return t >= now && t - now <= 7 * 864e5
   }).length
 })
-// 进度步骤按 stage 关键字映射（材料→0 申请→1 Offer→2 签证→3 行前→4 入学→5）
+// v6.11.51：阶段口径已统一为《项目需求文档》3.3.5 的 6 段（与下方步骤条、后端 PROGRESS_STAGES 逐字一致），
+// 直接按位置映射即可；原先的关键字兜底会把「面试」等旧取值错判成「材料审核」。
+const PROGRESS_STAGE_ORDER = ['材料审核', '申请提交', '收到Offer', '签证办理', '行前准备', '已入学']
 const progressActive = computed(() => {
-  const s = String(progressLatest.value?.stage || '')
-  if (/入学/.test(s)) return 5
-  if (/行前/.test(s)) return 4
-  if (/签证/.test(s)) return 3
-  if (/offer|录取/i.test(s)) return 2
-  if (/申请|提交/.test(s)) return 1
-  return 0
+  const index = PROGRESS_STAGE_ORDER.indexOf(String(progressLatest.value?.stage || ''))
+  return index >= 0 ? index : 0
 })
 const progressLatest = computed(() => progressRows.value.length ? progressRows.value[progressRows.value.length - 1] : null)
 // 员工首页：近 7 日跟进柱状图（真实聚合，替换装饰数据）
@@ -1601,6 +1658,8 @@ function revealPhone(member: any) {
     <template v-else-if="role === 'STUDENT' && section === 'psych'">
       <section class="psych-hero surface"><div><span class="badge">AI 对话式评估 · 一期</span><h2>今日心理状态</h2><p>服务性综合状态评分，不构成医疗诊断。</p></div><div class="score-ring"><strong>{{ psychScore }}</strong><span>/ 100</span><small>{{ studentProfile.latest_emotion_tag || '暂无评估' }}</small></div></section>
       <div class="two-column"><section class="surface panel"><SectionTitle title="情绪趋势" desc="近 7 日评估记录的综合状态变化" /><div v-if="emotionTrendPoints" class="line-chart"><div class="chart-y"><span>100</span><span>75</span><span>50</span><span>25</span></div><div class="chart-area"><svg viewBox="0 0 600 220" preserveAspectRatio="none"><polyline :points="emotionTrendPoints" fill="none" stroke="#5a50b8" stroke-width="8" stroke-linecap="round" /></svg></div></div><el-empty v-else description="暂无情绪趋势数据" /></section><section class="surface panel"><SectionTitle title="服务边界" /><ul class="boundary"><li>不提供医疗级心理建议或诊断</li><li>不承诺退费、转学等重大决定</li><li>遇到严重问题，引导联系专业心理咨询师</li><li>识别到高风险会即时通知负责员工</li></ul><el-button type="primary" round @click="startPsychChat">开始一次情绪对话</el-button><p v-if="studentProfile.latest_emotion_tag" class="muted">最近标签：{{ studentProfile.latest_emotion_tag }}</p></section></div>
+      <!-- v6.11.51：情绪对话弹窗——呈现后端 reply（此前被丢弃），支持连续对话 -->
+      <el-dialog v-model="psychDialog" title="情绪对话" width="560px" :close-on-click-modal="false"><p class="muted" style="margin:-6px 0 12px">AI 陪伴式对话，不构成医疗诊断；识别到高风险会即时通知负责员工。</p><div class="psych-chat"><div v-for="(msg, index) in psychMessages" :key="index" class="psych-bubble" :class="msg.role"><small>{{ msg.role === 'user' ? '我' : 'AI 陪伴' }}</small><p>{{ msg.text }}</p></div><p v-if="psychSending" class="muted">正在回应…</p></div><p v-if="psychDegraded" class="muted">当前为本地兜底话术（AI 网关暂不可用），情绪状态仍已记录。</p><div class="search-row" style="margin:12px 0 0"><el-input v-model="psychInput" placeholder="说说此刻的心情…" @keyup.enter="sendPsychMessage(psychInput)" /><el-button type="primary" :loading="psychSending" @click="sendPsychMessage(psychInput)">发送</el-button></div></el-dialog>
     </template>
 
     <template v-else-if="role === 'STUDENT' && section === 'feedback'">
@@ -1609,7 +1668,9 @@ function revealPhone(member: any) {
 
     <template v-else-if="role === 'STUDENT' && section === 'academic'">
       <div class="stat-grid"><StatCard label="7日内到期" :value="String(ddlDue7d)" tone="coral" /><StatCard label="学业事项" :value="String(academicItems.length)" tone="amber" /><StatCard label="有截止时间" :value="String(ddlRows.length)" tone="lime" /><StatCard label="已设提醒" :value="String(academicItems.filter((i: any) => i.reminder_sent).length)" tone="purple" /></div>
-      <section class="surface panel"><SectionTitle title="DDL 与考试安排" desc="来自我的学业事项（真实记录）" /><div v-for="item in ddlRows" :key="item.id" class="academic-row"><el-tag :type="item.item_type === '考试' ? 'danger' : 'warning'">{{ item.item_type || '事项' }}</el-tag><div><b>{{ item.title }}</b><small>截止时间 {{ String(item.due_time).replace('T', ' ') }}</small></div></div><el-empty v-if="!ddlRows.length" description="暂无带截止时间的学业事项" /></section>
+      <section class="surface panel"><SectionTitle title="DDL 与考试安排" desc="点击事项可查看具体内容（来自我的学业事项真实记录）" /><div v-for="item in ddlRows" :key="item.id" class="academic-row" style="cursor: pointer" @click="openAcademic(item)"><el-tag :type="item.item_type === '考试' ? 'danger' : 'warning'">{{ item.item_type || '事项' }}</el-tag><div><b>{{ item.title }}</b><small>截止时间 {{ String(item.due_time).replace('T', ' ') }}</small></div><el-button text type="primary">查看详情</el-button></div><el-empty v-if="!ddlRows.length" description="暂无带截止时间的学业事项" /></section>
+      <!-- v6.11.51：学业事项详情弹窗（此前列表项不可点、description 从不展示） -->
+      <el-dialog v-model="academicDialog" title="学业事项详情" width="520px"><div class="academic-detail"><p><span>事项类型</span><b>{{ academicDetail?.item_type || '—' }}</b></p><p><span>事项名称</span><b>{{ academicDetail?.title || '—' }}</b></p><p><span>所属课程</span><b>{{ academicDetail?.course_name || '—' }}</b></p><p><span>截止时间</span><b>{{ String(academicDetail?.due_time || '').replace('T', ' ') || '—' }}</b></p><p><span>提醒状态</span><b>{{ academicDetail?.reminder_sent ? '已发送提醒' : '未发送提醒' }}</b></p><p><span>详情说明</span><b>{{ academicDetail?.description || '暂无详细说明' }}</b></p></div></el-dialog>
     </template>
 
     <template v-else-if="role === 'STUDENT' && section === 'progress'">
@@ -1617,12 +1678,16 @@ function revealPhone(member: any) {
     </template>
 
     <template v-else-if="role === 'STUDENT' && section === 'life'">
-      <div class="life-grid"><article v-for="item in lifeFaqRows" :key="item.question" class="surface life-card"><h3>{{ item.question }}</h3><p>{{ item.answer }}</p><el-button text type="primary">查看指南</el-button></article><el-empty v-if="!lifeFaqRows.length" description="暂无生活指南" /></div>
+      <div class="life-grid"><article v-for="item in lifeFaqRows" :key="item.question" class="surface life-card"><h3>{{ item.question }}</h3><p>{{ item.answer }}</p><el-button text type="primary" @click="openLifeGuide(item)">查看指南</el-button></article><el-empty v-if="!lifeFaqRows.length" description="暂无生活指南" /></div>
+      <!-- v6.11.51：原「查看指南」是无 @click 的空按钮，点了没有任何反应 -->
+      <el-dialog v-model="lifeGuideDialog" title="生活指南" width="560px"><h3 style="margin:0 0 10px;color:var(--ink-deep)">{{ lifeGuideItem?.question || '生活指南' }}</h3><p style="margin:0;color:var(--ink-deep);line-height:1.9;white-space:pre-wrap">{{ lifeGuideItem?.answer || '暂无详细说明' }}</p><div class="guide-extra"><b>还需要更多帮助？</b><ul><li>紧急情况请先拨打当地急救/报警电话（欧盟统一 112），再联系你的负责老师。</li><li>非紧急问题可在「售后反馈」提交工单，我们会尽快跟进答复。</li></ul></div><template #footer><el-button @click="lifeGuideDialog = false">关闭</el-button><el-button type="primary" @click="goSection('feedback')">提交售后反馈</el-button></template></el-dialog>
     </template>
 
     <template v-else-if="role === 'STUDENT' && section === 'more'">
       <SectionTitle title="更多服务" desc="以下服务均为可选项目，不影响你已有的常规服务权益。" />
-      <div class="service-grid"><article v-for="item in moreServiceRows" :key="item.code" class="surface service-card"><div class="service-icon">+</div><h3>{{ item.name }}</h3><p>{{ item.description }}</p><el-button round>了解详情</el-button></article><el-empty v-if="!moreServiceRows.length" description="暂无更多服务" /></div>
+      <div class="service-grid"><article v-for="item in moreServiceRows" :key="item.code" class="surface service-card"><div class="service-icon">+</div><h3>{{ item.name }}</h3><p>{{ item.description }}</p><el-button round @click="openMoreService(item)">了解详情</el-button></article><el-empty v-if="!moreServiceRows.length" description="暂无更多服务" /></div>
+      <!-- v6.11.51：原「了解详情」是无 @click 的空按钮，点了没有任何反应 -->
+      <el-dialog v-model="moreServiceDialog" title="服务详情" width="540px"><h3 style="margin:0 0 10px;color:var(--ink-deep)">{{ moreServiceItem?.name || '更多服务' }}</h3><p style="margin:0;color:var(--ink-deep);line-height:1.9;white-space:pre-wrap">{{ moreServiceItem?.description || '暂无服务说明' }}</p><div class="guide-extra"><b>如何获得该服务？</b><ul><li>该服务为可选增值项目，开通与否不影响你已有的常规服务权益。</li><li>如需了解开通方式、时间安排与费用，请联系你的负责老师。</li><li>也可以先在「售后反馈」提交咨询工单，我们会安排专人对接。</li></ul></div><template #footer><el-button @click="moreServiceDialog = false">关闭</el-button><el-button type="primary" @click="goSection('feedback')">提交咨询工单</el-button></template></el-dialog>
     </template>
 
     <template v-else-if="role === 'STUDENT' && section === 'profile'">
@@ -2048,6 +2113,10 @@ function revealPhone(member: any) {
     <template v-else-if="role === 'PROSPECT' && section === 'events'">
       <!-- v6.11.48：去掉与顶部页面标题重复的内层标题，说明文案已上提到 pageDesc -->
       <div class="event-list"><div v-for="item in publicEvents.slice(0,3)" :key="item.id" class="surface ticket-row"><div><b>{{ item.title }}</b><small>{{ item.date }} · {{ item.format }}</small></div><el-tag v-if="myEventIds.includes(item.id)" type="success" round>已报名</el-tag><el-button v-else type="primary" round @click="applyEvent(item)">报名</el-button></div></div>
+      <!-- v6.11.51：我的报名清单（报名后按钮变「已报名」，但用户需要一个地方确认到底报了哪些活动） -->
+      <SectionTitle title="我的报名" desc="下面列出你已成功报名的活动。" />
+      <div class="event-list"><div v-for="item in myRegisteredEvents" :key="item.id" class="surface ticket-row"><div><b>{{ item.title }}</b><small>{{ item.date }} · {{ item.format }}</small></div><el-tag type="success" round>已报名</el-tag></div></div>
+      <el-empty v-if="!myRegisteredEvents.length" description="还没有报名任何活动" :image-size="80" />
     </template>
 
     <template v-else-if="role === 'PROSPECT' && section === 'consult'">
@@ -2173,6 +2242,9 @@ function revealPhone(member: any) {
 .table-card { padding: 8px 18px 18px; overflow: auto; }.drawer-actions { display: flex; gap: 10px; margin-top: 22px; }.customer-head { display: flex; justify-content: space-between; align-items: center; }.customer-head h2 { margin: 0; color: var(--ink-deep); }.customer-head p { color: var(--muted); }.assessment { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }.assessment > div { padding: 16px; background: var(--canvas); border-radius: 13px; }.assessment small { color: var(--muted); }.assessment b { display: block; margin: 8px 0; color: var(--violet); font-size: 22px; }.assessment p { margin: 0; color: var(--muted); line-height: 1.7; font-size: 12px; }.recommend { margin: 0 8px 8px 0; }
 .psych-hero { display: flex; justify-content: space-between; align-items: center; padding: 34px; color: #fff; background: var(--ink); }.psych-hero h2 { margin: 18px 0 8px; font-size: 36px; }.psych-hero p { color: #d6d5ee; }.score-ring { display: grid; place-items: center; align-content: center; width: 180px; height: 180px; border: 15px solid #80b717; border-right-color: #5b5798; border-radius: 50%; }.score-ring strong { font-size: 55px; line-height: 1; }.score-ring span, .score-ring small { color: #d3d2ec; }
 .line-chart { height: 220px; display: flex; gap: 12px; }.chart-y { display: flex; flex-direction: column; justify-content: space-between; color: var(--muted); font-size: 11px; }.chart-area { flex: 1; background: repeating-linear-gradient(to bottom, transparent 0, transparent 48px, var(--line) 49px); }.chart-area svg { width: 100%; height: 100%; }.boundary { padding-left: 20px; color: var(--muted); line-height: 2; }.boundary li::marker { color: var(--lime); }
+.guide-extra { margin-top: 18px; padding: 14px 16px; background: var(--canvas); border-radius: 12px; }.guide-extra b { color: var(--ink-deep); }.guide-extra ul { margin: 8px 0 0; padding-left: 20px; color: var(--muted); line-height: 1.9; }
+.academic-detail p { display: flex; gap: 12px; margin: 0 0 12px; }.academic-detail p:last-child { margin-bottom: 0; }.academic-detail span { flex: none; width: 78px; color: var(--muted); }.academic-detail b { color: var(--ink-deep); font-weight: 600; line-height: 1.7; }
+.psych-chat { display: grid; gap: 10px; max-height: 320px; padding-right: 4px; overflow-y: auto; }.psych-bubble { max-width: 86%; padding: 10px 14px; border-radius: 12px; background: var(--canvas); }.psych-bubble small { color: var(--muted); }.psych-bubble p { margin: 4px 0 0; color: var(--ink-deep); line-height: 1.7; white-space: pre-wrap; }.psych-bubble.user { justify-self: end; background: var(--mint); }
 .life-grid, .service-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 17px; }.life-card, .service-card { padding: 25px; }.life-card h3, .service-card h3 { color: var(--ink-deep); }.life-card p, .service-card p { color: var(--muted); line-height: 1.8; }.service-icon { display: grid; place-items: center; width: 45px; height: 45px; border-radius: 13px; color: var(--ink); background: var(--mint); font-weight: 900; }
 .profile-card { padding: 30px; }.event-list { display: grid; gap: 12px; }.ticket-row .el-button { margin-left: auto; }
 .report-tabs { display: flex; gap: 10px; margin-bottom: 18px; overflow-x: auto; }.report-tabs button { min-width: 150px; padding: 15px; border: 1px solid var(--line); border-radius: 13px; background: #fff; cursor: pointer; text-align: left; }.report-tabs button.active { color: #fff; border-color: var(--ink); background: var(--ink); }.report-tabs b, .report-tabs span { display: block; }.report-tabs span { margin-top: 7px; font-size: 12px; }
