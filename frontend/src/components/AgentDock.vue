@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ChatDotRound, Close, Promotion } from '@element-plus/icons-vue'
 import { platformApi } from '../api/platform'
@@ -106,7 +106,8 @@ async function send(text = input.value) {
 // 成功（含部分输出后中断）返回 true；完全无输出返回 false 由调用方回退非流式接口。
 async function streamCustomer(value: string): Promise<boolean> {
   const target = (import.meta.env.VITE_API_BASE_URL || '/api/v1') + '/ai/customer-service/chat/stream'
-  const msg: any = { role: 'agent', text: '' }
+  // 必须用 reactive：普通对象 push 进响应式数组后再直接改属性不会触发视图更新（v6.11.40 修复空白气泡）
+  const msg = reactive<any>({ role: 'agent', text: '' })
   messages.value.push(msg)
   try {
     const resp = await fetch(target, {
@@ -160,7 +161,8 @@ async function streamCustomer(value: string): Promise<boolean> {
 // 成功（含部分输出后中断）返回 true；完全无输出返回 false 由调用方回退非流式接口。
 async function streamAgent(value: string, endpoint: string): Promise<boolean> {
   const target = (import.meta.env.VITE_API_BASE_URL || '/api/v1') + endpoint
-  const msg: any = { role: 'agent', text: '' }
+  // 必须用 reactive：普通对象 push 进响应式数组后再直接改属性不会触发视图更新（v6.11.40 修复空白气泡）
+  const msg = reactive<any>({ role: 'agent', text: '' })
   messages.value.push(msg)
   try {
     const resp = await fetch(target, {

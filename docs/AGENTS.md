@@ -6,6 +6,7 @@
 
 ## 零、快速定位（打开项目先看这里）
 
+> v6.11.41（2026-10-19，longtrying_test）：**流式输出前端空白气泡修复**——AgentDock.vue 流式消息对象改 `reactive()` 包装（Vue 响应式陷阱致 SSE token 已到但视图不渲染、只显示空白气泡），浏览器实测逐字渲染恢复（LOG-101）。
 > v6.11.40（2026-10-19，longtrying_test）：**清库重注 + 种子数据自动注入**——新增 `scripts/seed_all.py` 编排器（默认空库自动注入 / `--force` 清库重建），接入 docker-compose backend 启动命令与 start-project.bat（重新拉起自动注入，已有数据不动）。详见更新记录 v6.11.40 / LOG-100。
 > v6.11.39（2026-10-19，longtrying_test）：**全角色 Agent 流式输出**——学生/员工/管理层 SSE 增量下发（新增 `POST /student/agent/chat/stream` 和 `POST /employee/agent/chat/stream`，路由 112→114）+ 前端 AgentDock.vue 新增 `streamAgent()` 函数支持逐字渲染（感知延迟=首字时间），流式失败自动回退非流式接口（LOG-099）。
 > v6.11.37 补丁（2026-10-19，longtrying_test）：**流式输出修复**——nginx `location /api/` 未关 `proxy_buffering` 导致 SSE 被攒批一次性下发（前端"整段蹦出"），补 `proxy_buffering off` + 后端 `X-Accel-Buffering: no` 双保险，三层实测逐字到达（LOG-097）。
@@ -94,8 +95,8 @@
 5. ✅ ~~ZNBG 分支本地提交未推送~~ **已推送**（v6.9.3 起本分支已同步远端；git 凭据本机已恢复，`git ls-remote` 免交互即通）
 6. ✅ ~~两条 P1（v6.9.3 实测发现，M5，阻断切 production）~~ **v6.9.6 已修复**：a) 缺省周期改用 `default_completed_week(now)`=上一完整自然周 `[上周一00:00, 本周一00:00)`（原为 `week_range(now)` 恒落未来 → 必 40002）b) `normalize_customer_status()` 复用 M1 词表 `STATUS_CN_TO_EN` 做中英归一 + `fetch_customers` 逐行容错（脏行跳过并写入口径说明，不再拖垮 5 类报告）。**仍留 P2（他模块）**：`seed_data.py` ai_report 段秒级 DATETIME 随机碰撞（2 跑 1 败，共用脚本需确认）、前端 `RoleWorkspace.vue` 部分区块仍为静态演示值（管理层看板 183/21.4%/689/3.2%、学生首屏「李同学」与登录账号不符，作者 ge yuan，属 M3 看板区块）
 7. ✅ ~~M5 报告 AI 只用模拟~~ **v6.9.5 已统一到共用网关**：`ReportAIService` 内部走 `model_ai_service`（共用模块名称），失败回落 mock；报告内容新增差异字段 `ai_source`（model/mock/unavailable）并与 `ai_status` 并存，PDF 头部/前端详情按来源标注；契约 §7 已同步。**v6.9.6 补**：三处下钻改为与报告**同源**（`_drilldown_dataset` 按 `data_source_status` 分流），前端「明细下钻」说明同步。**待办**：`DIFY_MODEL_API_KEY` 需在 `backend/.env` 配置后才可验证真实模型链路（当前自动回落 mock，不影响测试）；M3 `employee_service.py` 的 logger 导入为合并期最小修复，待 M3 负责人复审
-**数据库**：35张表（含 M5 ai_report_drill、ticket_ai_analysis 与 v6.11.23 新增 policy 等），110条路由路径（109 API + 1 health；v6.11.23 增 /cs/policies + DELETE follow-ups，v6.11.25 增 /customers/me），MVC分层结构就绪；Docker 数据库、Redis、后端服务按 compose 配置运行；数据库凭据见本机环境配置。
-**测试账号（v6.10.0 起规范）**：核心角色固定 `username=手机号`——`13810000001` PROSPECT / `13810000002` STUDENT / `13810000003` EMPLOYEE / `13810000004` MANAGER，**密码统一 `Test@123456`**；其余 `user000~user115` 同密码（角色按 `i % 8` 确定：0=ADMIN、1=MANAGER、2~4=EMPLOYEE、5~6=STUDENT、7=PROSPECT）。`scripts/seed_data.py` 会 `drop_all+create_all` 重建全库（`random.seed(42)` 可复现），重跑前注意数据留存；Docker E2E 已按此规范更新账号常量
+**数据库**：35张表（含 M5 ai_report_drill、ticket_ai_analysis 与 v6.11.23 新增 policy 等），114条路由路径（113 API + 1 health；v6.11.23 增 /cs/policies + DELETE follow-ups、v6.11.25 增 /customers/me、v6.11.35 增 /employee/psych-alerts、v6.11.37 增 /ai/customer-service/chat/stream、v6.11.39 增 /student/agent/chat/stream + /employee/agent/chat/stream），MVC分层结构就绪；Docker 数据库、Redis、后端服务按 compose 配置运行；数据库凭据见本机环境配置。
+**测试账号（v6.10.0 起规范）**：核心角色固定 `username=手机号`——`13810000001` PROSPECT / `13810000002` STUDENT / `13810000003` EMPLOYEE / `13810000004` MANAGER，**密码统一 `Test@123456`**；其余 `user000~user115` 同密码（角色按 `i % 8` 确定：0=ADMIN、1=MANAGER、2~4=EMPLOYEE、5~6=STUDENT、7=PROSPECT）。种子统一入口 `scripts/seed_all.py`（v6.11.40：空库自动注入已接启动流程，`--force` 清库重建恢复出厂数据；内部编排 seed_data `drop_all+create_all` 全量重建 + FAQ/缺口补充/归属重分配/通知，`random.seed(42)` 可复现），重跑 --force 前注意数据留存；Docker E2E 已按此规范更新账号常量
 **主基线文档**：`promts/lon/提示词整合测试_demo/docs/基础架构方案_五人并行开发.md`（v1.2.0，28项决策）
 
 **接手阅读顺序**：
@@ -103,8 +104,8 @@
 2. `docs/项目需求文档.md` — 完整业务需求
 3. `promts/lon/提示词整合测试_demo/docs/基础架构方案_五人并行开发.md` — **主基线，权重最高**
 4. `docs/开发路线图.md` — 当前进度、下一步任务
-5. `docs/接口契约v1.md` — API接口契约（v2.11.26，110 paths；v2.11.23 政策/删跟进 +2、v2.11.25 /customers/me +1）
-6. `docs/更新记录.md` — 最近变更（v6.11.27 变更归属修复 + v6.11.26 员工Agent真实数据注入 + v6.11.25 客服Agent完整版上线 + v6.11.23 政策建表/B类清零 + v6.11.22 种子归属重分配 + v6.11.21 第十三次同步master）
+5. `docs/接口契约v1.md` — API接口契约（v2.11.40，114 paths）
+6. `docs/更新记录.md` — 最近变更（v6.11.40 清库重注+种子自动注入 + v6.11.39 全角色Agent流式 + v6.11.38 Dify应用命名规范 + v6.11.37 客服提速/SSE + v6.11.36 正式交付运行 + v6.11.35 前端批量修复 11 项）
 
 **重要规则**：
 - 主基线文档（基础架构方案）权重 > 其他参考文档（共用基座方案、公共框架等）
@@ -211,7 +212,7 @@ GuangdongEducationStudyAbroadProgram/
 │   ├── AGENTS.md              # 本文件副本（与根目录AGENTS.md保持同步）
 │   ├── 项目需求文档.md
 │   ├── 更新记录.md
-│   ├── 接口契约v1.md          # API接口契约（v2.0）
+│   ├── 接口契约v1.md          # API接口契约（v2.11.40，114 paths）
 │   ├── 开发路线图.md
 │   └── 运行日志.md
 │
