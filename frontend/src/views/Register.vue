@@ -57,7 +57,7 @@ async function submit() {
           </div>
           <el-button type="primary" size="large" :loading="loading" native-type="submit" style="width:100%">提交注册</el-button>
         </el-form>
-        <p class="agreement">提交即表示同意《服务协议》与《隐私政策》。<router-link to="/login">已有账号，去登录</router-link></p>
+        <p class="agreement"><router-link to="/">← 返回官网首页</router-link><span class="agreement-dot">·</span>提交即表示同意《服务协议》与《隐私政策》。<router-link to="/login">已有账号，去登录</router-link></p>
       </div>
     </main>
   </div>
@@ -75,6 +75,7 @@ async function submit() {
 .register-card h2 { margin: 0; color: var(--ink-deep); font-size: 35px; }
 .form-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0 18px; margin: 22px 0; }
 .agreement { color: var(--muted); text-align: center; font-size: 12px; }.agreement a { color: var(--violet); }
+.agreement-dot { margin: 0 8px; color: #c9c8dd; }
 @media (max-width: 850px) { .register-shell { grid-template-columns: 1fr; }.register-intro { display: none; }.form-grid { grid-template-columns: 1fr; } }
 </style>
 

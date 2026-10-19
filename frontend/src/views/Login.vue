@@ -40,7 +40,7 @@ async function login() {
 
           <el-button type="primary" size="large" :loading="loading" native-type="submit" style="width:100%">登录</el-button>
         </el-form>
-        <div class="auth-foot"><router-link to="/register">还没有账号？立即注册</router-link></div>
+        <div class="auth-foot"><router-link to="/">← 返回官网首页</router-link><span class="auth-foot-dot">·</span><router-link to="/register">还没有账号？立即注册</router-link></div>
 
       </div>
     </main>
@@ -59,7 +59,8 @@ async function login() {
 .auth-panel { display: grid; place-items: center; padding: 32px; }
 .auth-card { width: min(470px, 100%); padding: 38px; background: #fff; border-radius: 24px; box-shadow: var(--shadow); }
 .auth-card h2 { margin: 18px 0 8px; color: var(--ink-deep); font-size: 36px; }
-.auth-foot { margin-top: 18px; text-align: center; color: var(--violet); }
+.auth-foot { margin-top: 18px; display: flex; align-items: center; justify-content: center; gap: 10px; text-align: center; color: var(--violet); }
+.auth-foot-dot { color: #c9c8dd; }
 @media (max-width: 850px) { .auth-shell { grid-template-columns: 1fr; }.auth-art { display: none; } }
 </style>
 
