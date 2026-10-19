@@ -6,6 +6,8 @@
 
 ## 零、快速定位（打开项目先看这里）
 
+> v6.11.25（2026-10-19，longtrying_test）：**客服 Agent 修复落地**——第十四次同步 master（anhoa 客服修复本体：完整版 Chatflow yml + FAQ 检索 + 多标记剥离 + GET /customers/me，pytest 170/170）；完整版工作流上线（Dify 1.16 无 draft 更新端点→导入新应用 86a2f351 **换 key**，旧骨架版 d05af668 停用），客服问答验收对题。详见更新记录 v6.11.25 / LOG-083。
+>
 > v6.11.23（2026-10-19，longtrying_test）：**Policies 政策页建表接库 + B 类假动作全接真实接口**——新增 `policy` 表（迁移 007_policy 幂等）+ `GET /cs/policies` 公开接口 + 18 条政策种子（幂等脚本）；学生请假/删除跟进（新 `DELETE /employee/crm/follow-ups/{id}`）/客户抽屉跟进与状态/查看完整号码/批量再分配/权限保存/导出 CSV/组织树/学生 DDL 与申请进度/跟进柱状图 10 处假动作全部改真实接口（路由 107→109）。build ✓ ×2 + API 拨测 10 项 + pytest 164/164。**运维补充**：Dify 18 个应用已全量盘点标注（当前调用 4 个以 backend/.env key 命中为判据，控制台描述已写明；14 个可删待批，重复根因=dify_init 去重失效，见 Dify 指南 §零）。详见更新记录 v6.11.23 / LOG-081。
 >
 > v6.11.22（2026-10-19，longtrying_test）：**P0 方案A 落地：种子数据归属重分配**——新增 `backend/scripts/seed_owner_rebalance_v6_11_22.py`（幂等、仅动归属字段，经用户批准）：EMPLOYEE(13810000003) 名下 customer/todo/follow_up/lead/通知 60/50 条、STUDENT(13810000002) 名下 ticket/admin_service/academic/通知 60/50 条，测试账号登录即见满屏真实数据。**结构性上限**：日报 8 条（UNIQUE(emp,date)×全库 8 日期）、成绩 32 条（UNIQUE 学生课程学期×32 组合），重建库时 seed 扩分布可解除。API 验收达标 + pytest 164/164。详见更新记录 v6.11.22 / LOG-080。
@@ -31,8 +33,6 @@
 > v6.11.22（2026-10-19，anhoa）：**多轮 [intent:] 标记全剥离修复+「重复答案」排查闭环**——排查「还是只重复回答一个答案」：链路分层验证（后端直连/Dify 直连/vite 代理空载）均正常，所见重复文案实为前端 AgentDock 固定兜底（v6.11.21 发布+压测维护窗口致超时/空回答触发）；顺手修复多轮标记泄漏——Dify 会话历史含原始标记致模型模仿输出多个 [intent:]，`_extract_intent` 由剥首个改为 `INTENT_RE.sub` 全剥离；3 轮实测回答各异、意图正确、marker_leaked=False×3；详见更新记录 v6.11.22 与 LOG-078（anhoa）。
 >
 > v6.11.23（2026-10-19，anhoa）：**第十六次同步 origin/master→anhoa**——并入 master 7 提交（v6.11.14~16 Dify 1.16 基建；无 backend 业务变更），公共模块（dify_init.py / start-project.bat / 5 yml）经用户批准；就 dify_init.py 两套实现与 yml mode 互斥问题请示后**用户裁定选项 A（保持 master 方案）**；解 2 冲突（客服 yml 保留 anhoa 完整版、更新记录并集）；回归 compileall + verify_all 29/29 + 前端 build ✅，pytest 169/1（失败项为既有时间相关 flaky，见 LOG-079）；详见更新记录 v6.11.23 与 LOG-079（anhoa）。
->
-> v6.11.24（2026-10-19，anhoa）：**第十七次同步 origin/master→anhoa（pytest 170/170 全绿）**——并入 master 6 提交（v6.11.19~22 全量），公共模块 A~F（`.gitattributes` / `dify_init.py` APP_KEY_ENV_MAP / seed_data.py / seed_owner_rebalance / start*.bat / nginx.conf）经用户批准；解 3 冲突（RoleWorkspace.vue **两边代码全部保留**——master 管理层看板真实接口 + anhoa PROSPECT 客户档案并入同一 role 分支）；回归 compileall + verify_all 29/29 + 前端 build ✅ + pytest **170/170 全绿**（master 顺手修了 M5 时间相关 flaky！）；详见更新记录 v6.11.24 与 LOG-081（anhoa）。
 
 > v6.11.16（2026-10-19，ZNBG 线，与本线 v6.11.16 同号异义）：Dify 1.16 首启脚本修正到 `/console/api/*` 并使用 cookie/CSRF 登录，补入智能报告 app key 映射；Agnes 模型配置仅保存在忽略的 `dify/docker/.env`。Dify API/Postgres/Redis/Sandbox 健康且管理员已创建，但 OpenAI 兼容插件和 DSL 依赖需访问 Marketplace；当前本机及容器均收到 403，dify-init 停在供应商配置，app keys 尚未生成。详见更新记录 v6.11.16、LOG-073。
 

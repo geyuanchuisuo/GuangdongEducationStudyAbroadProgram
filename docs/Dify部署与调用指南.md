@@ -16,7 +16,7 @@
 |--------|------|------------------|----------|--------|----------|
 | 留学生智能管家 | chat | `03a4dfa6` | DIFY_STUDENT_AGENT_KEY | M4 学生智能助手（/student/agent/chat） | 留学生智能管家__agent-chat.yml |
 | 企业员工助手 | chat | `012f71a7` | DIFY_EMPLOYEE_AGENT_KEY | M3 企业智能助手（/employee/agent/chat） | 企业员工助手__agent-chat.yml |
-| 粤教客服Agent | advanced-chat | `d05af668` | DIFY_CUSTOMER_AGENT_KEY | M2 智能客服（/ai/customer-service/chat） | 粤教客服__advanced-chat.yml |
+| 粤教客服Agent | advanced-chat | `86a2f351` | DIFY_CUSTOMER_AGENT_KEY（**v6.11.25 换 key**，key `app-Ru3T...`） | M2 智能客服（/ai/customer-service/chat） | 粤教客服__advanced-chat.yml（完整版，含 query 注入/FAQ/知识检索） |
 | 智能报告 | advanced-chat | `06ce80f9` | DIFY_REPORT_AGENT_KEY | M5 智能报告（报告 AI 文字） | 智能报告__advanced-chat.yml |
 
 ### 0.2 历史版本（2 个，可删）
