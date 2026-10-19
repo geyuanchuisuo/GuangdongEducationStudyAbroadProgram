@@ -394,12 +394,12 @@ for name, path in [("客户", "/employee/export/customers"), ("日报", "/employ
     except Exception as exc:
         check(f"M3 导出{name}CSV", False, str(exc)[:120])
 
-# 指令式业务（v6.8.3：AI 不可用自动本地规则兜底，不再 50002；当前环境无 Dify，source 预期 local）
+# 指令式业务（v6.8.3：AI 不可用自动本地规则兜底，不再 50002；Dify 可用时 source=ai，否则 source=local）
 ok, bj = call(client, "POST", "/employee/commands/parse", emp_tok, body={
     "text": "给客户12添加一条跟进记录：明天上午电话回访"})
 _action = bj.get("data", {}).get("action", {}) if ok else {}
-check("M3 指令解析（本地兜底）",
-      ok and _action.get("action_type") == "follow_up.create" and _action.get("source") == "local",
+check("M3 指令解析（Dify 或本地兜底）",
+      ok and _action.get("action_type") == "follow_up.create" and _action.get("source") in ("ai", "local"),
       str(bj)[:160])
 cmd_token = bj.get("data", {}).get("token") if ok else None
 if cmd_token:

@@ -70,9 +70,10 @@ services:
       - backend_storage:/app/storage_data
       # 与 dify-init 共享 Agent keys；backend 只读加载
       - dify_app_keys:/run/dify-keys:ro
+    # --reload-dir app：仅监听 backend/app，避免跑 tests/scripts 写入触发重启，产生约 1 秒的瞬时 500 窗口
     command: >-
       sh -c 'set -a && . /run/dify-keys/app_keys.env && set +a &&
-      exec /app/.venv/bin/uvicorn app.main:app --reload --host 0.0.0.0 --port 8000'
+      exec /app/.venv/bin/uvicorn app.main:app --reload --reload-dir app --host 0.0.0.0 --port 8000'
 
   # Dify 一键初始化：创建管理员 → 配模型供应商 → 导入应用 → 绑模型 → 写入 app key 共享卷
   # 长期挂载场景：必须成功，否则 backend 不启动

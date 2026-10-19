@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   ArrowRight,
@@ -15,9 +15,8 @@ import {
 import { ElMessage, ElMessageBox } from 'element-plus'
 import StatCard from '../components/StatCard.vue'
 import SectionTitle from '../components/SectionTitle.vue'
-import { customers, events, notifications, projects, studentTodos } from '../data/mock'
 import { REPORT_TYPES, typeName } from '../config/reports'
-import { platformApi } from '../api/platform'
+import { platformApi, fallbackState } from '../api/platform'
 import { useUserStore } from '../stores/user'
 
 const route = useRoute()
@@ -28,22 +27,43 @@ const section = computed(() => String(route.params.section || 'home'))
 const keyword = ref('')
 const customerDialog = ref(false)
 const leaveDialog = ref(false)
-const psychScore = ref(72)
+const psychScore = ref<number | string>('—')
 const customerForm = reactive({ name: '', phone: '', gender: '', age: '', education: '', project: '新加坡本硕', note: '' })
 const leaveForm = reactive({ type: '事假', start: '', end: '', reason: '' })
-const ticketForm = reactive({ title: '', detail: '', formal: false })
+const ticketForm = reactive({ type: '服务咨询', title: '', detail: '', formal: false })
 const reportForm = reactive({ date: new Date().toISOString().slice(0, 10), content: '' })
 const convertForm = reactive({ customerId: 1, project: '新加坡国际本硕升学计划', title: '', approverId: 4 })
 const submittedConversionIds = new Set<number>()
 const activeCustomer = ref<any>(null)
-const customerRows = ref<any[]>(customers)
-const notificationRows = ref<any[]>(notifications)
+const customerRows = ref<any[]>([])
+// 访客页与转化申请表单用的公开列表（走 platformApi，含懒加载演示数据兜底）
+const publicProjects = ref<any[]>([])
+const publicEvents = ref<any[]>([])
+const selectedCustomerIds = ref<number[]>([])
+const reassignFromId = ref<number | undefined>()
+const reassignToId = ref<number | undefined>()
+const reassignDialogTargetId = ref<number | undefined>()
+const reassignDialog = ref(false)
+const reassignCustomer = ref<any>(null)
+const customerOwnerFilter = ref('all')
+const customerStatusFilter = ref('all')
+const notificationRows = ref<any[]>([])
 const reminders = ref<any>({})
 const approvalRows = ref<any[]>([])
 const studentProfile = ref<any>({})
 const studentTickets = ref<any[]>([])
 const lifeFaqRows = ref<any[]>([])
 const moreServiceRows = ref<any[]>([])
+const studentReminders = ref<any>({})
+const studentAcademic = ref<any>({})
+const studentProgressRows = ref<any[]>([])
+const studentLeaveRows = ref<any[]>([])
+const permissionUserId = ref<number | undefined>()
+// 权限勾选的编辑态：切换用户时同步为该用户的真实权限，保存时整体覆盖写入
+const permissionDraft = ref<string[]>([])
+// 创建员工账号弹窗：后端 POST /employee/users 必填 username / password / real_name / user_type
+const createUserDialog = ref(false)
+const createUserForm = reactive({ real_name: '', username: '', phone: '', password: '', user_type: 'EMPLOYEE', department: '', employee_role: '' })
 const scoreForm = reactive({ studentId: 2, semester: String(), courseName: String(), score: 0 })
 const scoreRows = ref([] as any[])
 const dailyReportRows = ref([] as any[])
@@ -54,22 +74,48 @@ const reportDialog = ref(false)
 const dashboardData = ref<any>({})
 const approvalsData = ref<any>({})
 const todoRows = ref<any[]>([])
+const operationLogRows = ref<any[]>([])
 const profileStats = ref<any>({})
 const orgTree = ref<any[]>([])
 const orgTreeProps = { label: 'name', children: 'children' }
+const orgKeyword = ref('')
+const orgMembers = ref<any[]>([])
+const revealedPhones = ref<Record<number, string>>({})
 const employeeRows = ref<any[]>([])
 const selectedApprovals = ref<number[]>([])
+const approvalFilter = ref('全部')
 const updatedAtLabel = ref('—')
 // 客户来源渠道中文映射（后端 source_channel 枚举）
 const sourceLabel: Record<string, string> = { WEBSITE_REGISTER: '官网注册', CS_LEAD: '客服线索', EMPLOYEE_INPUT: '员工录入' }
 const todoStatusLabel: Record<string, string> = { pending: '待处理', in_progress: '处理中', done: '已完成' }
 const todoPriorityLabel: Record<string, string> = { low: '低', medium: '中', high: '高' }
+const logModuleLabel: Record<string, string> = { auth: '认证', crm: '客户', cs: '客服', employee: '员工', report: '日报', student: '学生', M3: '系统' }
+const logActionLabel: Record<string, string> = { create: '新增', update: '修改', delete: '删除', login: '登录', export: '导出', phone_reveal: '查看完整手机号' }
 const approvalBizLabel: Record<string, string> = { leave: '请假申请', convert: '转化申请', late_report: '日报补报', complaint: '投诉处理' }
 const approvalStatusLabel: Record<string, string> = { pending: '待审批', approved: '已通过', rejected: '已驳回' }
+// 客户状态 6 态：DB 存英文编码（后端 customer_service.CUSTOMER_STATUSES），历史/演示数据为中文，筛选项以真实编码为 value
+const customerStatusOptions = [
+  { label: '新录入', value: 'NEW' },
+  { label: '跟进中', value: 'FOLLOWING' },
+  { label: '意向强烈', value: 'STRONG' },
+  { label: '已签约', value: 'SIGNED' },
+  { label: '已入学', value: 'ENROLLED' },
+  { label: '已流失', value: 'LOST' },
+]
+function customerStatusKey(status: string) {
+  const hit = customerStatusOptions.find((option) => option.label === status)
+  return hit ? hit.value : status
+}
 
 const mgrOverview = computed(() => dashboardData.value?.overview || {})
 const mgrCustomers = computed(() => dashboardData.value?.customers || {})
 const mgrPendingTotal = computed(() => approvalsData.value?.stats?.pending_total ?? '—')
+// 审批筛选：按 radio 标签语义映射 biz_type（转化申请=convert、请假=leave、员工流程=日报补报/投诉）
+const approvalFilterBizTypes: Record<string, string[]> = { '转化申请': ['convert'], '请假': ['leave'], '员工流程': ['late_report', 'complaint'] }
+const filteredApprovalItems = computed<any[]>(() => {
+  const types = approvalFilterBizTypes[approvalFilter.value]
+  return types ? approvalRows.value.filter((item: any) => types.includes(item.biz_type)) : approvalRows.value
+})
 // 漏斗：以最大环节为 100% 计算条形宽度，与后端 dashboard.customers.funnel 口径一致
 const funnelRows = computed(() => {
   const list: any[] = mgrCustomers.value.funnel || []
@@ -86,6 +132,133 @@ const sourceRows = computed(() => {
     p: Math.round(((x.count || 0) / max) * 100),
   }))
 })
+
+// 学生首页「近期课程与 DDL」：来自提醒聚合 academic_ddl（真实字段 title/course_name/due_time/days_left）
+const studentDdlRows = computed(() => itemsOf(studentReminders.value?.academic_ddl).map((item: any) => ({
+  title: item.title,
+  due: String(item.due_time || '').slice(0, 10) || '—',
+  tone: (item.days_left ?? 99) <= 1 ? 'coral' : (item.days_left ?? 99) <= 2 ? 'amber' : 'blue',
+})))
+// 学生学业页：DDL 列表取 academic_items；统计卡由 academic_items/score_summary 真实字段推导
+const studentAcademicItems = computed(() => itemsOf(studentAcademic.value?.academic_items))
+const studentAcademicStats = computed(() => {
+  const now = Date.now()
+  const week = 7 * 24 * 60 * 60 * 1000
+  const items = studentAcademicItems.value
+  const dueWithin7d = items.filter((i: any) => {
+    const t = new Date(i.due_time).getTime()
+    return !isNaN(t) && t >= now && t - now <= week
+  }).length
+  const pending = items.filter((i: any) => i.item_type === '作业' && new Date(i.due_time).getTime() >= now).length
+  const pushed = items.filter((i: any) => i.reminder_sent).length
+  const summary = studentAcademic.value?.score_summary || {}
+  return {
+    due7d: dueWithin7d,
+    pending,
+    gpa: summary.average != null ? String(summary.average) : '—',
+    pushed,
+    scoreCount: summary.count ?? 0,
+  }
+})
+
+// 学生申请进度：GET /student/progress（真实阶段/状态/备注），按更新时间升序作为步骤顺序
+const studentProgressSteps = computed(() => [...studentProgressRows.value].sort(
+  (a: any, b: any) => new Date(a.update_time || 0).getTime() - new Date(b.update_time || 0).getTime(),
+))
+const studentProgressCurrent = computed(() => studentProgressSteps.value[studentProgressSteps.value.length - 1] || null)
+// 进度状态中文化：后端 status 是英文枚举（waiting/in_progress/completed…），不直接展示原文
+const progressStatusLabel: Record<string, string> = { waiting: '待处理', pending: '待处理', in_progress: '进行中', doing: '进行中', completed: '已完成', done: '已完成' }
+function progressStatusText(item: any) {
+  if (!item) return ''
+  return item.notes || progressStatusLabel[item.status] || item.status || ''
+}
+// 学生首页「待办事项」：提醒聚合 counts（学业 DDL + 服务结果 + 进度更新）真实合计
+const studentReminderTotal = computed(() => {
+  const c = studentReminders.value?.counts || {}
+  return (c.academic_ddl ?? 0) + (c.leave_results ?? 0) + (c.ticket_updates ?? 0) + (c.progress_updates ?? 0)
+})
+// 情绪趋势：近 7 天评估记录（emotion_history: {time, tag, score}）映射为折线坐标；不足 2 点不画线
+const emotionTrendPoints = computed(() => {
+  const history = Array.isArray(studentProfile.value?.emotion_history) ? studentProfile.value.emotion_history : []
+  const since = Date.now() - 7 * 24 * 60 * 60 * 1000
+  const points = history
+    .map((h: any) => ({ t: new Date(h?.time).getTime(), score: Number(h?.score) }))
+    .filter((h: any) => !isNaN(h.t) && h.t >= since && Number.isFinite(h.score))
+    .sort((a: any, b: any) => a.t - b.t)
+  if (points.length < 2) return ''
+  return points
+    .map((p: any, i: number) => `${Math.round((i / (points.length - 1)) * 600)},${Math.round(220 - (Math.max(0, Math.min(100, p.score)) / 100) * 220)}`)
+    .join(' ')
+})
+// 权限配置：选中员工的真实权限列表（GET /employee/users 的 permissions 字段）
+const permissionUser = computed(() => employeeRows.value.find((item: any) => item.id === permissionUserId.value) || null)
+const permissionChecked = computed<string[]>(() => (Array.isArray(permissionUser.value?.permissions) ? permissionUser.value.permissions : []))
+// 权限项字典：key 必须与后端 sys_user.permissions 的真实取值一致
+// （目录见 backend/scripts/seed_supplement_v6_11_13.py 的 PERMS：ADMIN/MANAGER/EMPLOYEE 三组并集）
+const permissionOptions = [
+  { key: 'report:view', label: '查看智能报告' },
+  { key: 'report:export', label: '导出报表' },
+  { key: 'approval:manage', label: '审批管理' },
+  { key: 'employee:manage', label: '员工管理' },
+  { key: 'customer:view', label: '查看客户' },
+  { key: 'customer:edit', label: '编辑客户' },
+  { key: 'report:daily', label: '提交日报' },
+  { key: 'todo:view', label: '查看待办' },
+  { key: 'system:manage', label: '系统管理' },
+  { key: 'user:manage', label: '用户管理' },
+]
+
+watch(permissionUserId, () => { permissionDraft.value = [...permissionChecked.value] })
+
+// 保存权限配置：PUT /employee/users/{id}/permissions（覆盖式写入），成功后同步本地行的真实权限
+async function savePermissionConfig() {
+  const user = permissionUser.value
+  if (!user) { notifyInfo('请先选择用户'); return }
+  try {
+    const updated: any = await platformApi.employee.updateUserPermissions(user.id, { permissions: permissionDraft.value })
+    const next = Array.isArray(updated?.permissions) ? updated.permissions : permissionDraft.value
+    user.permissions = next
+    permissionDraft.value = [...next]
+    notifySuccess('权限配置已保存')
+  } catch (error) {
+    notifyInfo(errorMessage(error, '权限配置接口尚未就绪'))
+  }
+}
+
+// 员工列表「权限」按钮：跳到权限配置页并预选该员工（预选后 watch 会同步其真实权限）
+function openPermissionConfig(userId: number) {
+  permissionUserId.value = userId
+  router.push('/app/' + role.value.toLowerCase() + '/permissions')
+}
+
+// 创建员工账号：打开弹窗并重置表单
+function openCreateUser() {
+  Object.assign(createUserForm, { real_name: '', username: '', phone: '', password: '', user_type: 'EMPLOYEE', department: '', employee_role: '' })
+  createUserDialog.value = true
+}
+
+// 提交创建：POST /employee/users（MANAGER），成功后刷新员工列表，不做假成功
+async function submitCreateUser() {
+  if (createUserForm.real_name.trim().length < 2) { notifyInfo('请填写真实姓名（至少 2 个字）'); return }
+  if (createUserForm.username.trim().length < 3) { notifyInfo('登录用户名至少 3 位'); return }
+  if (createUserForm.password.length < 6) { notifyInfo('初始密码至少 6 位'); return }
+  try {
+    await platformApi.employee.createUser({
+      real_name: createUserForm.real_name.trim(),
+      username: createUserForm.username.trim(),
+      password: createUserForm.password,
+      user_type: createUserForm.user_type,
+      phone: createUserForm.phone.trim() || undefined,
+      department: createUserForm.department.trim() || undefined,
+      employee_role: createUserForm.employee_role.trim() || undefined,
+    })
+    createUserDialog.value = false
+    notifySuccess('账号已创建')
+    try { employeeRows.value = itemsOf(await platformApi.employee.listUsers({ page: 1, page_size: 100 })) } catch { /* 列表刷新失败不影响创建结果 */ }
+  } catch (error) {
+    notifyInfo(errorMessage(error, '创建员工账号接口尚未就绪'))
+  }
+}
 
 // ── v6.11.19：PROSPECT 本人客户档案 + 转化申请状态 ──────────
 const myCustomer = ref<any>(null)
@@ -115,19 +288,14 @@ async function loadDailyReports() {
     dailyReportRows.value = itemsOf(result)
   } catch {}
 }
-// v6.11.20：真实数据加载——审批 / 操作日志 / 待补全线索
-const operationRows = ref<any[]>([])
+// v6.11.20：真实数据加载——审批 / 待补全线索
 const pendingLeadRows = ref<any[]>([])
+// MANAGER「流程审批」= 管理层全量待审批视图：/approvals/pending 是「待我审批」(按 approver_id 过滤)，
+// 管理层账号通常不是被指派审批人，会导致列表恒空 → 改用 /employee/approvals-center 取 status==='pending' 子集
 async function loadApprovals() {
   try {
-    const result: any = await platformApi.approvals.pending()
-    approvalRows.value = itemsOf(result)
-  } catch {}
-}
-async function loadOperationLogs() {
-  try {
-    const result: any = await platformApi.operationLogs({ page_size: 50 })
-    operationRows.value = itemsOf(result)
+    const result: any = await platformApi.employee.approvalsCenter({ page: 1, page_size: 50 })
+    approvalRows.value = itemsOf(result).filter((item: any) => item.status === 'pending')
   } catch {}
 }
 async function loadPendingLeads() {
@@ -149,10 +317,27 @@ async function loadEmployeeWorkspace() {
   try { profileStats.value = (await platformApi.employee.profileStats()) || {} } catch {}
 }
 async function loadStudentProfile() {
-  try { studentProfile.value = (await platformApi.student.psychProfile()) || {} } catch {}
+  try {
+    studentProfile.value = (await platformApi.student.psychProfile()) || {}
+    if (typeof studentProfile.value.emotion_score === 'number') psychScore.value = studentProfile.value.emotion_score
+  } catch {}
+}
+async function loadStudentWorkspace() {
+  try { studentReminders.value = (await platformApi.student.reminders()) || {} } catch {}
+  try { studentAcademic.value = (await platformApi.student.academic()) || {} } catch {}
+  try { studentTickets.value = itemsOf(await platformApi.student.listTickets({ page: 1, page_size: 20 })) } catch {}
+  try { lifeFaqRows.value = itemsOf(await platformApi.student.lifeFaq()) } catch {}
+  try { moreServiceRows.value = itemsOf(await platformApi.student.moreServices()) } catch {}
+  try { studentProgressRows.value = itemsOf(await platformApi.student.progress()) } catch { studentProgressRows.value = [] }
+  try { studentLeaveRows.value = itemsOf(await platformApi.student.listAdminServices({ page: 1, page_size: 20 })).filter((item: any) => String(item?.service_type || '').includes('请假')) } catch { studentLeaveRows.value = [] }
 }
 async function loadOrgTree() {
   try { orgTree.value = itemsOf(await platformApi.employee.org()) } catch {}
+}
+async function loadOrgMembers() {
+  try {
+    orgMembers.value = itemsOf(await platformApi.employee.orgMembers({ keyword: orgKeyword.value.trim() || undefined, page: 1, page_size: 20 }))
+  } catch { orgMembers.value = [] }
 }
 function errorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback
@@ -233,8 +418,64 @@ function itemsOf(value: any): any[] {
   return value?.items || []
 }
 
+// 待办「处理」：此前按钮没有任何点击事件（纯装饰，点了没反应），现接后端 PUT /employee/todos/{id}
+async function handleTodo(item: any) {
+  if (!item || item.status === 'done') return
+  confirmWrite('确认将「' + (item.title || '该待办') + '」标记为已完成吗？', async () => {
+    try {
+      const next: any = await platformApi.employee.updateTodo(item.id, { status: 'done' })
+      item.status = next?.status || 'done'
+      notifySuccess('已标记为已完成')
+      try { reminders.value = await platformApi.employeeReminders() } catch { /* 统计卡刷新失败不影响处理结果 */ }
+    } catch (error) {
+      notifyInfo(errorMessage(error, '待办接口尚未就绪'))
+    }
+  })
+}
+
+// 关键操作日志（MANAGER）：此前是写死的「暂无操作日志（数据源待接入）」空状态
+function operatorName(id?: number) {
+  if (!id) return '—'
+  const name = employeeName(id)
+  return name === '—' ? '用户#' + id : name
+}
+
+async function loadOperationLogs() {
+  try {
+    operationLogRows.value = itemsOf(await platformApi.operationLogs({ page: 1, page_size: 20 }))
+  } catch {
+    operationLogRows.value = []
+  }
+}
+
+// 消息中心：此前通知行是纯 div，点了没反应；后端 PUT /notifications/{id}/read 一直没接
+async function markNotification(item: any) {
+  if (!item || item.is_read) return
+  try {
+    await platformApi.markNotificationRead(item.id)
+    item.is_read = true
+    notifySuccess('已标记为已读')
+  } catch (error) {
+    notifyInfo(errorMessage(error, '通知接口尚未就绪'))
+  }
+}
+
+async function markAllNotifications() {
+  if (!notificationRows.value.length) return
+  try {
+    await platformApi.markAllNotificationsRead()
+    notificationRows.value.forEach((item: any) => { item.is_read = true })
+    notifySuccess('已全部标记为已读')
+  } catch (error) {
+    notifyInfo(errorMessage(error, '通知接口尚未就绪'))
+  }
+}
+
 onMounted(async () => {
   try {
+    // 公开列表（课程/活动）：走平台层，接口不可用时由平台层登记提示条
+    platformApi.projects().then((rows) => { publicProjects.value = rows }).catch(() => {})
+    platformApi.events().then((rows) => { publicEvents.value = rows }).catch(() => {})
     const requests: Promise<any>[] = [platformApi.notifications()]
     // M5-05.9：员工端不再请求 /reports（该组接口仅 MANAGER/ADMIN，员工调用必 403）
     if (role.value === 'EMPLOYEE' || role.value === 'MANAGER') {
@@ -280,12 +521,15 @@ onMounted(async () => {
   if (role.value === 'MANAGER') await loadManagerOverview()
   if (role.value === 'EMPLOYEE') await loadEmployeeWorkspace()
   if (role.value === 'EMPLOYEE' || role.value === 'MANAGER') await loadOrgTree()
+  if (role.value === 'EMPLOYEE') await loadOrgMembers()
   if (role.value === 'STUDENT') {
     await loadStudentProfile()
     await loadMyServices()
     await loadStudentAcademic()
     await loadStudentProgress()
+    await loadStudentWorkspace()
   }
+  if (role.value === 'EMPLOYEE' || role.value === 'MANAGER') customerRows.value = customerRows.value.map(normalizeCustomer)
 })
 
 // ── M5 智能报告：列表 / 生成 / 详情 / 下钻 / 导出（M5-05.1~05.8） ──────────
@@ -569,9 +813,28 @@ const pageTitle = computed(() => {
   return map[section.value] || '工作空间'
 })
 
+// 员工/状态筛选交由服务端（GET /employee/customers 支持 status / employee_id 参数），
+// 避免只在前 N 条已加载数据里过滤导致「筛出来永远是空」；此处仅保留关键字本地过滤
 const filteredCustomers = computed(() => customerRows.value.filter((item: any) =>
-  !keyword.value || item.name.includes(keyword.value) || item.phone.includes(keyword.value) || item.project.includes(keyword.value),
+  (!keyword.value || item.name.includes(keyword.value) || item.phone.includes(keyword.value) || item.project.includes(keyword.value))
+  && (customerStatusFilter.value === 'all' || customerStatusKey(item.status) === customerStatusFilter.value),
 ))
+
+async function loadCustomers() {
+  try {
+    const page: any = await platformApi.employeeCustomers({
+      page: 1,
+      page_size: 100,
+      status: customerStatusFilter.value === 'all' ? undefined : customerStatusFilter.value,
+      employee_id: customerOwnerFilter.value === 'all' ? undefined : customerOwnerFilter.value,
+    })
+    customerRows.value = itemsOf(page).map(normalizeCustomer)
+  } catch {
+    notifyInfo('客户列表接口尚未就绪')
+  }
+}
+
+watch([customerOwnerFilter, customerStatusFilter], () => { loadCustomers() })
 
 const employeeMenu = computed(() => [
   { label: '客户录入', icon: Plus, action: () => { customerDialog.value = true } },
@@ -685,8 +948,8 @@ function submitLeave() {
       leaveDialog.value = false
       await loadMyServices()
       notifySuccess('请假申请已提交')
-    } catch {
-      notifyInfo('请假申请提交失败，请稍后重试')
+    } catch (error: unknown) {
+      notifyInfo(errorMessage(error, '请假接口尚未就绪'))
     }
   })
 }
@@ -784,15 +1047,6 @@ function loadConsultRows() {
     consultRows.value = []
   }
 }
-async function registerEvent(item: any) {
-  try {
-    await platformApi.eventRegister(item.id)
-    notifySuccess('报名成功')
-  } catch (error: unknown) {
-    notifyInfo(errorMessage(error, '报名失败，请稍后重试'))
-  }
-}
-
 // v6.11.20：待补全线索合并为正式客户（pending_lead → customer）
 async function mergePendingLeadRow(row: any) {
   try {
@@ -882,30 +1136,6 @@ async function exportCsv(name: string) {
   }
 }
 
-// v6.11.23：脱敏联系方式真实化——orgMembers 列表 + 逐行查看完整号码（写操作日志）
-const orgMembers = ref<any[]>([])
-const orgMemberDialog = ref(false)
-const revealedPhones = ref<Record<number, string>>({})
-async function showOrgMembers() {
-  try {
-    const res: any = await platformApi.employee.orgMembers()
-    orgMembers.value = itemsOf(res)
-    orgMemberDialog.value = true
-    if (!orgMembers.value.length) notifyInfo('暂无同事信息')
-  } catch {
-    notifyInfo('组织通讯录加载失败，请稍后重试')
-  }
-}
-async function revealMemberPhone(row: any) {
-  try {
-    const res: any = await platformApi.employee.revealPhone(row.user_id)
-    revealedPhones.value = { ...revealedPhones.value, [row.user_id]: res?.phone || '—' }
-    notifySuccess('已展示完整号码（该操作已写入操作日志）')
-  } catch {
-    notifyInfo('号码展示失败，请稍后重试')
-  }
-}
-
 // ── v6.11.23：B 类假动作全接真实接口 ──────────────────────
 // 客户抽屉：添加跟进（真落库）
 async function addActiveFollowUp() {
@@ -933,64 +1163,6 @@ async function updateActiveStatus() {
     notifySuccess('状态已更新')
   } catch (e) {
     if (e !== 'cancel' && e !== 'close') notifyInfo('状态更新失败，请稍后重试')
-  }
-}
-// MANAGER 批量再分配（POST /employee/customers/reassign，不传 customer_ids 则整批转移）
-async function reassignAll() {
-  try {
-    const from = await ElMessageBox.prompt('输入原归属员工 ID', '批量再分配（1/2）', {
-      inputValidator: (v: string) => /^\d+$/.test(v.trim()) || '请输入数字 ID',
-    })
-    const to = await ElMessageBox.prompt('输入新归属员工 ID', '批量再分配（2/2）', {
-      inputValidator: (v: string) => /^\d+$/.test(v.trim()) || '请输入数字 ID',
-    })
-    await platformApi.employee.reassignCustomers({
-      from_employee_id: Number(from.value.trim()),
-      to_employee_id: Number(to.value.trim()),
-    })
-    await loadManagerOverview()
-    customerRows.value = itemsOf(await platformApi.employeeCustomers())
-    notifySuccess('客户再分配已完成')
-  } catch (e) {
-    if (e !== 'cancel' && e !== 'close') notifyInfo('再分配失败，请稍后重试')
-  }
-}
-// v6.11.27 修复：单客户「变更归属」——只转移该客户（原实现误调批量转移，会把原员工名下全部客户转走）
-async function reassignOne(customer: any) {
-  const from = Number(customer?.owner_employee_id)
-  if (!Number.isFinite(from) || from <= 0) {
-    notifyInfo('该客户无归属员工，无法变更归属')
-    return
-  }
-  try {
-    const result = await ElMessageBox.prompt(
-      `输入新归属员工 ID（员工管理页可查），当前归属员工 ID：${from}`,
-      '变更归属 · ' + (customer.name || customer.wechat || customer.phone || `#${customer.id}`),
-      { inputValidator: (v: string) => /^\d+$/.test(v.trim()) || '请输入数字 ID' },
-    )
-    const to = Number(result.value.trim())
-    await platformApi.employee.reassignCustomers({
-      from_employee_id: from,
-      to_employee_id: to,
-      customer_ids: [customer.id],
-    })
-    customer.owner_employee_id = to
-    customerRows.value = itemsOf(await platformApi.employeeCustomers())
-    notifySuccess('归属已变更（仅该客户）')
-  } catch (e) {
-    if (e !== 'cancel' && e !== 'close') notifyInfo(errorMessage(e, '变更归属失败，请稍后重试'))
-  }
-}
-// MANAGER 权限配置（PUT /employee/users/{id}/permissions 真保存）
-const permUserId = ref<number | null>(null)
-const permChecked = ref<string[]>([])
-async function savePermissions() {
-  if (!permUserId.value) { notifyInfo('请先选择用户'); return }
-  try {
-    await platformApi.employee.updateUserPermissions(permUserId.value, { permissions: permChecked.value })
-    notifySuccess('权限配置已保存')
-  } catch {
-    notifyInfo('权限保存失败，请稍后重试')
   }
 }
 // 学生 DDL/进度真实化（/student/academic + /student/progress）
@@ -1047,19 +1219,136 @@ async function loadFollowUpBars() {
     followUpBars.value = counts
   } catch {}
 }
+
+async function changePassword() {
+  try {
+    const oldOne = await ElMessageBox.prompt('请输入当前密码', '修改密码', { inputType: 'password', inputValidator: (value: string) => (value ? true : '请输入当前密码') })
+    const newOne = await ElMessageBox.prompt('请输入新密码（至少 6 位）', '修改密码', { inputType: 'password', inputValidator: (value: string) => (value && value.length >= 6 ? true : '新密码至少 6 位') })
+    await platformApi.employee.changePassword({ old_password: oldOne.value, new_password: newOne.value })
+    notifySuccess('密码已修改，请重新登录')
+  } catch (error: unknown) {
+    if (error === 'cancel' || error === 'close') return
+    notifyInfo(errorMessage(error, '密码修改接口尚未就绪'))
+  }
+}
+
+async function applyEvent(event: any) {
+  confirmWrite('确认报名“' + (event?.title || '该活动') + '”吗？', async () => {
+    try {
+      await platformApi.eventRegister(event.id)
+      notifySuccess('报名成功')
+    } catch (error: unknown) {
+      notifyInfo(errorMessage(error, '活动报名接口尚未就绪'))
+    }
+  })
+}
+
+function employeeName(id?: number) {
+  if (!id) return '—'
+  const fromAccounts = employeeRows.value.find((item: any) => item.id === id)
+  if (fromAccounts?.real_name) return fromAccounts.real_name
+  const fromMembers = orgMembers.value.find((item: any) => item.user_id === id)
+  return fromMembers?.real_name || '—'
+}
+
+// 后端 /employee/customers 返回 recommended/assessment_score/owner_employee_id/last_follow_at，
+// 与页面列名（project/score/owner/last）不一致，这里统一映射，避免四列空白；
+// 降级 mock 数据没有这些后端字段，原样返回不改动
+function normalizeCustomer(raw: any) {
+  if (!raw || (raw.owner_employee_id === undefined && raw.assessment_score === undefined && raw.last_follow_at === undefined && raw.recommended === undefined)) return raw
+  const rec = raw.recommended
+  let project = '—'
+  if (typeof rec === 'string') project = rec
+  else if (Array.isArray(rec)) project = rec.map((item: any) => item?.project_name || item?.name || String(item)).filter(Boolean).join('、') || '—'
+  else if (rec && typeof rec === 'object') project = rec.project_name || rec.name || '—'
+  return {
+    ...raw,
+    project,
+    score: raw.assessment_score === null || raw.assessment_score === undefined ? '—' : raw.assessment_score,
+    owner: employeeName(raw.owner_employee_id),
+    last: raw.last_follow_at ? String(raw.last_follow_at).slice(0, 10) : '—',
+  }
+}
+
+function onCustomerSelection(rows: any[]) {
+  selectedCustomerIds.value = rows.map((row: any) => row.id)
+}
+
+function openReassign(customer: any) {
+  reassignCustomer.value = customer
+  reassignDialogTargetId.value = undefined
+  reassignDialog.value = true
+}
+
+async function doReassign(fromId: number, toId: number, customerIds: number[]) {
+  try {
+    const result: any = await platformApi.employee.reassignCustomers({
+      from_employee_id: fromId,
+      to_employee_id: toId,
+      customer_ids: customerIds,
+    })
+    // v6.11.27 差异字段并入：转移成功后刷新客户列表（原 reassignOne/reassignAll 的刷新行为）
+    customerRows.value = itemsOf(await platformApi.employeeCustomers())
+    notifySuccess('已转移 ' + (result?.moved ?? customerIds.length) + ' 个客户')
+    return true
+  } catch (error: unknown) {
+    notifyInfo(errorMessage(error, '客户再分配接口尚未就绪'))
+    return false
+  }
+}
+
+async function confirmReassign() {
+  if (!reassignDialogTargetId.value) {
+    ElMessage.warning('请选择目标员工')
+    return
+  }
+  const fromId = reassignCustomer.value?.owner_employee_id
+  if (!fromId) {
+    notifyInfo('该客户当前没有归属员工，无法变更归属')
+    return
+  }
+  if (await doReassign(fromId, reassignDialogTargetId.value, [reassignCustomer.value.id])) {
+    reassignDialog.value = false
+  }
+}
+
+async function batchReassign() {
+  if (!selectedCustomerIds.value.length) {
+    ElMessage.warning('请先勾选需要再分配的客户')
+    return
+  }
+  if (!reassignFromId.value || !reassignToId.value) {
+    ElMessage.warning('请选择原归属员工和目标员工')
+    return
+  }
+  await doReassign(reassignFromId.value, reassignToId.value, selectedCustomerIds.value)
+}
+
+function revealPhone(member: any) {
+  confirmWrite('确认查看 ' + (member.real_name || '该同事') + ' 的完整手机号吗？该敏感操作会写入操作日志。', async () => {
+    try {
+      const data: any = await platformApi.employee.revealPhone(member.user_id)
+      revealedPhones.value[member.user_id] = data?.phone || '—'
+      notifySuccess('完整号码：' + (data?.phone || '—'))
+    } catch (error: unknown) {
+      notifyInfo(errorMessage(error, '接口尚未就绪'))
+    }
+  })
+}
 </script>
 
 <template>
   <div class="workspace">
+    <el-alert v-if="fallbackState.keys.length" class="fallback-banner" type="warning" :closable="false" show-icon :title="'接口不可用，以下内容为演示数据：' + fallbackState.keys.join('、')" />
     <SectionTitle :eyebrow="role" :title="pageTitle" desc="数据按业务模块和接口口径展示。">
     </SectionTitle>
 
     <template v-if="section === 'home' && role === 'STUDENT'">
-      <section class="welcome surface"><div><span class="badge">STUDENT · 德国双元制护理</span><h2>{{ userStore.userInfo?.real_name || '同学' }}，欢迎回来</h2><p>负责顾问：陈顾问 · 语言班第3个月 · 当前状态：在学</p></div><div class="welcome-score"><small>综合状态</small><strong>{{ studentProfile.emotion_score ?? '—' }}</strong><span>{{ studentProfile.latest_emotion_tag || '暂无评估' }}</span></div></section>
-      <div class="stat-grid"><StatCard label="待办事项" :value="String((reminders.counts && reminders.counts.academic_ddl) || 3)" note="学业与服务提醒" tone="coral" /><StatCard label="本周课程" value="5" note="下节课程：德语写作" tone="purple" /><StatCard label="申请进度" value="签证办理" note="材料递交中" tone="lime" /><StatCard label="服务状态" value="良好" note="最近更新：今天" tone="amber" /></div>
+      <section class="welcome surface"><div><span class="badge">STUDENT · 德国双元制护理</span><h2>{{ userStore.userInfo?.real_name || '同学' }}，欢迎回来</h2><p>负责顾问：— · 语言班进度：— · 当前状态：—</p></div><div class="welcome-score"><small>综合状态</small><strong>{{ studentProfile.emotion_score ?? '—' }}</strong><span>{{ studentProfile.latest_emotion_tag || '暂无评估' }}</span></div></section>
+      <div class="stat-grid"><StatCard label="待办事项" :value="String(studentReminderTotal)" note="学业与服务提醒" tone="coral" /><StatCard label="本周课程" value="—" tone="purple" /><StatCard label="申请进度" :value="studentProgressCurrent?.stage || '—'" :note="progressStatusText(studentProgressCurrent) || '暂无进度记录'" tone="lime" /><StatCard label="服务状态" value="—" tone="amber" /></div>
       <div class="two-column">
-        <section class="surface panel"><SectionTitle title="近期课程与 DDL" /><div v-for="(item, index) in studentTodos" :key="item.title" class="task-row"><b>0{{ index + 1 }}</b><div><strong>{{ item.title }}</strong><small>{{ item.due }}</small></div><el-tag :type="item.tone === 'coral' ? 'danger' : item.tone === 'amber' ? 'warning' : 'primary'">{{ item.due }}</el-tag></div></section>
-        <section class="surface panel student-progress-panel"><SectionTitle title="留学申请进度" /><el-steps class="student-progress-steps" direction="vertical" :active="4" size="small" :space="58"><el-step title="材料审核" description="学历公证与语言证明已通过" /><el-step title="申请提交" description="目标院校申请已完成" /><el-step title="收到 Offer" description="护理方向 · 条件录取" /><el-step title="签证办理" description="材料递交中" /><el-step title="行前准备" /><el-step title="已入学" /></el-steps></section>
+        <section class="surface panel"><SectionTitle title="近期课程与 DDL" /><div v-for="(item, index) in studentDdlRows" :key="item.title" class="task-row"><b>0{{ index + 1 }}</b><div><strong>{{ item.title }}</strong><small>{{ item.due }}</small></div><el-tag :type="item.tone === 'coral' ? 'danger' : item.tone === 'amber' ? 'warning' : 'primary'">{{ item.due }}</el-tag></div><el-empty v-if="!studentDdlRows.length" description="暂无近期课程与 DDL" /></section>
+        <section class="surface panel student-progress-panel"><SectionTitle title="留学申请进度" /><el-steps v-if="studentProgressSteps.length" class="student-progress-steps" direction="vertical" :active="studentProgressSteps.length - 1" size="small" :space="58"><el-step v-for="item in studentProgressSteps" :key="item.stage" :title="item.stage" :description="progressStatusText(item)" /></el-steps><el-empty v-else description="暂无申请进度" /></section>
       </div>
     </template>
 
@@ -1071,12 +1360,12 @@ async function loadFollowUpBars() {
     </template>
 
     <template v-else-if="role === 'STUDENT' && section === 'psych'">
-      <section class="psych-hero surface"><div><span class="badge">AI 对话式评估 · 一期</span><h2>今日心理状态</h2><p>服务性综合状态评分，不构成医疗诊断。</p></div><div class="score-ring"><strong>{{ psychScore }}</strong><span>/ 100</span><small>平静偏积极</small></div></section>
-      <div class="two-column"><section class="surface panel"><SectionTitle title="情绪趋势" desc="近7日综合状态变化" /><div class="line-chart"><div class="chart-y"><span>100</span><span>75</span><span>50</span><span>25</span></div><div class="chart-area"><svg viewBox="0 0 600 220" preserveAspectRatio="none"><polyline points="0,88 100,104 200,126 300,150 400,136 500,118 600,70" fill="none" stroke="#5a50b8" stroke-width="8" stroke-linecap="round" /></svg></div></div></section><section class="surface panel"><SectionTitle title="服务边界" /><ul class="boundary"><li>不提供医疗级心理建议或诊断</li><li>不承诺退费、转学等重大决定</li><li>遇到严重问题，引导联系专业心理咨询师</li><li>识别到高风险会即时通知负责员工</li></ul><el-button type="primary" round @click="startPsychChat">开始一次情绪对话</el-button><p v-if="studentProfile.latest_emotion_tag" class="muted">最近标签：{{ studentProfile.latest_emotion_tag }}</p></section></div>
+      <section class="psych-hero surface"><div><span class="badge">AI 对话式评估 · 一期</span><h2>今日心理状态</h2><p>服务性综合状态评分，不构成医疗诊断。</p></div><div class="score-ring"><strong>{{ psychScore }}</strong><span>/ 100</span><small>{{ studentProfile.latest_emotion_tag || '暂无评估' }}</small></div></section>
+      <div class="two-column"><section class="surface panel"><SectionTitle title="情绪趋势" desc="近 7 日评估记录的综合状态变化" /><div v-if="emotionTrendPoints" class="line-chart"><div class="chart-y"><span>100</span><span>75</span><span>50</span><span>25</span></div><div class="chart-area"><svg viewBox="0 0 600 220" preserveAspectRatio="none"><polyline :points="emotionTrendPoints" fill="none" stroke="#5a50b8" stroke-width="8" stroke-linecap="round" /></svg></div></div><el-empty v-else description="暂无情绪趋势数据" /></section><section class="surface panel"><SectionTitle title="服务边界" /><ul class="boundary"><li>不提供医疗级心理建议或诊断</li><li>不承诺退费、转学等重大决定</li><li>遇到严重问题，引导联系专业心理咨询师</li><li>识别到高风险会即时通知负责员工</li></ul><el-button type="primary" round @click="startPsychChat">开始一次情绪对话</el-button><p v-if="studentProfile.latest_emotion_tag" class="muted">最近标签：{{ studentProfile.latest_emotion_tag }}</p></section></div>
     </template>
 
     <template v-else-if="role === 'STUDENT' && section === 'feedback'">
-      <div class="two-column"><section class="surface panel"><SectionTitle title="提交反馈工单" desc="普通咨询和建议不会计入投诉周报。" /><el-form label-position="top"><el-form-item label="反馈类型"><el-select style="width:100%" model-value="服务咨询"><el-option v-for="item in ['服务咨询','课程安排','费用问题','住宿生活','投诉建议']" :key="item" :label="item" :value="item" /></el-select></el-form-item><el-form-item label="问题标题"><el-input v-model="ticketForm.title" placeholder="请简要描述问题" /></el-form-item><el-form-item label="详细描述"><el-input v-model="ticketForm.detail" type="textarea" :rows="5" /></el-form-item><el-checkbox v-model="ticketForm.formal">确认这是正式投诉（仅正式投诉进入投诉周报）</el-checkbox><el-button type="primary" style="margin-top:18px" @click="submitTicket">提交工单</el-button></el-form></section><section class="surface panel"><SectionTitle title="我的工单" /><div v-for="item in (studentTickets.length ? studentTickets : [{content:'宿舍网络连接不稳定',status:'处理中',create_time:'2026-10-12'},{content:'选课系统操作咨询',status:'已解决',create_time:'2026-09-28'}])" :key="item.id || item.content" class="ticket-row"><div><b>{{ item.content || item.t }}</b><small>{{ item.create_time || '2026-10-12' }}</small></div><el-tag :type="(item.status || item.s) === '已解决' ? 'success' : 'warning'">{{ item.status || item.s }}</el-tag></div></section></div>
+      <div class="two-column"><section class="surface panel"><SectionTitle title="提交反馈工单" desc="普通咨询和建议不会计入投诉周报。" /><el-form label-position="top"><el-form-item label="反馈类型"><el-select style="width:100%" v-model="ticketForm.type"><el-option v-for="item in ['服务咨询','课程安排','费用问题','住宿生活','投诉建议']" :key="item" :label="item" :value="item" /></el-select></el-form-item><el-form-item label="问题标题"><el-input v-model="ticketForm.title" placeholder="请简要描述问题" /></el-form-item><el-form-item label="详细描述"><el-input v-model="ticketForm.detail" type="textarea" :rows="5" /></el-form-item><el-checkbox v-model="ticketForm.formal">确认这是正式投诉（仅正式投诉进入投诉周报）</el-checkbox><el-button type="primary" style="margin-top:18px" @click="submitTicket">提交工单</el-button></el-form></section><section class="surface panel"><SectionTitle title="我的工单" /><div v-for="item in studentTickets" :key="item.id" class="ticket-row"><div><b>{{ item.content }}</b><small>{{ String(item.create_time || '').slice(0, 10) || '—' }}</small></div><el-tag :type="item.status === '已解决' ? 'success' : 'warning'">{{ item.status }}</el-tag></div><el-empty v-if="!studentTickets.length" description="暂无工单" /></section></div>
     </template>
 
     <template v-else-if="role === 'STUDENT' && section === 'academic'">
@@ -1089,12 +1378,12 @@ async function loadFollowUpBars() {
     </template>
 
     <template v-else-if="role === 'STUDENT' && section === 'life'">
-      <div class="life-grid"><article v-for="item in (lifeFaqRows.length ? lifeFaqRows : ['住宿指南','交通指南','医疗健康','法律与安全','紧急联系','生活常见问题'])" :key="item" class="surface life-card"><h3>{{ item }}</h3><p>查看当地生活知识、注意事项和服务渠道。</p><el-button text type="primary">查看指南</el-button></article></div>
+      <div class="life-grid"><article v-for="item in lifeFaqRows" :key="item.question" class="surface life-card"><h3>{{ item.question }}</h3><p>{{ item.answer }}</p><el-button text type="primary">查看指南</el-button></article><el-empty v-if="!lifeFaqRows.length" description="暂无生活指南" /></div>
     </template>
 
     <template v-else-if="role === 'STUDENT' && section === 'more'">
       <SectionTitle title="更多服务" desc="以下服务均为可选项目，不影响你已有的常规服务权益。" />
-      <div class="service-grid"><article v-for="item in (moreServiceRows.length ? moreServiceRows : ['学业规划','课程升级','背景提升','语言进阶','职业发展','定制服务'])" :key="item" class="surface service-card"><div class="service-icon">+</div><h3>{{ item }}</h3><p>基于当前阶段和学业表现，为你匹配合适的成长资源。</p><el-button round>了解详情</el-button></article></div>
+      <div class="service-grid"><article v-for="item in moreServiceRows" :key="item.code" class="surface service-card"><div class="service-icon">+</div><h3>{{ item.name }}</h3><p>{{ item.description }}</p><el-button round>了解详情</el-button></article><el-empty v-if="!moreServiceRows.length" description="暂无更多服务" /></div>
     </template>
 
     <template v-else-if="role === 'STUDENT' && section === 'profile'">
@@ -1105,7 +1394,7 @@ async function loadFollowUpBars() {
       <section class="welcome surface"><div><span class="badge">EMPLOYEE · {{ userStore.userInfo?.department || '—' }}</span><h2>{{ userStore.userInfo?.real_name || '员工' }}，上午好</h2><p>今日有 {{ reminders.todos_pending ?? 0 }} 项待办，{{ reminders.follow_ups_due ?? 0 }} 项待跟进，当前视图仅显示归属本人的数据。</p></div><el-button type="primary" round @click="customerDialog = true"><el-icon><Plus /></el-icon>录入新客户</el-button></section>
       <div class="stat-grid"><StatCard label="今日待办" :value="String(reminders.todos_pending ?? 0)" note="未完成待办" tone="coral" /><StatCard label="名下客户" :value="String(profileStats.total ?? customerRows.length)" :note="'本月新增 ' + (profileStats.month_new ?? 0)" tone="purple" /><StatCard label="跟进中 / 已转化" :value="(profileStats.following ?? 0) + ' / ' + (profileStats.signed ?? 0)" :note="'已流失 ' + (profileStats.lost ?? 0)" tone="lime" /><StatCard label="待我审批" :value="String(reminders.admin_services_pending ?? 0)" note="待审批行政服务" tone="amber" /></div>
       <div class="quick-grid"><button v-for="item in employeeMenu" :key="item.label" @click="item.action"><el-icon><component :is="item.icon" /></el-icon><span>{{ item.label }}</span><el-icon><ArrowRight /></el-icon></button></div>
-      <div class="two-column"><section class="surface panel"><SectionTitle title="今日待办" /><div v-for="item in todoRows.slice(0, 5)" :key="item.id" class="task-row"><b>!</b><div><strong>{{ item.title }}</strong><small>{{ todoStatusLabel[item.status] || item.status }} · 优先级{{ todoPriorityLabel[item.priority] || item.priority }}</small></div><el-button text type="primary">处理</el-button></div><el-empty v-if="!todoRows.length" description="暂无待办" /></section><section class="surface panel"><SectionTitle title="客户跟进提醒" /><div class="bars"><div v-for="(cnt, idx) in followUpBars" :key="idx" class="bar" :style="{ height: (cnt * 100 / barMax) + '%' }"></div></div></section></div>
+      <div class="two-column"><section class="surface panel"><SectionTitle title="今日待办" /><div v-for="item in todoRows.slice(0, 5)" :key="item.id" class="task-row"><b>!</b><div><strong>{{ item.title }}</strong><small>{{ todoStatusLabel[item.status] || item.status }} · 优先级{{ todoPriorityLabel[item.priority] || item.priority }}</small></div><el-button text type="primary" :disabled="item.status === 'done'" @click="handleTodo(item)">{{ item.status === 'done' ? '已完成' : '处理' }}</el-button></div><el-empty v-if="!todoRows.length" description="暂无待办" /></section><section class="surface panel"><SectionTitle title="客户跟进提醒" /><div class="bars"><div v-for="(cnt, idx) in followUpBars" :key="idx" class="bar" :style="{ height: (cnt * 100 / barMax) + '%' }"></div></div></section></div>
     </template>
 
     <template v-else-if="role === 'EMPLOYEE' && section === 'customers'">
@@ -1139,7 +1428,7 @@ async function loadFollowUpBars() {
     </template>
 
     <template v-else-if="role === 'EMPLOYEE' && section === 'convert'">
-      <div class="two-column"><section class="surface panel"><SectionTitle title="代客申请留学生" desc="一次审批：员工申请，管理层审批。" /><el-form label-position="top"><el-form-item label="选择意向客户"><el-select v-model="convertForm.customerId" style="width:100%"><el-option v-for="item in customerRows" :key="item.id" :label="item.name + '（' + item.project + '）'" :value="item.id" /></el-select></el-form-item><el-form-item label="转化项目"><el-select v-model="convertForm.project" style="width:100%"><el-option v-for="item in projects.slice(0,3)" :key="item.id" :label="item.title" :value="item.title" /></el-select></el-form-item><el-form-item label="转化理由 / 备注"><el-input v-model="convertForm.title" type="textarea" :rows="4" /></el-form-item><el-button type="primary" @click="submitConvertApply">提交审批申请</el-button></el-form></section><section class="surface panel"><SectionTitle title="学生流程审批" /><div v-for="item in approvalRows" :key="item.id || item.title" class="ticket-row"><div><b>{{ item.title || item.t }}</b><small>学生端提交 · {{ item.created_at }}</small></div><el-tag :type="item.status === 'approved' ? 'success' : 'warning'">{{ item.status || item.s }}</el-tag></div><el-empty v-if="!approvalRows.length" description="暂无待审批的学生流程" :image-size="60" /></section></div>
+      <div class="two-column"><section class="surface panel"><SectionTitle title="代客申请留学生" desc="一次审批：员工申请，管理层审批。" /><el-form label-position="top"><el-form-item label="选择意向客户"><el-select v-model="convertForm.customerId" style="width:100%"><el-option v-for="item in customerRows" :key="item.id" :label="item.name + '（' + item.project + '）'" :value="item.id" /></el-select></el-form-item><el-form-item label="转化项目"><el-select v-model="convertForm.project" style="width:100%"><el-option v-for="item in publicProjects.slice(0,3)" :key="item.id" :label="item.title" :value="item.title" /></el-select></el-form-item><el-form-item label="转化理由 / 备注"><el-input v-model="convertForm.title" type="textarea" :rows="4" /></el-form-item><el-button type="primary" @click="submitConvertApply">提交审批申请</el-button></el-form></section><section class="surface panel"><SectionTitle title="学生流程审批" /><div v-for="item in approvalRows" :key="item.id || item.title" class="ticket-row"><div><b>{{ item.title || item.t }}</b><small>学生端提交 · {{ item.created_at }}</small></div><el-tag :type="item.status === 'approved' ? 'success' : 'warning'">{{ item.status || item.s }}</el-tag></div><el-empty v-if="!approvalRows.length" description="暂无待审批的学生流程" :image-size="60" /></section></div>
     </template>
 
 <template v-else-if="role === 'EMPLOYEE' && section === 'reports'">
@@ -1156,16 +1445,16 @@ async function loadFollowUpBars() {
 <div v-if="activeReport"> <h2>{{ activeReport.report_date }}</h2> <p>{{ activeReport.content }}</p> </div>
 </template> </el-drawer> </template>
     <template v-else-if="role === 'EMPLOYEE' && section === 'org'">
-      <div class="two-column"><section class="surface panel"><SectionTitle title="组织架构查询" desc="联系方式默认脱敏，查看完整号码需要二次确认。" /><el-input :prefix-icon="Search" placeholder="搜索姓名或部门" /><el-tree :data="orgTree" :props="orgTreeProps" default-expand-all /><el-empty v-if="!orgTree.length" description="暂无组织数据" /></section><section class="surface panel"><SectionTitle title="新人指引" /><div v-for="item in ['办公环境快速导航','IT支持与设备使用','团队协作与沟通','公司文化与价值观','新人成长与资源支持']" :key="item" class="task-row"><b>0{{ item.length % 4 + 1 }}</b><div><strong>{{ item }}</strong><small>知识库 + 引导式流程</small></div><el-button text type="primary">打开</el-button></div><el-button type="primary" round @click="showOrgMembers">查看脱敏联系方式</el-button></section></div>
+      <div class="two-column"><section class="surface panel"><SectionTitle title="组织架构查询" desc="联系方式默认脱敏，查看完整号码需要二次确认。" /><el-tree :data="orgTree" :props="orgTreeProps" default-expand-all /><el-empty v-if="!orgTree.length" description="暂无组织数据" /><SectionTitle title="同事联系方式" desc="按姓名搜索，默认脱敏；查看完整号码需二次确认并记入操作日志。" /><el-input v-model="orgKeyword" :prefix-icon="Search" placeholder="搜索同事姓名" clearable @keyup.enter="loadOrgMembers" @clear="loadOrgMembers" /><el-button type="primary" @click="loadOrgMembers">搜索</el-button><div v-for="member in orgMembers" :key="member.user_id" class="task-row"><b>{{ (member.real_name || '?').slice(0, 1) }}</b><div><strong>{{ member.real_name }}</strong><small>{{ member.department || '—' }} · {{ revealedPhones[member.user_id] || member.phone_masked || '—' }}</small></div><el-button text type="primary" @click="revealPhone(member)">查看完整号码</el-button></div><el-empty v-if="!orgMembers.length" description="暂无同事数据" /></section><section class="surface panel"><SectionTitle title="新人指引" /><div v-for="item in ['办公环境快速导航','IT支持与设备使用','团队协作与沟通','公司文化与价值观','新人成长与资源支持']" :key="item" class="task-row"><b>0{{ item.length % 4 + 1 }}</b><div><strong>{{ item }}</strong><small>知识库 + 引导式流程</small></div><el-button text type="primary">打开</el-button></div></section></div>
     </template>
 
     <template v-else-if="role === 'EMPLOYEE' && section === 'todos'">
       <div class="stat-grid"><StatCard label="待办事项" :value="String(reminders.todos_pending ?? 0)" tone="amber" /><StatCard label="待跟进" :value="String(reminders.follow_ups_due ?? 0)" tone="coral" /><StatCard label="待审批" :value="String(reminders.admin_services_pending ?? 0)" tone="purple" /><StatCard label="心理预警" :value="String(reminders.psych_alerts_pending ?? 0)" tone="lime" /></div>
-      <section class="surface panel"><SectionTitle title="待办与消息" /><div v-for="item in todoRows" :key="item.id" class="task-row"><b>!</b><div><strong>{{ item.title }}</strong><small>{{ todoStatusLabel[item.status] || item.status }} · 优先级{{ todoPriorityLabel[item.priority] || item.priority }}</small></div><el-button text type="primary">处理</el-button></div><el-empty v-if="!todoRows.length" description="暂无待办" /></section>
+      <section class="surface panel"><SectionTitle title="待办与消息" /><div v-for="item in todoRows" :key="item.id" class="task-row"><b>!</b><div><strong>{{ item.title }}</strong><small>{{ todoStatusLabel[item.status] || item.status }} · 优先级{{ todoPriorityLabel[item.priority] || item.priority }}</small></div><el-button text type="primary" :disabled="item.status === 'done'" @click="handleTodo(item)">{{ item.status === 'done' ? '已完成' : '处理' }}</el-button></div><el-empty v-if="!todoRows.length" description="暂无待办" /></section>
     </template>
 
     <template v-else-if="role === 'EMPLOYEE' && section === 'profile'">
-      <section class="surface profile-card"><SectionTitle title="账号资料" /><el-form label-position="top"><div class="form-grid"><el-form-item label="姓名"><el-input :model-value="userStore.userInfo?.real_name || '—'" /></el-form-item><el-form-item label="手机号"><el-input :model-value="userStore.userInfo?.username || '—'" /></el-form-item><el-form-item label="部门"><el-input :model-value="userStore.userInfo?.department || '—'" /></el-form-item><el-form-item label="企业微信"><el-input :model-value="userStore.userInfo?.contact_info || '—'" /></el-form-item></div><el-button type="primary" @click="confirmWrite('确认保存个人信息修改吗？', saveEmployeeProfile)">保存修改</el-button><el-button @click="confirmWrite('确认修改密码吗？', () => notifySuccess('密码修改入口已打开'))">修改密码</el-button></el-form></section>
+      <section class="surface profile-card"><SectionTitle title="账号资料" /><el-form label-position="top"><div class="form-grid"><el-form-item label="姓名"><el-input :model-value="userStore.userInfo?.real_name || '—'" /></el-form-item><el-form-item label="手机号"><el-input :model-value="userStore.userInfo?.username || '—'" /></el-form-item><el-form-item label="部门"><el-input :model-value="userStore.userInfo?.department || '—'" /></el-form-item><el-form-item label="企业微信"><el-input :model-value="userStore.userInfo?.contact_info || '—'" /></el-form-item></div><el-button type="primary" @click="confirmWrite('确认保存个人信息修改吗？', saveEmployeeProfile)">保存修改</el-button><el-button @click="changePassword">修改密码</el-button></el-form></section>
     </template>
 
     <template v-else-if="role === 'MANAGER' && section === 'home'">
@@ -1224,10 +1513,7 @@ async function loadFollowUpBars() {
         </section>
         <section class="surface panel">
           <SectionTitle title="近期预警与待办" />
-          <div v-for="item in ['综合转化部业绩偏低，完成率 45%','5 名客户超过 7 天未跟进','2 例心理预警需重点跟进','投诉周报已生成，3 起均在 24h 内闭环']" :key="item" class="task-row">
-            <b>!</b><div><strong>{{ item }}</strong><small>点击进入对应模块处理</small></div>
-            <el-button text type="primary">查看</el-button>
-          </div>
+          <el-empty description="暂无数据" />
         </section>
       </div>
     </template>
@@ -1431,12 +1717,14 @@ async function loadFollowUpBars() {
       </SectionTitle>
       <div class="toolbar surface">
         <el-input v-model="keyword" :prefix-icon="Search" placeholder="搜索姓名、手机号或项目" clearable />
-        <el-select model-value="全部员工" style="width:150px"><el-option label="全部员工" value="all" /><el-option v-for="emp in employeeRows" :key="emp.id" :label="emp.real_name" :value="emp.real_name" /></el-select>
-        <el-select model-value="全部状态" style="width:140px"><el-option label="全部状态" value="all" /><el-option label="跟进中" value="跟进中" /><el-option label="已签约" value="已签约" /></el-select>
-        <el-button @click="confirmWrite('确认对所选客户执行批量再分配吗？', reassignAll)">批量再分配</el-button>
+        <el-select v-model="customerOwnerFilter" style="width:150px"><el-option label="全部员工" value="all" /><el-option v-for="emp in employeeRows" :key="emp.id" :label="emp.real_name" :value="emp.id" /></el-select>
+        <el-select v-model="customerStatusFilter" style="width:140px"><el-option label="全部状态" value="all" /><el-option v-for="option in customerStatusOptions" :key="option.value" :label="option.label" :value="option.value" /></el-select>
+        <el-select v-model="reassignFromId" placeholder="原归属员工" style="width:150px"><el-option v-for="emp in employeeRows" :key="emp.id" :label="emp.real_name" :value="emp.id" /></el-select>
+        <el-select v-model="reassignToId" placeholder="目标员工" style="width:150px"><el-option v-for="emp in employeeRows" :key="emp.id" :label="emp.real_name" :value="emp.id" /></el-select>
+        <el-button @click="batchReassign">批量再分配</el-button>
       </div>
       <section class="surface table-card">
-        <el-table :data="filteredCustomers" @row-click="(row:any) => activeCustomer = row">
+        <el-table :data="filteredCustomers" @row-click="(row:any) => activeCustomer = row" @selection-change="onCustomerSelection">
           <el-table-column type="selection" width="48" />
           <el-table-column prop="name" label="客户" width="120" />
           <el-table-column prop="phone" label="手机号" width="125" />
@@ -1448,7 +1736,7 @@ async function loadFollowUpBars() {
           <el-table-column label="操作" width="150">
             <template #default="{ row }">
               <el-button text type="primary" @click.stop="activeCustomer = row">详情</el-button>
-              <el-button text @click.stop="confirmWrite('确认变更客户归属吗？', () => notifySuccess('客户归属已变更'))">改归属</el-button>
+              <el-button text @click.stop="openReassign(row)">改归属</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -1460,47 +1748,55 @@ async function loadFollowUpBars() {
           <div class="assessment"><div><small>新加坡项目</small><b>{{ activeCustomer.score }}</b><p>画像匹配结果、缺失信息和跟进建议。</p></div><div><small>中德项目</small><b>待确认</b><p>需要核实德语能力、实训接受度和无犯罪记录。</p></div></div>
           <h3>跟进与归属</h3>
           <p class="muted">当前跟进人：{{ activeCustomer.owner }} · 支持管理层变更归属</p>
-          <div class="drawer-actions"><el-button type="primary" @click="addActiveFollowUp">添加跟进</el-button><el-button @click="reassignOne(activeCustomer)">变更归属</el-button></div>
+          <div class="drawer-actions"><el-button type="primary" @click="addActiveFollowUp">添加跟进</el-button><el-button @click="openReassign(activeCustomer)">变更归属</el-button></div>
         </template>
       </el-drawer>
+      <el-dialog v-model="reassignDialog" title="变更客户归属" width="min(420px, 92vw)">
+        <p class="muted">客户：{{ reassignCustomer?.name || '—' }} · 当前跟进人：{{ employeeName(reassignCustomer?.owner_employee_id) }}</p>
+        <el-select v-model="reassignDialogTargetId" placeholder="请选择目标员工" style="width:100%"><el-option v-for="emp in employeeRows" :key="emp.id" :label="emp.real_name" :value="emp.id" /></el-select>
+        <template #footer>
+          <el-button @click="reassignDialog = false">取消</el-button>
+          <el-button type="primary" @click="confirmReassign">确认变更</el-button>
+        </template>
+      </el-dialog>
     </template>
 
     <template v-else-if="role === 'MANAGER' && section === 'approvals'">
       <SectionTitle title="审批任务" desc="统一处理员工转化申请、请假、日报补报和投诉处理，支持批量通过。">
         <el-button type="primary" @click="confirmWrite('确认批量通过所选申请吗？', batchApprove)">批量通过</el-button>
       </SectionTitle>
-      <div class="approval-filters"><el-radio-group model-value="全部"><el-radio-button value="全部">全部</el-radio-button><el-radio-button value="转化申请">转化申请</el-radio-button><el-radio-button value="请假">请假</el-radio-button><el-radio-button value="员工流程">员工流程</el-radio-button></el-radio-group></div>
+      <div class="approval-filters"><el-radio-group v-model="approvalFilter"><el-radio-button value="全部">全部</el-radio-button><el-radio-button value="转化申请">转化申请</el-radio-button><el-radio-button value="请假">请假</el-radio-button><el-radio-button value="员工流程">员工流程</el-radio-button></el-radio-group></div>
       <div class="approval-grid">
-        <article v-for="item in approvalRows" :key="item.id" class="surface approval-card">
+        <article v-for="item in filteredApprovalItems" :key="item.id" class="surface approval-card">
           <div class="approval-top"><el-checkbox :model-value="selectedApprovals.includes(item.id)" @change="(checked: any) => toggleApproval(item.id, !!checked)" /><el-tag>{{ approvalBizLabel[item.biz_type] || item.biz_type || '审批' }}</el-tag><el-tag :type="item.status === 'approved' ? 'success' : item.status === 'rejected' ? 'info' : 'warning'">{{ approvalStatusLabel[item.status] || item.status }}</el-tag></div>
           <h3>{{ item.title || (item.biz_type + ' #' + item.id) }}</h3>
           <p>提交时间：{{ (item.created_at || item.create_time || '—').toString().slice(0, 10) }} · 一次审批</p>
           <div><el-button type="primary" @click="confirmWrite('确认通过该申请吗？', () => approveItem(item))">通过</el-button><el-button @click="confirmWrite('确认驳回该申请吗？申请人可修改后重新提交。', () => rejectItem(item))">驳回</el-button><el-button text>查看详情</el-button></div>
         </article>
-        <el-empty v-if="!approvalRows.length" description="暂无待审批的申请" />
+        <el-empty v-if="!filteredApprovalItems.length" description="暂无待审批的申请" />
       </div>
     </template>
 
     <template v-else-if="role === 'MANAGER' && section === 'employees'">
-      <SectionTitle title="员工账号与权限" desc="一期不设置独立人事角色，员工账号和状态在此统一管理。"><el-button type="primary" :icon="Plus">创建员工账号</el-button></SectionTitle>
-      <section class="surface table-card"><el-table :data="employeeRows"><el-table-column prop="real_name" label="员工" /><el-table-column prop="department" label="部门" /><el-table-column label="角色"><template #default="{ row }">{{ row.employee_role || (row.user_type === 'MANAGER' ? '管理层' : '普通员工') }}</template></el-table-column><el-table-column label="本月客户" width="110"><template #default>—</template></el-table-column><el-table-column prop="status" label="状态" /><el-table-column label="操作"><template #default><el-button text type="primary">权限</el-button></template></el-table-column></el-table><el-empty v-if="!employeeRows.length" description="暂无员工账号" /></section>
+      <SectionTitle title="员工账号与权限" desc="一期不设置独立人事角色，员工账号和状态在此统一管理。"><el-button type="primary" :icon="Plus" @click="openCreateUser">创建员工账号</el-button></SectionTitle>
+      <section class="surface table-card"><el-table :data="employeeRows"><el-table-column prop="real_name" label="员工" /><el-table-column prop="department" label="部门" /><el-table-column label="角色"><template #default="{ row }">{{ row.employee_role || (row.user_type === 'MANAGER' ? '管理层' : '普通员工') }}</template></el-table-column><el-table-column label="本月客户" width="110"><template #default>—</template></el-table-column><el-table-column prop="status" label="状态" /><el-table-column label="操作"><template #default="{ row }"><el-button text type="primary" @click="openPermissionConfig(row.id)">权限</el-button></template></el-table-column></el-table><el-empty v-if="!employeeRows.length" description="暂无员工账号" /></section>
     </template>
 
     <template v-else-if="role === 'MANAGER' && section === 'permissions'">
-      <section class="surface panel permission-panel"><SectionTitle title="权限项配置" desc="一期使用 user_type 粗判和数据隔离，权限项配置界面为管理层工具。" /><el-form label-position="top"><el-form-item label="选择用户"><el-select v-model="permUserId" style="width:100%" placeholder="选择员工"><el-option v-for="u in employeeRows" :key="u.id" :label="(u.real_name || '—') + ' · ' + (u.department || u.user_type || '')" :value="u.id" /></el-select></el-form-item><el-checkbox-group v-model="permChecked"><el-checkbox value="manager.approve_convert">审批转化申请</el-checkbox><el-checkbox value="manager.view_all_crm">查看全部客户</el-checkbox><el-checkbox value="manager.business_dashboard">经营看板</el-checkbox><el-checkbox value="manager.view_reports">查看智能报告</el-checkbox><el-checkbox value="manager.permission_config">权限配置</el-checkbox></el-checkbox-group><el-button type="primary" style="margin-top:22px" @click="confirmWrite('确认保存权限配置吗？', savePermissions)">保存权限配置</el-button></el-form></section>
+      <section class="surface panel permission-panel"><SectionTitle title="权限项配置" desc="一期使用 user_type 粗判和数据隔离，权限项配置界面为管理层工具。" /><el-form label-position="top"><el-form-item label="选择用户"><el-select v-model="permissionUserId" filterable placeholder="请选择用户" style="width:100%"><el-option v-for="emp in employeeRows" :key="emp.id" :label="(emp.real_name || '—') + ' · ' + (emp.department || emp.employee_role || (emp.user_type === 'MANAGER' ? '管理层' : '普通员工'))" :value="emp.id" /></el-select></el-form-item><el-empty v-if="!employeeRows.length" description="暂无员工账号" /><el-checkbox-group v-model="permissionDraft"><el-checkbox v-for="perm in permissionOptions" :key="perm.key" :value="perm.key">{{ perm.label }}</el-checkbox></el-checkbox-group><el-button type="primary" style="margin-top:22px" @click="confirmWrite('确认保存权限配置吗？', savePermissionConfig)">保存权限配置</el-button></el-form></section>
     </template>
 
     <template v-else-if="role === 'MANAGER' && section === 'logs'">
       <SectionTitle title="消息中心与操作日志" desc="展示审批结果、预警通知、系统公告和关键操作记录。" />
-      <div class="two-column"><section class="surface panel"><SectionTitle title="消息中心" /><div v-for="item in notificationRows" :key="item.id" class="task-row"><b>!</b><div><strong>{{ item.title || item.content || '站内通知' }}</strong><small>{{ item.type || '系统' }} · {{ String(item.created_at || '').slice(11, 16) || '刚刚' }}</small></div></div><el-empty v-if="!notificationRows.length" description="暂无消息" /></section><section class="surface panel"><SectionTitle title="关键操作日志" desc="来自 GET /operation-logs 的真实操作记录" /><el-table :data="operationRows.slice(0, 20)"><el-table-column prop="created_at" label="时间" width="160"><template #default="{ row }">{{ (row.created_at || '—').toString().slice(0, 16) }}</template></el-table-column><el-table-column prop="module" label="模块" width="110" /><el-table-column prop="action" label="操作" /><el-table-column prop="user_id" label="操作人ID" width="100" /></el-table><el-empty v-if="!operationRows.length" description="暂无操作日志" /></section></div>
+      <div class="two-column"><section class="surface panel"><SectionTitle title="消息中心" /><el-button v-if="notificationRows.length" text type="primary" @click="markAllNotifications">全部已读</el-button><div v-for="item in notificationRows" :key="item.id" class="task-row" style="cursor: pointer" @click="markNotification(item)"><b>{{ item.is_read ? '✓' : '!' }}</b><div><strong>{{ item.title || item.content || '站内通知' }}</strong><small>{{ item.type || '系统' }} · {{ String(item.created_at || '').slice(11, 16) || '刚刚' }} · {{ item.is_read ? '已读' : '未读' }}</small></div></div><el-empty v-if="!notificationRows.length" description="暂无消息" /></section><section class="surface panel"><SectionTitle title="关键操作日志" /><div v-for="log in operationLogRows" :key="log.id" class="task-row"><b>•</b><div><strong>{{ (logModuleLabel[log.module] || log.module) + ' · ' + (logActionLabel[log.action] || log.action) }}</strong><small>{{ operatorName(log.user_id) }} · {{ String(log.created_at || '').slice(0, 16).replace('T', ' ') || '—' }}</small></div></div><el-empty v-if="!operationLogRows.length" description="暂无操作日志" /></section></div>
     </template>
 
     <template v-else-if="role === 'PROSPECT' && section === 'courses'">
-      <SectionTitle title="课程与项目" desc="登录后可提交报名咨询。" /><div class="service-grid"><article v-for="item in projects.slice(0,4)" :key="item.id" class="surface service-card"><div class="service-icon">{{ item.category.slice(0,2) }}</div><h3>{{ item.title }}</h3><p>{{ item.summary }}</p><el-button type="primary" round @click="router.push('/projects/' + item.id)">了解并咨询</el-button></article></div>
+      <SectionTitle title="课程与项目" desc="登录后可提交报名咨询。" /><div class="service-grid"><article v-for="item in publicProjects.slice(0,4)" :key="item.id" class="surface service-card"><div class="service-icon">{{ item.category.slice(0,2) }}</div><h3>{{ item.title }}</h3><p>{{ item.summary }}</p><el-button type="primary" round @click="router.push('/projects/' + item.id)">了解并咨询</el-button></article></div>
     </template>
 
     <template v-else-if="role === 'PROSPECT' && section === 'events'">
-      <SectionTitle title="活动报名" desc="已登录，可直接报名近期活动。" /><div class="event-list"><div v-for="item in events.slice(0,3)" :key="item.id" class="surface ticket-row"><div><b>{{ item.title }}</b><small>{{ item.date }} · {{ item.format }}</small></div><el-button type="primary" round @click="registerEvent(item)">报名</el-button></div></div>
+      <SectionTitle title="活动报名" desc="已登录，可直接报名近期活动。" /><div class="event-list"><div v-for="item in publicEvents.slice(0,3)" :key="item.id" class="surface ticket-row"><div><b>{{ item.title }}</b><small>{{ item.date }} · {{ item.format }}</small></div><el-button type="primary" round @click="applyEvent(item)">报名</el-button></div></div>
     </template>
 
     <template v-else-if="role === 'PROSPECT' && section === 'consult'">
@@ -1542,14 +1838,7 @@ async function loadFollowUpBars() {
       <section class="surface profile-card"><SectionTitle title="模块详情" /><p class="muted">该页面已按当前角色和模块建立完整结构。后续接入对应接口时，将替换数据来源和操作处理。</p><el-button type="primary" @click="router.push('/app/' + role.toLowerCase() + '/home')">返回工作台</el-button></section>
     </template>
   </div>
-    <el-dialog v-model="orgMemberDialog" title="脱敏联系方式（查看完整号码将写入操作日志）" width="min(680px, 94vw)">
-      <el-table :data="orgMembers" size="small">
-        <el-table-column prop="real_name" label="姓名" width="110" />
-        <el-table-column prop="department" label="部门" width="130"><template #default="{ row }">{{ row.department || '—' }}</template></el-table-column>
-        <el-table-column label="电话" width="180"><template #default="{ row }">{{ revealedPhones[row.user_id] || row.phone_masked || '—' }}</template></el-table-column>
-        <el-table-column label="操作" width="140"><template #default="{ row }"><el-button v-if="!revealedPhones[row.user_id]" text type="primary" @click="revealMemberPhone(row)">查看完整号码</el-button><el-tag v-else size="small" type="success">已查看</el-tag></template></el-table-column>
-      </el-table>
-    </el-dialog>
+    <el-dialog v-model="createUserDialog" title="创建员工账号" width="min(520px, 94vw)"><el-form label-position="top"><el-form-item label="真实姓名"><el-input v-model="createUserForm.real_name" placeholder="请输入真实姓名" /></el-form-item><el-form-item label="登录用户名"><el-input v-model="createUserForm.username" placeholder="3-50 位，需唯一" /></el-form-item><el-form-item label="手机号"><el-input v-model="createUserForm.phone" placeholder="选填，需唯一" /></el-form-item><el-form-item label="初始密码"><el-input v-model="createUserForm.password" type="password" show-password placeholder="至少 6 位" /></el-form-item><el-form-item label="账号类型"><el-radio-group v-model="createUserForm.user_type"><el-radio value="EMPLOYEE">普通员工</el-radio><el-radio value="MANAGER">管理层</el-radio></el-radio-group></el-form-item><el-form-item label="部门"><el-input v-model="createUserForm.department" placeholder="选填，如 咨询部" /></el-form-item><el-form-item label="岗位角色"><el-input v-model="createUserForm.employee_role" placeholder="选填，如 留学顾问" /></el-form-item></el-form><template #footer><el-button @click="createUserDialog = false">取消</el-button><el-button type="primary" @click="submitCreateUser">确认创建</el-button></template></el-dialog>
     <el-dialog v-model="customerDialog" title="录入意向客户" width="min(620px, 94vw)">
       <el-form label-position="top">
         <div class="form-grid">

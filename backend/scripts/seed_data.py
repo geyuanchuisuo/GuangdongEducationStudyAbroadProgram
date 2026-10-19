@@ -53,6 +53,15 @@ random.seed(42)
 # 统一测试密码（所有账号均使用此密码，便于跨分支/跨环境登录）
 TEST_PASSWORD = "Test@123456"
 
+# 权限位：与 seed_supplement_v6_11_13.py 的 PERMS 逐字对齐
+# （ADMIN/MANAGER/EMPLOYEE 三组并集；前端 RoleWorkspace.vue 的 permissionOptions 依赖这些 key）
+# 不写进这里的话，drop_all 重建后 sys_user.permissions 全为 NULL，权限配置页永远勾不上任何项
+USER_PERMISSIONS = {
+    "ADMIN": ["system:manage", "user:manage", "report:view", "report:export", "approval:manage"],
+    "MANAGER": ["report:view", "report:export", "approval:manage", "employee:manage", "customer:view"],
+    "EMPLOYEE": ["customer:edit", "report:daily", "todo:view"],
+}
+
 # 4 个核心角色固定账号（手机号即 username），与 docs/测试账号.md 及 scripts/create_frontend_test_accounts.py 对齐
 CORE_ACCOUNTS = [
     # (username, user_type, real_name, employee_role, department)
@@ -103,6 +112,7 @@ async def seed():
                 phone=username,
                 employee_role=role,
                 department=dept,
+                permissions=USER_PERMISSIONS.get(ut),
                 status="正常",
             )
             session.add(u)
@@ -123,6 +133,7 @@ async def seed():
                 phone=f"139{i:08d}"[:11],
                 employee_role="普通员工" if ut == "EMPLOYEE" else ("管理层" if ut == "MANAGER" else ("管理员" if ut == "ADMIN" else None)),
                 department=random.choice(DEPARTMENTS) if ut in ("EMPLOYEE", "MANAGER", "ADMIN") else None,
+                permissions=USER_PERMISSIONS.get(ut),
                 status="正常",
             )
             session.add(u)
@@ -201,7 +212,22 @@ async def seed():
                 follow_type=random.choice(["电话", "微信", "面谈", "邮件"]),
                 content=f"跟进内容_{i}",
                 next_action=f"下一步_{i}",
-                next_date=datetime.now() + timedelta(days=random.randint(1, 30)),
+                # v6.11.14：约 1/3 落到今天或已过期，保证「客户跟进提醒」follow_ups_due > 0
+                # （原实现全为未来日期 → 员工/管理层首页该卡片永远显示 0）
+                next_date=datetime.now() + timedelta(days=random.randint(-20, 20)),
+            ))
+
+        # 核心员工账号（13810000003）固定补 3 条已到期跟进：随机分配无法保证命中，
+        # 否则员工首页「客户跟进提醒」在演示时仍可能为 0
+        core_employee_id = users[2].id
+        for i in range(3):
+            session.add(CrmFollowUp(
+                customer_id=random.choice(customer_ids),
+                employee_id=core_employee_id,
+                follow_type="电话",
+                content=f"到期回访_{i}",
+                next_action="回访确认最新意向",
+                next_date=datetime.now() - timedelta(days=i),
             ))
 
         # ── M2: CS ──
@@ -492,10 +518,19 @@ async def seed():
             approval_instances.append(inst)
         await session.flush()
 
+        # 演示需要：核心管理层账号（固定 13810000004）名下必须分到待审批任务，
+        # 否则 MANAGER 端「待我审批」(/approvals/pending) 恒空（审批按 approver_id 过滤）
+        core_manager = next((u for u in users if u.username == "13810000004"), None)
+        pending_seq = 0
         for inst in approval_instances:
+            approver_id = random.choice(manager_ids)
+            if inst.status == "pending":
+                pending_seq += 1
+                if core_manager and pending_seq % 3 == 0:
+                    approver_id = core_manager.id
             session.add(ApprovalTask(
                 instance_id=inst.id,
-                approver_id=random.choice(manager_ids),
+                approver_id=approver_id,
                 seq_no=1,
                 action=random.choice(["approved", "rejected"]) if inst.status != "pending" else None,
                 comment=f"审批意见_{inst.id}",
@@ -509,6 +544,25 @@ async def seed():
                 title=f"通知标题_{i}",
                 content=f"通知内容_{i}",
                 is_read=random.random() > 0.5,
+            ))
+
+        # 核心演示账号固定补站内通知（含未读/已读两种）：
+        # 随机分配命中概率低，会导致管理层「消息中心」长期为空、标记已读无处验证
+        core_notifications = [
+            # (接收人, 类型, 标题, 内容, 是否已读)
+            (users[3].id, "approval", "有 3 条日报补报待审批", "员工提交的日报补报申请已进入你的审批队列", False),
+            (users[3].id, "todo", "今日有客户待跟进", "请到「客户经营」按最后跟进时间查看明细", False),
+            (users[3].id, "system", "系统已更新到 v6.11.14", "本次更新修复了消息中心与客户跟进提醒", True),
+            (users[2].id, "todo", "你有一条待办即将到期", "请在今天内处理「客户回访」待办", False),
+            (users[2].id, "status", "客户状态已变更", "你负责的客户已流转为「意向强烈」", True),
+        ]
+        for uid, ntype, title, content, is_read in core_notifications:
+            session.add(SysNotification(
+                user_id=uid,
+                type=ntype,
+                title=title,
+                content=content,
+                is_read=is_read,
             ))
 
         for i in range(100):
@@ -536,14 +590,14 @@ async def seed():
     print("-" * 60)
     print(f"  用户: 120 (ADMIN/MANAGER/EMPLOYEE/STUDENT/PROSPECT)")
     print(f"  客户主表: 120, 待补全线索: 15")
-    print(f"  CRM线索: 110, 研判: 150, 跟进: 120")
+    print(f"  CRM线索: 110, 研判: 150, 跟进: 123（含 3 条核心员工已到期跟进）")
     print(f"  FAQ: 105, 会话: 110, 消息: 200, 意图: 100, 推荐日志: 150")
     print(f"  活动: 20, 报名: 100, 课程: 15")
     print(f"  组织架构: 10, 日报: 120, 待办: 100, 成绩: 100")
     print(f"  学生服务: 100, 心理画像: 100, 心理预警: 100, 反馈工单: 100, 工单AI分析: ~80")
     print(f"  学业: 100, 申请进度: 100")
     print(f"  报告: 20, 报告附件: ~30")
-    print(f"  系统事件: 100, 审批实例: 100, 审批任务: 100, 通知: 100, 操作日志: 100")
+    print(f"  系统事件: 100, 审批实例: 100, 审批任务: 100, 通知: 105（含核心账号 5 条）, 操作日志: 100")
     print("=" * 60)
 
 
