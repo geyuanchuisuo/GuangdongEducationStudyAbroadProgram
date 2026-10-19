@@ -8,7 +8,7 @@ Dify 一键初始化脚本（dify-init 容器入口）
   3. 添加 OpenAI-API-compatible 模型供应商
   4. 导入 dify/apps/ 下的所有应用 DSL yml（幂等）
   5. 为所有应用绑定模型
-  6. 输出 app key 到 dify/docker/app_keys.txt
+  6. 将 4 个 app key 写入 dify_app_keys 命名卷（backend 启动时自动读取，无需手工回填）
 
 依赖：httpx, pyyaml
 运行环境：dify-init 容器内（与 Dify api 同 docker 网络）
@@ -35,7 +35,7 @@ DIFY_MODEL_NAME = os.environ.get("DIFY_MODEL_NAME", "")
 AUTO_IMPORT = os.environ.get("DIFY_INIT_AUTO_IMPORT", "true").lower() == "true"
 AUTO_BIND = os.environ.get("DIFY_INIT_AUTO_BIND_MODEL", "true").lower() == "true"
 APPS_DIR = os.environ.get("DIFY_APPS_DIR", "/apps")
-APP_KEYS_FILE = os.environ.get("DIFY_APP_KEYS_FILE", "/output/app_keys.txt")
+APP_KEYS_FILE = os.environ.get("DIFY_APP_KEYS_FILE", "/output/app_keys.txt")  # compose 覆盖为 /shared/app_keys.env（dify_app_keys 命名卷）
 
 # 模型供应商标识（Dify 1.16 插件化：OpenAI-API-compatible 供应商 = 模型插件，三段式标识）
 MODEL_PROVIDER = "langgenius/openai_api_compatible/openai_api_compatible"
@@ -44,7 +44,7 @@ MARKETPLACE_API_URL = "https://marketplace.dify.ai"
 MODEL_MODE = "chat"  # 业务应用均用对话模型
 
 # 应用名 → backend 读取的环境变量名
-# app_keys.env 由 backend 容器以 `sh -c '. /run/dify-keys/app_keys.env'` 加载，
+# app_keys.env 由 backend 容器以 `sh -c 'set -a && . /run/dify-keys/app_keys.env && set +a'` 加载，
 # 键名必须是合法的 shell 变量名，不能直接用中文应用名。
 APP_KEY_ENV_NAMES = {
     "留学生智能管家": "DIFY_STUDENT_AGENT_KEY",
