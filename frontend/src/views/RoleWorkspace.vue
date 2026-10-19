@@ -17,6 +17,7 @@ import StatCard from '../components/StatCard.vue'
 import SectionTitle from '../components/SectionTitle.vue'
 import { REPORT_TYPES, typeName } from '../config/reports'
 import { platformApi, fallbackState } from '../api/platform'
+import { showMessage } from '../utils/request'
 import { useUserStore } from '../stores/user'
 
 const route = useRoute()
@@ -961,10 +962,11 @@ function metricRows(metrics: any): { key: string; value: any }[] {
   return rows
 }
 function notifySuccess(message: string) {
-  ElMessage['success'](message)
+  // v6.11.47：改走统一提示出口，与 axios 拦截器共用短时去重，避免同一条消息弹两条
+  showMessage('success', message)
 }
 function notifyInfo(message: string) {
-  ElMessage['info'](message)
+  showMessage('info', message)
 }
 
 const pageTitle = computed(() => {

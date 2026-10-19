@@ -761,11 +761,14 @@ async def seed():
                 sort_order=i,
             ))
 
-        # employee_id+report_date 为唯一约束：按员工轮转、天数递增，保证组合唯一
+        # employee_id+report_date 为唯一约束：按员工轮转、天数递增，保证组合唯一。
+        # v6.11.47：日期从「昨天」起算（原从今天起算），故意不给今天留种子日报——
+        # 否则可提交窗口（今天/昨天/前天）全被占满，员工端任何提交都只能收到
+        # 「已提交，请勿重复」的报错，无法验证「日报提交成功」链路。
         for i in range(120):
             session.add(EmployeeDailyReport(
                 employee_id=employee_ids[i % len(employee_ids)],
-                report_date=date.today() - timedelta(days=i // len(employee_ids)),
+                report_date=date.today() - timedelta(days=1 + i // len(employee_ids)),
                 content=DAILY_REPORT_CONTENTS[i % len(DAILY_REPORT_CONTENTS)],
             ))
 
