@@ -85,8 +85,15 @@ const employeeRows = ref<any[]>([])
 const selectedApprovals = ref<number[]>([])
 const approvalFilter = ref('全部')
 const updatedAtLabel = ref('—')
-// 客户来源渠道中文映射（后端 source_channel 枚举）
-const sourceLabel: Record<string, string> = { WEBSITE_REGISTER: '官网注册', CS_LEAD: '客服线索', EMPLOYEE_INPUT: '员工录入' }
+// 来源码两套并存：crm_lead.source 落库为小写（website/cs/employee），
+// 客户侧/访客侧用大写码（WEBSITE_REGISTER/CS_LEAD/EMPLOYEE_INPUT）。两套都映射，
+// 否则线索管理「来源」列会直接显示英文码（此前只映射了大写码，页面显示 website/cs）。
+const sourceLabel: Record<string, string> = {
+  website: '官网注册', cs: '客服线索', employee: '员工录入',
+  WEBSITE_REGISTER: '官网注册', CS_LEAD: '客服线索', EMPLOYEE_INPUT: '员工录入',
+}
+// 线索状态：crm_lead.status 落库为英文码（new/processing/converted/invalid）
+const leadStatusLabel: Record<string, string> = { new: '新线索', processing: '跟进中', converted: '已转化', invalid: '无效' }
 const todoStatusLabel: Record<string, string> = { pending: '待处理', in_progress: '处理中', done: '已完成' }
 const todoPriorityLabel: Record<string, string> = { low: '低', medium: '中', high: '高' }
 const logModuleLabel: Record<string, string> = { auth: '认证', crm: '客户', cs: '客服', employee: '员工', report: '日报', student: '学生', M3: '系统' }
@@ -371,6 +378,10 @@ async function loadPsychAlerts() {
   try { psychAlertRows.value = itemsOf(await platformApi.employee.listPsychAlerts({ page: 1, page_size: 50 })) } catch { psychAlertRows.value = [] }
 }
 const psychActionCN: Record<string, string> = { communicated: '已沟通', referred: '已转介', resolved: '已解决' }
+// 员工端「心理预警」独立页概览：仅统计本人负责学员的预警（v6.11.38）
+const psychPendingCount = computed(() => psychAlertRows.value.filter((a: any) => a.status === '未处理').length)
+const psychStudentCount = computed(() => new Set(psychAlertRows.value.map((a: any) => a.student_id)).size)
+const psychHandledCount = computed(() => psychAlertRows.value.filter((a: any) => a.status !== '未处理').length)
 function handlePsychAlertItem(alert: any, action: string) {
   confirmWrite('确认将该心理预警标记为「' + (psychActionCN[action] || action) + '」吗？将形成关怀记录。', async () => {
     try {
@@ -504,7 +515,12 @@ async function loadOperationLogs() {
 
 // 消息中心：此前通知行是纯 div，点了没反应；后端 PUT /notifications/{id}/read 一直没接
 async function markNotification(item: any) {
-  if (!item || item.is_read) return
+  if (!item) return
+  // 已读消息不再静默 return：此前直接返回、无任何提示，用户表现为「点了没反应」
+  if (item.is_read) {
+    notifyInfo('该消息已是已读状态')
+    return
+  }
   try {
     await platformApi.markNotificationRead(item.id)
     item.is_read = true
@@ -562,6 +578,8 @@ onMounted(async () => {
   if (role.value === 'MANAGER') {
     await loadApprovals()
     await loadOperationLogs()
+    // 管理层经营看板「近期预警与待办」面板的数据源（该面板此前是写死的 el-empty「暂无数据」）
+    try { todoRows.value = itemsOf(await platformApi.employee.listTodos({ page: 1, page_size: 10 })) } catch { todoRows.value = [] }
   }
   if (role.value === 'PROSPECT') {
     loadConsultRows()
@@ -1580,7 +1598,7 @@ function revealPhone(member: any) {
       <div class="toolbar surface"><el-input v-model="keyword" :prefix-icon="Search" placeholder="搜索姓名、手机号或项目" clearable /><el-button :icon="Download" @click="exportCsv('客户列表')">导出 CSV</el-button></div>
       <section class="surface table-card"><el-table :data="filteredCustomers" @row-click="(row:any) => activeCustomer = row"><el-table-column prop="name" label="客户" width="130" /><el-table-column prop="phone" label="手机号" width="130" /><el-table-column prop="project" label="意向项目" /><el-table-column prop="score" label="研判结论" width="110"><template #default="{ row }"><el-tag :type="row.score === '符合' ? 'success' : row.score === '待确认' ? 'warning' : 'info'">{{ row.score }}</el-tag></template></el-table-column><el-table-column prop="status" label="状态" width="110" /><el-table-column prop="owner" label="跟进人" width="100" /><el-table-column prop="last" label="最后跟进" width="100" /><el-table-column label="操作" width="180"><template #default="{ row }"><el-button text type="primary" @click.stop="activeCustomer = row">详情</el-button><el-button text type="danger" :icon="Delete" @click.stop="removeCustomer(row)" /></template></el-table-column></el-table></section>
       <section class="surface panel" style="margin-top:20px"><SectionTitle title="待补全线索" desc="访客项目咨询记录（pending_lead），补充手机号后可合并为正式客户" /><el-table :data="pendingLeadRows"><el-table-column prop="name" label="姓名" width="120" /><el-table-column prop="wechat" label="微信" width="130" /><el-table-column prop="raw_info" label="原始信息" /><el-table-column prop="status" label="状态" width="100" /><el-table-column label="操作" width="120"><template #default="{ row }"><el-button v-if="row.status !== 'merged' && !row.merged_customer_id" text type="primary" @click="mergePendingLeadRow(row)">合并</el-button><el-tag v-else size="small" type="success">已合并</el-tag></template></el-table-column></el-table><el-empty v-if="!pendingLeadRows.length" description="暂无待补全线索" /></section>
-      <section class="surface panel" style="margin-top:20px"><SectionTitle title="线索管理" desc="CRM 线索跟进与状态流转（GET /crm/leads）" /><el-table :data="leadRows"><el-table-column prop="name" label="姓名" width="110"><template #default="{ row }">{{ row.name || '—' }}</template></el-table-column><el-table-column prop="phone" label="手机号" width="130"><template #default="{ row }">{{ row.phone || row.wechat || '—' }}</template></el-table-column><el-table-column prop="status" label="状态" width="110" /><el-table-column prop="source" label="来源" width="110"><template #default="{ row }">{{ sourceLabel[row.source] || row.source || '—' }}</template></el-table-column><el-table-column label="操作" width="200"><template #default="{ row }"><el-button text type="primary" @click="addLeadFollowUp(row)">添加跟进</el-button><el-button text @click="changeLeadStatus(row)">变更状态</el-button></template></el-table-column></el-table><el-empty v-if="!leadRows.length" description="暂无线索" /></section>
+      <section class="surface panel" style="margin-top:20px"><SectionTitle title="线索管理" desc="CRM 线索跟进与状态流转（GET /crm/leads）" /><el-table :data="leadRows"><el-table-column prop="name" label="姓名" width="100"><template #default="{ row }">{{ row.name || '—' }}</template></el-table-column><el-table-column prop="phone" label="手机号" width="125"><template #default="{ row }">{{ row.phone || '—' }}</template></el-table-column><el-table-column prop="wechat" label="微信" width="130"><template #default="{ row }">{{ row.wechat || '—' }}</template></el-table-column><el-table-column prop="source" label="来源" width="100"><template #default="{ row }">{{ sourceLabel[row.source] || row.source || '—' }}</template></el-table-column><el-table-column prop="status" label="状态" width="100"><template #default="{ row }"><el-tag size="small" :type="row.status === 'converted' ? 'success' : row.status === 'invalid' ? 'info' : 'warning'">{{ leadStatusLabel[row.status] || row.status || '—' }}</el-tag></template></el-table-column><el-table-column prop="raw_input" label="原始信息" min-width="200" show-overflow-tooltip><template #default="{ row }">{{ row.raw_input || '—' }}</template></el-table-column><el-table-column prop="background_info" label="背景信息" min-width="180" show-overflow-tooltip><template #default="{ row }">{{ row.background_info || '—' }}</template></el-table-column><el-table-column label="操作" width="190"><template #default="{ row }"><el-button text type="primary" @click="addLeadFollowUp(row)">添加跟进</el-button><el-button text @click="changeLeadStatus(row)">变更状态</el-button></template></el-table-column></el-table><el-empty v-if="!leadRows.length" description="暂无线索" /></section>
       <el-drawer v-model="activeCustomer" title="客户详情" size="min(620px, 94vw)"><template v-if="activeCustomer"><div class="customer-head"><div><h2>{{ activeCustomer.name }}</h2><p>{{ activeCustomer.project }} · {{ activeCustomer.phone }}</p></div><el-tag type="success">{{ activeCustomer.score }}</el-tag></div><h3>研判结果</h3><div class="assessment"><div><small>新加坡项目</small><b>{{ activeCustomer.score ?? '—' }}</b><p>研判结论来自客户研判记录（customer_assessment），如需详细维度可前往客户研判工具重新执行。</p></div><div><small>中德项目</small><b>{{ activeCustomer.score ?? '—' }}</b><p>双产品独立研判结果以研判工具输出为准，本处展示该客户最新研判结论。</p></div></div><h3>推荐项目</h3><el-tag v-for="item in customerRecommendList" :key="item" class="recommend">{{ item }}</el-tag><el-empty v-if="!customerRecommendList.length" description="暂无推荐项目" :image-size="48" /><h3>跟进记录</h3><el-timeline v-if="activeFollowUps.length"><el-timeline-item v-for="fu in activeFollowUps" :key="fu.id">{{ fu.content || fu.note || '跟进记录' }} · {{ String(fu.create_time || fu.created_at || '').slice(0, 10) }}</el-timeline-item></el-timeline><el-empty v-else description="暂无跟进记录" :image-size="48" /><div class="drawer-actions"><el-button type="primary" @click="addActiveFollowUp">添加跟进</el-button><el-button @click="updateActiveStatus">更新状态</el-button></div></template></el-drawer>
     </template>
 
@@ -1629,6 +1647,11 @@ function revealPhone(member: any) {
     <template v-else-if="role === 'EMPLOYEE' && section === 'todos'">
       <div class="stat-grid"><StatCard label="待办事项" :value="String(reminders.todos_pending ?? 0)" tone="amber" /><StatCard label="待跟进" :value="String(reminders.follow_ups_due ?? 0)" tone="coral" /><StatCard label="待审批" :value="String(reminders.admin_services_pending ?? 0)" tone="purple" /><StatCard label="心理预警" :value="String(reminders.psych_alerts_pending ?? 0)" tone="lime" /></div>
       <section class="surface panel"><SectionTitle title="待办与消息" /><div v-for="item in todoRows" :key="item.id" class="task-row"><b>!</b><div><strong>{{ item.title }}</strong><small>{{ todoStatusLabel[item.status] || item.status }} · 优先级{{ todoPriorityLabel[item.priority] || item.priority }}</small></div><el-button text type="primary" :disabled="item.status === 'done'" @click="handleTodo(item)">{{ item.status === 'done' ? '已完成' : '处理' }}</el-button></div><el-empty v-if="!todoRows.length" description="暂无待办" /><SectionTitle title="消息通知" desc="站内提示消息，点击标记已读。" /><el-button v-if="notificationRows.length" text type="primary" @click="markAllNotifications">全部已读</el-button><div v-for="item in notificationRows" :key="item.id" class="task-row" style="cursor: pointer" @click="markNotification(item)"><b>{{ item.is_read ? '✓' : '!' }}</b><div><strong>{{ item.title || item.content || '站内通知' }}</strong><small>{{ item.type || '系统' }} · {{ String(item.created_at || '').slice(0, 16).replace('T', ' ') || '刚刚' }} · {{ item.is_read ? '已读' : '未读' }}</small></div></div><el-empty v-if="!notificationRows.length" description="暂无提示消息" /><SectionTitle title="心理预警处理" desc="负责学生的心理预警（情绪低分自动生成），处理后形成关怀记录。" /><div v-for="alert in psychAlertRows" :key="alert.id" class="task-row"><b>心</b><div><strong>{{ alert.student_name || ('学生#' + alert.student_id) }}</strong><small>{{ alert.risk_level }} · {{ alert.trigger_reason }} · {{ String(alert.create_time || '').slice(0, 10) }}</small></div><el-tag v-if="alert.status !== '未处理'" type="success" size="small">{{ psychActionCN[alert.handled_action] || alert.status }}</el-tag><template v-else><el-button text type="primary" @click="handlePsychAlertItem(alert, 'communicated')">已沟通</el-button><el-button text @click="handlePsychAlertItem(alert, 'referred')">已转介</el-button><el-button text @click="handlePsychAlertItem(alert, 'resolved')">已解决</el-button></template></div><el-empty v-if="!psychAlertRows.length" description="暂无心理预警" /></section>
+    </template>
+
+    <template v-else-if="role === 'EMPLOYEE' && section === 'psych-alerts'">
+      <div class="stat-grid"><StatCard label="未处理预警" :value="String(psychPendingCount)" note="本人负责学员" tone="coral" /><StatCard label="涉及学员" :value="String(psychStudentCount)" note="名下有预警的在读学员" tone="lime" /><StatCard label="已形成记录" :value="String(psychHandledCount)" note="已沟通 / 已转介 / 已解决" tone="purple" /></div>
+      <section class="surface panel"><SectionTitle title="心理预警处理" desc="本人负责学员的心理预警（情绪低分自动生成），处理后形成关怀记录。仅展示归属本人的在读学员。" /><div v-for="alert in psychAlertRows" :key="alert.id" class="task-row"><b>心</b><div><strong>{{ alert.student_name || ('学生#' + alert.student_id) }}</strong><small>{{ alert.risk_level }} · {{ alert.trigger_reason }} · {{ String(alert.create_time || '').slice(0, 10) }}</small></div><el-tag v-if="alert.status !== '未处理'" type="success" size="small">{{ psychActionCN[alert.handled_action] || alert.status }}</el-tag><template v-else><el-button text type="primary" @click="handlePsychAlertItem(alert, 'communicated')">已沟通</el-button><el-button text @click="handlePsychAlertItem(alert, 'referred')">已转介</el-button><el-button text @click="handlePsychAlertItem(alert, 'resolved')">已解决</el-button></template></div><el-empty v-if="!psychAlertRows.length" description="暂无本人负责学员的心理预警" /></section>
     </template>
 
     <template v-else-if="role === 'EMPLOYEE' && section === 'profile'">
@@ -1690,8 +1713,10 @@ function revealPhone(member: any) {
           </el-table>
         </section>
         <section class="surface panel">
-          <SectionTitle title="近期预警与待办" />
-          <el-empty description="暂无数据" />
+          <SectionTitle title="近期预警与待办" desc="归属本人的待办与负责学生的心理预警，可直接处理。" />
+          <div v-for="item in todoRows" :key="'todo-' + item.id" class="task-row"><b>!</b><div><strong>{{ item.title }}</strong><small>{{ todoStatusLabel[item.status] || item.status }} · 优先级{{ todoPriorityLabel[item.priority] || item.priority }}</small></div><el-button text type="primary" :disabled="item.status === 'done'" @click="handleTodo(item)">{{ item.status === 'done' ? '已完成' : '处理' }}</el-button></div>
+          <div v-for="alert in psychAlertRows.slice(0, 5)" :key="'alert-' + alert.id" class="task-row"><b>心</b><div><strong>{{ alert.student_name || ('学生#' + alert.student_id) }}</strong><small>{{ alert.risk_level }} · {{ alert.trigger_reason }}</small></div><el-tag v-if="alert.status !== '未处理'" type="success" size="small">{{ psychActionCN[alert.handled_action] || alert.status }}</el-tag><template v-else><el-button text type="primary" @click="handlePsychAlertItem(alert, 'communicated')">已沟通</el-button><el-button text @click="handlePsychAlertItem(alert, 'referred')">已转介</el-button><el-button text @click="handlePsychAlertItem(alert, 'resolved')">已解决</el-button></template></div>
+          <el-empty v-if="!todoRows.length && !psychAlertRows.length" description="暂无待办与预警" />
         </section>
       </div>
     </template>

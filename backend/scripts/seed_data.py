@@ -493,6 +493,41 @@ async def seed():
             customers.append(c)
         await session.flush()
 
+        # v6.11.38：已签约/已入学客户已转为在读学员，sys_user_id 必须指向真实 STUDENT 用户。
+        # 此前统一指向 PROSPECT 用户，而心理预警的 student_id 取的是 STUDENT 用户，
+        # 两者集合不相交，导致员工端「心理预警」按 Customer.sys_user_id 关联学员时恒为空。
+        converted_customers = [c for c in customers if c.status in ("SIGNED", "ENROLLED")]
+        for idx, c in enumerate(converted_customers[: len(student_ids)]):
+            c.sys_user_id = student_ids[idx]
+
+        # 核心员工（13810000003）名下固定补 3 位「在读学员」：状态 ENROLLED 且
+        # sys_user_id 指向真实 STUDENT 用户，保证员工端「心理预警」能查到本人负责学员。
+        core_students = [
+            # (姓名, 手机号, 性别, 年龄, 学历)
+            ("苏若彤", "13700002001", "女", 20, "高中"),
+            ("郑一鸣", "13700002002", "男", 21, "大专"),
+            ("何静怡", "13700002003", "女", 19, "高中"),
+        ]
+        core_student_user_ids: list[int] = []
+        for idx, (sname, sphone, sgender, sage, sedu) in enumerate(core_students):
+            suid = student_ids[idx % len(student_ids)]
+            session.add(Customer(
+                phone=sphone,
+                name=sname,
+                gender=sgender,
+                age=sage,
+                education=sedu,
+                study_intent="在读学员（已入学，由本人负责日常学习与生活关怀）",
+                source_channel=SOURCE_CHANNELS[idx % len(SOURCE_CHANNELS)],
+                owner_employee_id=core_employee_id,
+                status="ENROLLED",
+                phone_status="normal",
+                first_register_at=datetime.now() - timedelta(days=(idx + 1) * 30),
+                sys_user_id=suid,
+            ))
+            core_student_user_ids.append(suid)
+        await session.flush()
+
         customer_ids = [c.id for c in customers]
 
         # ── PendingLead（待补全线索） ──
@@ -753,6 +788,23 @@ async def seed():
                 teacher_id=random.choice(employee_ids + manager_ids),
             ))
 
+        # 核心员工名下在读学员的固定心理预警（v6.11.38）：保证员工端「心理预警」
+        # 能看到本人负责学员的预警，且不依赖随机分配结果，可复现。
+        core_psych_alerts = [
+            ("连续三次评估情绪低落，建议辅导员介入", "中", "未处理"),
+            ("临近考试压力上升，情绪评分持续下滑", "高", "未处理"),
+            ("自述睡眠质量差、焦虑明显", "低", "未处理"),
+        ]
+        for idx, suid in enumerate(core_student_user_ids):
+            reason, level, st = core_psych_alerts[idx % len(core_psych_alerts)]
+            session.add(StudentPsychAlert(
+                student_id=suid,
+                risk_level=level,
+                trigger_reason=reason,
+                status=st,
+                teacher_id=core_employee_id,
+            ))
+
         tickets = []
         for i in range(100):
             t = StudentFeedbackTicket(
@@ -959,13 +1011,13 @@ async def seed():
     print(f"  其他账号: user000~user115（密码同上）")
     print("-" * 60)
     print(f"  用户: 120 (ADMIN/MANAGER/EMPLOYEE/STUDENT/PROSPECT)")
-    print(f"  客户主表: 124（含核心员工 13810000003 名下 4 个意向客户）, 待补全线索: 15")
+    print(f"  客户主表: 127（含核心员工 13810000003 名下 4 个意向客户 + 3 位在读学员）, 待补全线索: 15")
     print(f"  CRM线索: 110, 研判: 150, 跟进: 123（含 3 条核心员工已到期跟进）")
     print(f"  FAQ: 105, 会话: 110, 消息: 200, 意图: 100, 推荐日志: 150")
     print(f"  活动: 20, 报名: 100, 业务项目: {len(BUSINESS_PROJECTS)}（四条核心业务线）")
     print(f"  政策资讯: {policy_seed_count}")
     print(f"  组织架构: 10, 日报: 120, 待办: 100, 成绩: 100")
-    print(f"  学生服务: 100, 心理画像: 100, 心理预警: 100, 反馈工单: 100, 工单AI分析: ~80")
+    print(f"  学生服务: 100, 心理画像: 100, 心理预警: 103（含核心员工名下在读学员 3 条）, 反馈工单: 100, 工单AI分析: ~80")
     print(f"  学业: 100, 申请进度: 100")
     print(f"  报告: 20, 报告附件: ~30")
     print(f"  系统事件: 100, 审批实例: 100, 审批任务: 100, 通知: 105（含核心账号 5 条）, 操作日志: 100")
