@@ -43,6 +43,16 @@ MODEL_PLUGIN_ID = "langgenius/openai_api_compatible"
 MARKETPLACE_API_URL = "https://marketplace.dify.ai"
 MODEL_MODE = "chat"  # 业务应用均用对话模型
 
+# 应用名 → backend 读取的环境变量名
+# app_keys.env 由 backend 容器以 `sh -c '. /run/dify-keys/app_keys.env'` 加载，
+# 键名必须是合法的 shell 变量名，不能直接用中文应用名。
+APP_KEY_ENV_NAMES = {
+    "留学生智能管家": "DIFY_STUDENT_AGENT_KEY",
+    "企业员工助手": "DIFY_EMPLOYEE_AGENT_KEY",
+    "粤教客服Agent": "DIFY_CUSTOMER_AGENT_KEY",
+    "智能报告": "DIFY_REPORT_AGENT_KEY",
+}
+
 
 def log(msg: str) -> None:
     print(f"[dify-init] {msg}", flush=True)
@@ -404,10 +414,10 @@ def export_app_keys(client: httpx.Client, token: str, apps: dict) -> None:
     headers = build_headers(client, token)
     lines = [
         "# Dify 应用 API Key（由 dify-init 自动生成）",
-        "# 请将下方 key 复制到 backend/.env 对应变量：",
+        "# 本文件由 backend 容器启动时自动加载（挂载为 /run/dify-keys/app_keys.env），无需手工复制：",
         "#   留学生智能管家 -> DIFY_STUDENT_AGENT_KEY",
         "#   企业员工助手   -> DIFY_EMPLOYEE_AGENT_KEY",
-        "#   粤教客服       -> DIFY_CUSTOMER_AGENT_KEY",
+        "#   粤教客服Agent  -> DIFY_CUSTOMER_AGENT_KEY",
         "#   智能报告       -> DIFY_REPORT_AGENT_KEY（留空则报告 AI 恒 unavailable）",
         "",
     ]
@@ -428,7 +438,11 @@ def export_app_keys(client: httpx.Client, token: str, apps: dict) -> None:
             )
             if r.status_code in (200, 201):
                 key = r.json().get("token", "")
-        lines.append(f"{name}={key}")
+        env_name = APP_KEY_ENV_NAMES.get(name)
+        if not env_name:
+            log(f"    （{name} 未登记环境变量名，跳过 key 输出）")
+            continue
+        lines.append(f"{env_name}={key}")
 
     output = "\n".join(lines) + "\n"
     Path(APP_KEYS_FILE).parent.mkdir(parents=True, exist_ok=True)
@@ -438,7 +452,7 @@ def export_app_keys(client: httpx.Client, token: str, apps: dict) -> None:
     log("-" * 60)
     log(output)
     log("-" * 60)
-    log("⚠️  请将上方 4 个应用 key（除留档版外）复制到 backend/.env，然后重启 backend")
+    log("✅ backend 容器启动时自动加载本文件，无需手工复制")
 
 
 # ── 主流程 ────────────────────────────────────────────────
