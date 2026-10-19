@@ -6,6 +6,8 @@
 
 ## 零、快速定位（打开项目先看这里）
 
+> v6.11.21（2026-10-19，longtrying_test）：**第十三次同步 gitea/master→longtrying_test（工作台双轨修复融合）**——master 3729eba 与本线 v6.11.20 同区域双轨修复合并：seed_data.py 种子补齐/vite 分包移除/nginx 禁缓存直入；RoleWorkspace.vue 6 冲突块双向融合（本线为基础+master 差异字段：MANAGER 看板漏斗/todoRows/orgTree/勾选式批量审批等）；dify_init.py 按用户裁定以本线为基准。pytest 164/164 + build ✓。**遗留待批**：dify_init.py 中文键名输出 vs compose `sh -c '. app_keys.env'` 共享卷自动加载格式断点（master APP_KEY_ENV_NAMES 是修复，待用户拍板吸收）。详见更新记录 v6.11.21 / LOG-079。
+>
 > v6.11.20（2026-10-19，longtrying_test）：**前后端假联通清零 + 七缺口接线 + 测试时间炸弹修复**——ProjectDetail「报名咨询」假成功→接 `POST /customers/pending-leads` 真落库（落库选型经后端代码确认，鉴权匹配"先登录再咨询"）；Home 项目/活动切真实接口；demo 硬编码清零（批量审批 id/approve 兜底 id/个人信息/StatCard/审批卡片）；PROSPECT 工作台"报名"假成功→真调 /events/{id}/register；七缺口全接线（operation-logs 日志表、pending-leads 面板+合并、assessments 保存/批量、leads 跟进/状态、cs 会话历史）；禁用按钮 tooltip。顺带修复 M5 测试时间炸弹（test_report_data_source 夹具未钉 created_at，跑测日≥2026-10-19 必红，LOG-078），pytest **164/164**。P0 数据可见性三选一待用户决策。详见更新记录 v6.11.20。
 >
 > v6.11.19（2026-10-19，longtrying_test）：**前后端全链路核验 + 一键启动增强 + 一键穿透**——运行时拨测 19 端点抓出 `/employee/customers` 50001 真缺陷（`CustomerQueryItem.recommended` dict→list 对齐 `recommended_json` 实际形状，已修复复测 200）；`start-project.bat` 增后端 /health 轮询就绪 + 8000/5173 健康复用 + 就绪后自动开浏览器；新增 `start-tunnel.bat` 一键内网穿透（自动探测 8080/5173，localtunnel 免注册）。**端到端实测通过**（start-project 全流程绿：依赖→8000 复用→4 账号 200→5173→页面 200→代理 API 200；start-tunnel 实测公网 URL 页面/API 双 200），并修复 bat 三连缺陷（UTF-8+LF 编码崩坏→纯 ASCII+CRLF+新增 `.gitattributes` 锁 CRLF、括号块内标签/计数器→顶层 goto、timeout 无 stdin→ping 延时）。详见更新记录 v6.11.19 与 LOG-076、LOG-077。
