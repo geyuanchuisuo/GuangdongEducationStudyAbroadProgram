@@ -976,3 +976,5 @@ chore: 构建
 **最后更新**：2026-10-19（v6.11.15 遗留问题清零：启动防冲突预检、dify_init 文案语义、阻塞清单⑤销账（报告 Chatflow system prompt 约束+降温）；v6.11.14 dify-init Dify 1.16 适配：10 项契约修复（路径/密码/CSRF/插件安装/模型注册/两步导入/工作流发布/yml 结构），一条命令全链拉起、AI 三端 source=dify 真实可用、pytest 157/157；v6.11.13 种子数据差异补齐 + 迁移链漂移债清偿：seed_supplement_v6_11_13.py 补 16 类字段缺口真实数据；005 防御式 + 006_schema_drift 对齐 ORM，全链建库 diff 归零、开发库 stamp 006；v6.11.12 Dify 模型配置去供应商绑定：三变量默认值全空 + dify-init 必填校验 + yml 模型占位符注入，全仓 MiMo/供应商绑定痕迹清零，历史日志仅作留痕标注；2026-10-18 合并 gitea/master→longtrying_test：10 项公共模块经用户逐项审批并入，pytest 157/157）
 
 > 合并回归（2026-10-18）：qianduan 已并入 origin/master 成绩三件套、环境修复与远端访问文档更新；verify_all 29/29、pytest 152/152、npm build 通过。
+
+**最后更新**：2026-10-19（**v6.11.23 E2E 测试断言过期修复**——`tests/e2e_m3m4_test.py` 第 401 行「M3 指令解析（本地兜底）」断言 `source=="local"` 与当前 Dify 已上线环境不符（Dify 栈完整部署 + 4 app key 注入 PID1，`/employee/commands/parse` 走 Dify 返回 `source="ai"`，E2E 80/81）；断言放宽为 `source in ("ai","local")`（与 `schemas/employee.py:232` 契约一致），注释同步去掉"当前环境无 Dify"假设，用例名改为「Dify 或本地兜底」；功能本身正确（`action_type=follow_up.create` 解析无误），属测试期望过期漂移；回归 Docker E2E **81/81** + pytest **164/164** + compileall 0 错 + verify_all **29/29** + 前端 build 通过；详见更新记录 v6.11.23 与 LOG-082）

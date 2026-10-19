@@ -274,10 +274,12 @@ async function loadDailyReports() {
 }
 // v6.11.20：真实数据加载——审批 / 待补全线索
 const pendingLeadRows = ref<any[]>([])
+// MANAGER「流程审批」= 管理层全量待审批视图：/approvals/pending 是「待我审批」(按 approver_id 过滤)，
+// 管理层账号通常不是被指派审批人，会导致列表恒空 → 改用 /employee/approvals-center 取 status==='pending' 子集
 async function loadApprovals() {
   try {
-    const result: any = await platformApi.approvals.pending()
-    approvalRows.value = itemsOf(result)
+    const result: any = await platformApi.employee.approvalsCenter({ page: 1, page_size: 50 })
+    approvalRows.value = itemsOf(result).filter((item: any) => item.status === 'pending')
   } catch {}
 }
 async function loadPendingLeads() {

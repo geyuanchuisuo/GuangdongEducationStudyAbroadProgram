@@ -518,10 +518,19 @@ async def seed():
             approval_instances.append(inst)
         await session.flush()
 
+        # 演示需要：核心管理层账号（固定 13810000004）名下必须分到待审批任务，
+        # 否则 MANAGER 端「待我审批」(/approvals/pending) 恒空（审批按 approver_id 过滤）
+        core_manager = next((u for u in users if u.username == "13810000004"), None)
+        pending_seq = 0
         for inst in approval_instances:
+            approver_id = random.choice(manager_ids)
+            if inst.status == "pending":
+                pending_seq += 1
+                if core_manager and pending_seq % 3 == 0:
+                    approver_id = core_manager.id
             session.add(ApprovalTask(
                 instance_id=inst.id,
-                approver_id=random.choice(manager_ids),
+                approver_id=approver_id,
                 seq_no=1,
                 action=random.choice(["approved", "rejected"]) if inst.status != "pending" else None,
                 comment=f"审批意见_{inst.id}",
