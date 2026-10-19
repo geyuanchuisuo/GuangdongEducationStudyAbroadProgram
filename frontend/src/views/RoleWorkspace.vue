@@ -982,6 +982,17 @@ const pageTitle = computed(() => {
   return map[section.value] || '工作空间'
 })
 
+// v6.11.48：意向客户「课程与项目 / 活动报名 / 我的咨询」的内层 SectionTitle 与顶部页面标题
+// 完全同名，页面会显示两层同一个标题。现只保留顶部标题，把原本写在内层的说明文案上提到这里。
+const pageDesc = computed(() => {
+  const map: Record<string, string> = {
+    courses: '登录后可提交报名咨询。',
+    events: '已登录，可直接报名近期活动。',
+    consult: '记录与顾问沟通和报名进度。',
+  }
+  return map[section.value] || '数据按业务模块和接口口径展示。'
+})
+
 // 员工/状态筛选交由服务端（GET /employee/customers 支持 status / employee_id 参数），
 // 避免只在前 N 条已加载数据里过滤导致「筛出来永远是空」；此处仅保留关键字本地过滤
 // 空安全过滤：name/phone/project 可能为 undefined（后端可空字段），原 .includes 直接崩掉导致搜索后画面空白
@@ -1557,7 +1568,7 @@ function revealPhone(member: any) {
 <template>
   <div class="workspace">
     <el-alert v-if="fallbackState.keys.length" class="fallback-banner" type="warning" :closable="false" show-icon :title="'接口不可用，以下内容为演示数据：' + fallbackState.keys.join('、')" />
-    <SectionTitle :eyebrow="role" :title="pageTitle" desc="数据按业务模块和接口口径展示。">
+    <SectionTitle :eyebrow="role" :title="pageTitle" :desc="pageDesc">
     </SectionTitle>
 
     <template v-if="section === 'home' && role === 'STUDENT'">
@@ -2019,15 +2030,18 @@ function revealPhone(member: any) {
     </template>
 
     <template v-else-if="role === 'PROSPECT' && section === 'courses'">
-      <SectionTitle title="课程与项目" desc="登录后可提交报名咨询。" /><div class="service-grid"><article v-for="item in publicProjects.slice(0,4)" :key="item.id" class="surface service-card"><div class="service-icon">{{ item.category.slice(0,2) }}</div><h3>{{ item.title }}</h3><p>{{ item.summary }}</p><el-button type="primary" round @click="router.push('/projects/' + item.id)">了解并咨询</el-button></article></div>
+      <!-- v6.11.48：去掉与顶部页面标题重复的内层标题，说明文案已上提到 pageDesc -->
+      <div class="service-grid"><article v-for="item in publicProjects.slice(0,4)" :key="item.id" class="surface service-card"><div class="service-icon">{{ item.category.slice(0,2) }}</div><h3>{{ item.title }}</h3><p>{{ item.summary }}</p><el-button type="primary" round @click="router.push('/projects/' + item.id)">了解并咨询</el-button></article></div>
     </template>
 
     <template v-else-if="role === 'PROSPECT' && section === 'events'">
-      <SectionTitle title="活动报名" desc="已登录，可直接报名近期活动。" /><div class="event-list"><div v-for="item in publicEvents.slice(0,3)" :key="item.id" class="surface ticket-row"><div><b>{{ item.title }}</b><small>{{ item.date }} · {{ item.format }}</small></div><el-button type="primary" round @click="applyEvent(item)">报名</el-button></div></div>
+      <!-- v6.11.48：去掉与顶部页面标题重复的内层标题，说明文案已上提到 pageDesc -->
+      <div class="event-list"><div v-for="item in publicEvents.slice(0,3)" :key="item.id" class="surface ticket-row"><div><b>{{ item.title }}</b><small>{{ item.date }} · {{ item.format }}</small></div><el-button type="primary" round @click="applyEvent(item)">报名</el-button></div></div>
     </template>
 
     <template v-else-if="role === 'PROSPECT' && section === 'consult'">
-      <SectionTitle title="我的咨询" desc="记录与顾问沟通和报名进度。" /><section class="surface panel"><div v-if="consultRows.length"><div v-for="(item, index) in consultRows" :key="index" class="ticket-row"><div><b>{{ item.project }}</b><small>{{ item.time }} · {{ item.name }} {{ item.phone }}</small><small>{{ item.note }}</small></div><el-tag type="success">已提交</el-tag></div></div><el-empty v-else description="暂无进行中的咨询"><el-button type="primary" @click="router.push('/projects')">去看看项目</el-button></el-empty></section>
+      <!-- v6.11.48：去掉与顶部页面标题重复的内层标题，说明文案已上提到 pageDesc -->
+      <section class="surface panel"><div v-if="consultRows.length"><div v-for="(item, index) in consultRows" :key="index" class="ticket-row"><div><b>{{ item.project }}</b><small>{{ item.time }} · {{ item.name }} {{ item.phone }}</small><small>{{ item.note }}</small></div><el-tag type="success">已提交</el-tag></div></div><el-empty v-else description="暂无进行中的咨询"><el-button type="primary" @click="router.push('/projects')">去看看项目</el-button></el-empty></section>
     </template>
 
     <template v-else-if="role === 'MANAGER' && section === 'org'">
@@ -2066,7 +2080,7 @@ function revealPhone(member: any) {
           <el-button type="success" size="small" style="margin-top:8px" @click="reloginAsStudent">退出登录并重新登录</el-button>
         </el-alert>
         <template v-if="myCustomer">
-          <div class="task-row"><b>档</b><div><strong>客户状态</strong><small>{{ customerStatusCN(myCustomer.status) }}</small></div></div>
+          <div class="task-row"><b>档</b><div><strong>状态</strong><small>{{ customerStatusCN(myCustomer.status) }}</small></div></div>
           <div class="task-row"><b>申</b><div><strong>转化申请</strong><small>{{ convertStatusCN(myCustomer.convert_status) }}</small></div></div>
         </template>
         <el-empty v-else description="暂无客户档案信息" :image-size="60" />
@@ -2077,7 +2091,7 @@ function revealPhone(member: any) {
          客户档案来自 GET /customers/me，后端无自助修改接口，故只读展示并指引联系顾问。 -->
     <template v-else-if="role === 'PROSPECT' && section === 'profile'">
       <section class="surface profile-card"><SectionTitle title="账号资料" /><el-form label-position="top"><div class="form-grid"><el-form-item label="姓名"><el-input v-model="profileForm.real_name" /></el-form-item><el-form-item label="联系方式"><el-input v-model="profileForm.contact_info" /></el-form-item><el-form-item label="账号"><el-input :model-value="userStore.userInfo?.username || '—'" disabled /></el-form-item><el-form-item label="角色"><el-input :model-value="userStore.userInfo?.user_type || '—'" disabled /></el-form-item></div><el-button type="primary" @click="confirmWrite('确认保存个人信息修改吗？', saveEmployeeProfile)">保存修改</el-button></el-form></section>
-      <section class="surface profile-card" style="margin-top:20px"><SectionTitle title="我的客户档案" desc="由顾问维护，仅供查看；如需变更留学意向请联系你的专属顾问。" /><div v-if="myCustomer" class="form-grid"><el-form-item label="客户状态"><el-input :model-value="customerStatusCN(myCustomer.status)" disabled /></el-form-item><el-form-item label="转化申请"><el-input :model-value="convertStatusCN(myCustomer.convert_status)" disabled /></el-form-item><el-form-item label="留学意向"><el-input :model-value="myCustomer.study_intent || '—'" disabled /></el-form-item><el-form-item label="学历"><el-input :model-value="myCustomer.education || '—'" disabled /></el-form-item></div><el-empty v-else description="暂无客户档案信息" :image-size="60" /></section>
+      <section class="surface profile-card" style="margin-top:20px"><SectionTitle title="我的客户档案" desc="由顾问维护，仅供查看；如需变更留学意向请联系你的专属顾问。" /><el-form v-if="myCustomer" label-position="top"><div class="form-grid"><el-form-item label="客户状态"><el-input :model-value="customerStatusCN(myCustomer.status)" disabled /></el-form-item><el-form-item label="转化申请"><el-input :model-value="convertStatusCN(myCustomer.convert_status)" disabled /></el-form-item><el-form-item label="留学意向"><el-input :model-value="myCustomer.study_intent || '—'" disabled /></el-form-item><el-form-item label="学历"><el-input :model-value="myCustomer.education || '—'" disabled /></el-form-item></div></el-form><el-empty v-else description="暂无客户档案信息" :image-size="60" /></section>
     </template>
 
     <template v-else>
