@@ -1613,11 +1613,15 @@ class EmployeeService:
             )
         )).scalar_one()
 
-        psych_pending = (await self.db.execute(
-            select(func.count()).select_from(StudentPsychAlert).where(
-                StudentPsychAlert.status == "未处理"
-            )
-        )).scalar_one()
+        # 员工只看本人负责学员的未处理预警，与 GET /employee/psych-alerts 的列表口径保持一致；
+        # MANAGER 仍看全量（v6.11.39 修复：此前未过滤，员工端计数恒为全量、与列表对不上）。
+        psych_stmt = select(func.count()).select_from(StudentPsychAlert).where(
+            StudentPsychAlert.status == "未处理"
+        )
+        if user.user_type != "MANAGER":
+            owned_students = select(Customer.sys_user_id).where(Customer.owner_employee_id == user.id)
+            psych_stmt = psych_stmt.where(StudentPsychAlert.student_id.in_(owned_students))
+        psych_pending = (await self.db.execute(psych_stmt)).scalar_one()
 
         result: dict = {
             "todos_pending": todos_pending,
