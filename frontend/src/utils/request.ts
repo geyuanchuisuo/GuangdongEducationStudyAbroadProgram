@@ -42,7 +42,11 @@ request.interceptors.response.use(
       return Promise.reject(new Error(data.message || 'unauthorized'))
     }
     showMessage('error', data.message || '请求失败')
-    return Promise.reject(new Error(data.message || 'request failed'))
+    // v6.11.52：给业务错误打上标记，便于页面 catch 区分「业务错误」（拦截器已弹出真实原因）
+    // 与「网络/超时异常」，避免页面再用「接口未就绪」把真实原因覆盖掉。
+    const businessError = new Error(data.message || 'request failed') as Error & { bizCode?: number }
+    businessError.bizCode = data.code
+    return Promise.reject(businessError)
   },
   (error) => {
     if (error.response?.status === 401) {

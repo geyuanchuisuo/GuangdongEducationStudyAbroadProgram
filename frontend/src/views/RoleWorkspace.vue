@@ -41,7 +41,10 @@ const customerForm = reactive({ name: '', phone: '', gender: '', age: '', educat
 const leaveForm = reactive({ type: '事假', start: '', end: '', reason: '', missed: '' })
 const ticketForm = reactive({ type: '服务咨询', title: '', detail: '', formal: false })
 const reportForm = reactive({ date: new Date().toISOString().slice(0, 10), content: '' })
-const convertForm = reactive({ customerId: 1, project: '新加坡国际本硕升学计划', title: '', approverId: 4 })
+// v6.11.52：原 customerId 默认写死 1、approverId 默认写死 4。1 并不在候选下拉里，
+// 用户不选客户直接提交就会打到不存在的客户上（后端 40003），再被兜底成「接口未就绪」；
+// 审批人也应在界面上选择而不是写死，故两者均改为空值 + 加载后自动选中首项 + 提交前校验。
+const convertForm = reactive<{ customerId: number | null; project: string; title: string; approverId: number | null }>({ customerId: null, project: '新加坡国际本硕升学计划', title: '', approverId: null })
 const submittedConversionIds = new Set<number>()
 const activeCustomer = ref<any>(null)
 const customerRows = ref<any[]>([])
@@ -599,6 +602,8 @@ onMounted(async () => {
     if (role.value === 'EMPLOYEE' || role.value === 'MANAGER') {
       requests.push(platformApi.employeeCustomers(), platformApi.employeeReminders())
     }
+    // v6.11.52：员工端预热「代客申请」的审批人（管理层）候选项
+    if (role.value === 'EMPLOYEE') loadApprovers()
     if (role.value === 'MANAGER') {
       requests.push(platformApi.reports.list({ page: 1, page_size: reportPageSize }))
     }
@@ -1077,6 +1082,28 @@ const convertCandidates = computed(() => customerRows.value.filter((item: any) =
   if (!INTENT_CUSTOMER_STATUSES.includes(item?.status)) return false
   return key !== 'ENROLLED' && !item?.is_converted && item?.convert_status !== 'approved'
 }))
+// v6.11.52：候选客户加载后自动选中第一项（避免 v-model 停在不在选项里的旧默认值上）
+watch(convertCandidates, (rows) => {
+  if (rows.length && !rows.some((item: any) => Number(item.id) === Number(convertForm.customerId))) {
+    convertForm.customerId = rows[0].id
+  }
+}, { immediate: true })
+// v6.11.52：代客申请的审批人（管理层）改为界面可选，不再写死为某一个用户 id
+const approverOptions = ref<Array<{ id: number; name: string }>>([])
+async function loadApprovers() {
+  try {
+    // v6.11.52：/employee/org/members 返回的成员主键字段是 user_id（不是 sys_user_id/id），
+    // 之前取错字段导致下拉项 id 为 undefined、选中拿不到值。这里按 user_id 取值，
+    // 并用 user_type=MANAGER 过滤（employee_role 文案可能随种子数据变化，user_type 更稳定）。
+    const rows = itemsOf(await platformApi.employee.orgMembers({ page: 1, page_size: 100 }))
+    approverOptions.value = rows
+      .filter((item: any) => item.user_type === 'MANAGER')
+      .map((item: any) => ({ id: item.user_id, name: item.real_name || item.name || '管理层' }))
+    if (!convertForm.approverId && approverOptions.value.length) convertForm.approverId = approverOptions.value[0].id
+  } catch {
+    approverOptions.value = []
+  }
+}
 // 客户详情抽屉：研判/推荐/跟进接真实数据（原为写死文案与假时间线）
 const activeFollowUps = ref<any[]>([])
 watch(() => (activeCustomer.value as any)?.id, async (id) => {
@@ -1107,6 +1134,15 @@ function confirmWrite(message: string, done: () => void) {
 
 async function submitConvertApply() {
   const customerId = Number(convertForm.customerId)
+  if (!customerId) {
+    ElMessage.warning('请先选择意向客户')
+    return
+  }
+  const approverId = Number(convertForm.approverId)
+  if (!approverId) {
+    ElMessage.warning('请先选择审批人（管理层）')
+    return
+  }
   if (submittedConversionIds.has(customerId)) {
     ElMessage.warning('该客户已有待审批的留学生转化申请')
     return
@@ -1126,14 +1162,17 @@ async function submitConvertApply() {
     try {
       const result: any = await platformApi.employee.createConvertApply({
         customer_id: customerId,
-        approver_id: Number(convertForm.approverId),
+        approver_id: approverId,
         title: convertForm.title || ('代客申请：' + convertForm.project),
       })
       submittedConversionIds.add(customerId)
       approvalRows.value = [result, ...approvalRows.value]
       notifySuccess('申请已提交，等待管理层一次审批')
-    } catch {
-      notifyInfo('代客申请接口尚未就绪，当前申请已保留')
+    } catch (error: unknown) {
+      // v6.11.52：业务错误（40003 客户状态不允许 / 40901 已有待审批申请 / 40002 审批人不合规）
+      // 已由响应拦截器弹出真实原因，此处若再统一弹「接口未就绪」会把真实原因盖掉、误导排查；
+      // 只有网络/超时这类没有业务码的异常才在这里兜底提示。
+      if (!(error as { bizCode?: number })?.bizCode) notifyInfo('提交失败（网络异常），请稍后重试')
     }
   })
 }
@@ -1732,7 +1771,7 @@ function revealPhone(member: any) {
     </template>
 
     <template v-else-if="role === 'EMPLOYEE' && section === 'convert'">
-      <div class="two-column"><section class="surface panel"><SectionTitle title="代客申请留学生" desc="一次审批：员工申请，管理层审批。" /><el-form label-position="top"><el-form-item label="选择意向客户"><el-select v-model="convertForm.customerId" style="width:100%"><el-option v-for="item in convertCandidates" :key="item.id" :label="item.name + '（' + item.project + '）'" :value="item.id" /><el-empty v-if="!convertCandidates.length" description="暂无可转化的意向客户" :image-size="60" /></el-select></el-form-item><el-form-item label="转化项目"><el-select v-model="convertForm.project" style="width:100%"><el-option v-for="item in publicProjects.slice(0,3)" :key="item.id" :label="item.title" :value="item.title" /></el-select></el-form-item><el-form-item label="转化理由 / 备注"><el-input v-model="convertForm.title" type="textarea" :rows="4" /></el-form-item><el-button type="primary" @click="submitConvertApply">提交审批申请</el-button></el-form></section><section class="surface panel"><SectionTitle title="学生流程审批" /><div v-for="item in approvalRows" :key="item.id || item.title" class="ticket-row"><div><b>{{ item.title || item.t }}</b><small>学生端提交 · {{ item.created_at }}</small></div><el-tag :type="item.status === 'approved' ? 'success' : 'warning'">{{ item.status || item.s }}</el-tag></div><el-empty v-if="!approvalRows.length" description="暂无待审批的学生流程" :image-size="60" /></section></div>
+      <div class="two-column"><section class="surface panel"><SectionTitle title="代客申请留学生" desc="一次审批：员工申请，管理层审批。" /><el-form label-position="top"><el-form-item label="选择意向客户"><el-select v-model="convertForm.customerId" style="width:100%"><el-option v-for="item in convertCandidates" :key="item.id" :label="item.name + '（' + item.project + '）'" :value="item.id" /><el-empty v-if="!convertCandidates.length" description="暂无可转化的意向客户" :image-size="60" /></el-select></el-form-item><el-form-item label="转化项目"><el-select v-model="convertForm.project" style="width:100%"><el-option v-for="item in publicProjects.slice(0,3)" :key="item.id" :label="item.title" :value="item.title" /></el-select></el-form-item><el-form-item label="转化理由 / 备注"><el-input v-model="convertForm.title" type="textarea" :rows="4" /></el-form-item><el-form-item label="审批人（管理层）"><el-select v-model="convertForm.approverId" style="width:100%"><el-option v-for="item in approverOptions" :key="item.id" :label="item.name" :value="item.id" /><el-empty v-if="!approverOptions.length" description="暂无可选审批人" :image-size="60" /></el-select></el-form-item><el-button type="primary" @click="submitConvertApply">提交审批申请</el-button></el-form></section><section class="surface panel"><SectionTitle title="学生流程审批" /><div v-for="item in approvalRows" :key="item.id || item.title" class="ticket-row"><div><b>{{ item.title || item.t }}</b><small>学生端提交 · {{ item.created_at }}</small></div><el-tag :type="item.status === 'approved' ? 'success' : 'warning'">{{ item.status || item.s }}</el-tag></div><el-empty v-if="!approvalRows.length" description="暂无待审批的学生流程" :image-size="60" /></section></div>
     </template>
 
 <template v-else-if="role === 'EMPLOYEE' && section === 'reports'">
