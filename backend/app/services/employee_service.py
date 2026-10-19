@@ -1351,11 +1351,52 @@ class EmployeeService:
         "智能报告查询",
     ]
 
+    async def _build_agent_real_data(self, user: User) -> str:
+        """实时业务快照（v6.11.26）：注入给 Dify，让助手基于真实数据回答，杜绝编造。"""
+        from sqlalchemy import func, select
+
+        from app.models.customer import Customer
+        from app.models.employee import EmployeeTodo
+        from app.models.system import ApprovalInstance
+
+        rows = (await self.db.execute(
+            select(EmployeeTodo).where(
+                EmployeeTodo.employee_id == user.id, EmployeeTodo.status == "pending"
+            ).order_by(EmployeeTodo.due_time).limit(5)
+        )).scalars().all()
+        todo_txt = "；".join(
+            f"{r.title}（优先级{r.priority}，截止{r.due_time or '未定'}）" for r in rows
+        ) or "无"
+        q = select(func.count()).select_from(Customer)
+        if user.user_type != "MANAGER":
+            q = q.where(Customer.owner_employee_id == user.id)
+        cust_cnt = (await self.db.execute(q)).scalar() or 0
+        pend_cnt = (await self.db.execute(
+            select(func.count()).select_from(ApprovalInstance).where(ApprovalInstance.status == "pending")
+        )).scalar() or 0
+        return f"今日待办：{todo_txt}｜名下客户数：{cust_cnt}｜待审批申请数：{pend_cnt}"
+
+    @staticmethod
+    def _strip_agent_json(reply: str) -> str:
+        """剥离回复中的 JSON/结构化 action 残留（v6.11.26 兜底），只留自然语言。"""
+        import re
+
+        out = re.sub(r"```(?:json)?\s*.*?```", "", reply, flags=re.S).strip()
+        if out.startswith("{") or out.startswith("["):
+            try:
+                import json as _json
+                _json.loads(out)
+                return "已收到您的指令。为避免误操作，指令式业务请走二次确认流程（我已识别到结构化动作），或直接用自然语言描述需求。"
+            except Exception:
+                pass
+        return out or "（回复为空）"
+
     async def agent_chat(self, user: User, message: str, session_id: str | None) -> dict:
         """企业助手会话：按角色注入权限感知 context 转发 Dify；AI 不可用降级返回能力清单。
 
         权限感知：EMPLOYEE 数据范围=own（仅名下客户），MANAGER=all（全域），
         能力清单写入 inputs.capabilities 供 Dify Agent prompt 使用。
+        v6.11.26：注入实时业务快照（待办/客户/审批）+ 回复格式约束，禁止编造与 JSON 输出。
         """
         from app.services.ai_service import AgentType, ai_service
 
@@ -1370,19 +1411,31 @@ class EmployeeService:
             "capabilities": "、".join(caps),
         }
         try:
+            real = await self._build_agent_real_data(user)
+        except Exception as snap_exc:  # 快照失败不阻塞对话
+            logger.warning("agent real-data snapshot failed: user=%s err=%s", user.id, snap_exc)
+            real = "（实时数据暂不可用，请勿编造具体事项）"
+        prompt_message = (
+            "【系统注入·实时数据】以下是你唯一可引用的事实依据，禁止编造其中没有的人名/单号/事项；"
+            "用户问题超出数据范围时如实说明没有数据：\n"
+            f"{real}\n"
+            "【回复格式】只用自然语言回答，禁止输出 JSON、结构化 action 或代码块。\n"
+            f"【用户提问】{message}"
+        )
+        try:
             resp = await ai_service.chat(
                 agent=AgentType.EMPLOYEE,
-                message=message,
+                message=prompt_message,
                 session_id=session_id or "new",
                 user_id=f"employee_{user.id}",
                 context=context,
             )
-            return {"reply": resp.content, "session_id": resp.session_id, "source": "dify"}
+            return {"reply": self._strip_agent_json(resp.content), "session_id": resp.session_id, "source": "dify"}
         except Exception:
             try:
                 from app.services.model_ai_service import model_ai_service
-                result = await model_ai_service.chat(message, session_id or "new", context)
-                return {"reply": result["reply"], "session_id": result.get("session_id", session_id or "new"), "source": "model"}
+                result = await model_ai_service.chat(prompt_message, session_id or "new", context)
+                return {"reply": self._strip_agent_json(result["reply"]), "session_id": result.get("session_id", session_id or "new"), "source": "model"}
             except Exception as model_exc:
                 logger.warning("model fallback failed: employee=%s error=%s", user.id, model_exc)
             reply = (
