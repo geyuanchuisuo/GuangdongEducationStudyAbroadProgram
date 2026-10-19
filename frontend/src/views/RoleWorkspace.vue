@@ -1030,6 +1030,18 @@ const pageDesc = computed(() => {
     events: '已登录，可直接报名近期活动。',
     consult: '记录与顾问沟通和报名进度。',
   }
+  // v6.11.52：管理层以下五个模块原来在内容区内层又写了一遍标题与说明（形成「双层标题」），
+  // 现只保留顶部标题，把内层说明上提到这里。仅对 MANAGER 生效，避免影响其他角色的同名 section。
+  if (role.value === 'MANAGER') {
+    const managerMap: Record<string, string> = {
+      customers: '查看全域客户、研判结果和跟进记录，支持录入、筛选、下钻和客户再分配。',
+      approvals: '统一处理员工转化申请、请假、日报补报和投诉处理，支持批量通过。',
+      employees: '一期不设置独立人事角色，员工账号和状态在此统一管理。',
+      logs: '展示审批结果、预警通知、系统公告和关键操作记录。',
+      org: '查看部门职能、团队层级和同事联系方式；联系方式默认脱敏。',
+    }
+    if (managerMap[section.value]) return managerMap[section.value]
+  }
   return map[section.value] || '数据按业务模块和接口口径展示。'
 })
 
@@ -1675,7 +1687,19 @@ function revealPhone(member: any) {
 <template>
   <div class="workspace">
     <el-alert v-if="fallbackState.keys.length" class="fallback-banner" type="warning" :closable="false" show-icon :title="'接口不可用，以下内容为演示数据：' + fallbackState.keys.join('、')" />
+    <!-- v6.11.52：管理层以下模块原来在内容区又写了一遍标题（形成双层标题）。
+         现统一只保留顶部这一个标题，各模块的操作按钮移入本组件右侧插槽，说明文案并入 pageDesc。 -->
     <SectionTitle :eyebrow="role" :title="pageTitle" :desc="pageDesc">
+      <div v-if="role === 'MANAGER' && section === 'customers'" class="title-actions">
+        <el-button :icon="Plus" @click="customerDialog = true">录入客户</el-button>
+        <el-button :icon="Download" @click="exportCsv('全域客户')">导出 CSV</el-button>
+      </div>
+      <div v-else-if="role === 'MANAGER' && section === 'approvals'">
+        <el-button type="primary" @click="confirmWrite('确认批量通过所选申请吗？', batchApprove)">批量通过</el-button>
+      </div>
+      <div v-else-if="role === 'MANAGER' && section === 'employees'">
+        <el-button type="primary" :icon="Plus" @click="openCreateUser">创建员工账号</el-button>
+      </div>
     </SectionTitle>
 
     <template v-if="section === 'home' && role === 'STUDENT'">
@@ -1804,7 +1828,10 @@ function revealPhone(member: any) {
     <!-- v6.11.43：管理层「个人信息」并入员工分支。后端 GET/PUT /employee/profile
          与 /employee/profile/password 的依赖均为 require_user_type("EMPLOYEE","MANAGER")，管理层可直接复用，无需改后端。 -->
     <template v-else-if="(role === 'EMPLOYEE' || role === 'MANAGER') && section === 'profile'">
-      <section class="surface profile-card"><SectionTitle title="账号资料" /><el-form label-position="top"><div class="form-grid"><el-form-item label="姓名"><el-input :model-value="userStore.userInfo?.real_name || '—'" /></el-form-item><el-form-item label="手机号"><el-input :model-value="userStore.userInfo?.username || '—'" /></el-form-item><el-form-item label="部门"><el-input :model-value="userStore.userInfo?.department || '—'" /></el-form-item><el-form-item label="企业微信"><el-input :model-value="userStore.userInfo?.contact_info || '—'" /></el-form-item></div><el-button type="primary" @click="confirmWrite('确认保存个人信息修改吗？', saveEmployeeProfile)">保存修改</el-button><el-button @click="changePassword">修改密码</el-button></el-form></section>
+      <!-- v6.11.52：原为四个只读输入框（:model-value），姓名/企业微信根本改不动，但「保存修改」仍在提交
+           未被绑定的 profileForm，点了等于空操作。现对齐学生端「账号资料」布局：姓名 + 联系方式可编辑并真正保存，
+           账号 + 角色只读；管理层额外保留「修改密码」入口。 -->
+      <section class="surface profile-card"><SectionTitle title="账号资料" /><el-form label-position="top"><div class="form-grid"><el-form-item label="姓名"><el-input v-model="profileForm.real_name" /></el-form-item><el-form-item label="联系方式"><el-input v-model="profileForm.contact_info" /></el-form-item><el-form-item label="账号"><el-input :model-value="userStore.userInfo?.username || '—'" disabled /></el-form-item><el-form-item label="角色"><el-input :model-value="userStore.userInfo?.user_type || '—'" disabled /></el-form-item></div><el-button type="primary" @click="confirmWrite('确认保存个人信息修改吗？', saveEmployeeProfile)">保存修改</el-button><el-button @click="changePassword">修改密码</el-button></el-form></section>
     </template>
 
     <template v-else-if="role === 'MANAGER' && section === 'home'">
@@ -2061,12 +2088,6 @@ function revealPhone(member: any) {
     </template>
 
     <template v-else-if="role === 'MANAGER' && section === 'customers'">
-      <SectionTitle title="客户管理" desc="查看全域客户、研判结果和跟进记录，支持录入、筛选、下钻和客户再分配。">
-        <div class="title-actions">
-          <el-button :icon="Plus" @click="customerDialog = true">录入客户</el-button>
-          <el-button :icon="Download" @click="exportCsv('全域客户')">导出 CSV</el-button>
-        </div>
-      </SectionTitle>
       <div class="toolbar surface">
         <el-input v-model="keyword" :prefix-icon="Search" placeholder="搜索姓名、手机号或项目" clearable />
         <el-select v-model="customerOwnerFilter" style="width:150px"><el-option label="全部员工" value="all" /><el-option v-for="emp in employeeRows" :key="emp.id" :label="emp.real_name" :value="emp.id" /></el-select>
@@ -2115,9 +2136,6 @@ function revealPhone(member: any) {
     </template>
 
     <template v-else-if="role === 'MANAGER' && section === 'approvals'">
-      <SectionTitle title="审批任务" desc="统一处理员工转化申请、请假、日报补报和投诉处理，支持批量通过。">
-        <el-button type="primary" @click="confirmWrite('确认批量通过所选申请吗？', batchApprove)">批量通过</el-button>
-      </SectionTitle>
       <div class="approval-filters"><el-radio-group v-model="approvalFilter"><el-radio-button value="全部">全部</el-radio-button><el-radio-button value="转化申请">转化申请</el-radio-button><el-radio-button value="请假">请假</el-radio-button><el-radio-button value="员工流程">员工流程</el-radio-button></el-radio-group></div>
       <div class="approval-grid">
         <article v-for="item in filteredApprovalItems" :key="item.id" class="surface approval-card">
@@ -2131,7 +2149,6 @@ function revealPhone(member: any) {
     </template>
 
     <template v-else-if="role === 'MANAGER' && section === 'employees'">
-      <SectionTitle title="员工账号与权限" desc="一期不设置独立人事角色，员工账号和状态在此统一管理。"><el-button type="primary" :icon="Plus" @click="openCreateUser">创建员工账号</el-button></SectionTitle>
       <section class="surface table-card"><el-table :data="employeeRows"><el-table-column prop="real_name" label="员工" /><el-table-column prop="department" label="部门" /><el-table-column label="角色"><template #default="{ row }">{{ row.employee_role || (row.user_type === 'MANAGER' ? '管理层' : '普通员工') }}</template></el-table-column><el-table-column label="本月客户" width="110"><template #default>—</template></el-table-column><el-table-column prop="status" label="状态" /><el-table-column label="操作"><template #default="{ row }"><el-button text type="primary" @click="openPermissionConfig(row.id)">权限</el-button></template></el-table-column></el-table><el-empty v-if="!employeeRows.length" description="暂无员工账号" /></section>
     </template>
 
@@ -2140,7 +2157,6 @@ function revealPhone(member: any) {
     </template>
 
     <template v-else-if="role === 'MANAGER' && section === 'logs'">
-      <SectionTitle title="消息中心与操作日志" desc="展示审批结果、预警通知、系统公告和关键操作记录。" />
       <div class="two-column"><section class="surface panel"><SectionTitle title="消息中心" /><el-button v-if="notificationRows.length" text type="primary" @click="markAllNotifications">全部已读</el-button><div v-for="item in notificationRows" :key="item.id" class="task-row" style="cursor: pointer" @click="markNotification(item)"><b>{{ item.is_read ? '✓' : '!' }}</b><div><strong>{{ item.title || item.content || '站内通知' }}</strong><small>{{ item.type || '系统' }} · {{ String(item.created_at || '').slice(11, 16) || '刚刚' }} · {{ item.is_read ? '已读' : '未读' }}</small></div></div><el-empty v-if="!notificationRows.length" description="暂无消息" /></section><section class="surface panel"><SectionTitle title="关键操作日志" /><div v-for="log in operationLogRows" :key="log.id" class="task-row"><b>•</b><div><strong>{{ (logModuleLabel[log.module] || log.module) + ' · ' + (logActionLabel[log.action] || log.action) }}</strong><small>{{ operatorName(log.user_id) }} · {{ String(log.created_at || '').slice(0, 16).replace('T', ' ') || '—' }}</small></div></div><el-empty v-if="!operationLogRows.length" description="暂无操作日志" /></section></div>
     </template>
 
@@ -2164,7 +2180,6 @@ function revealPhone(member: any) {
     </template>
 
     <template v-else-if="role === 'MANAGER' && section === 'org'">
-      <SectionTitle title="组织架构查询" desc="查看部门职能、团队层级和同事联系方式；联系方式默认脱敏。" />
       <div class="two-column">
         <section class="surface panel">
           <SectionTitle title="团队层级" desc="按部门查看层级与负责人；搜索部门名过滤树，搜姓名过滤同事列表。" />

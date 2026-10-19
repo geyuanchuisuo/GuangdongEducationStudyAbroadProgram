@@ -17,6 +17,11 @@ class UserService:
     async def login(self, request: LoginRequest) -> LoginResponse:
         user = await self.repo.get_by_username(request.username)
         if not user:
+            # v6.11.52：登录页字段标注为「手机号」，但新建员工账号的「登录用户名」与手机号往往不一致，
+            # 用户按提示用手机号登录就会报「用户名或密码错误」，看起来像「没接上数据库」。
+            # 这里补一次按手机号的兜底匹配（种子账号的 username 恰好等于手机号，行为不变）。
+            user = await self.repo.get_by_phone(request.username)
+        if not user:
             raise BusinessError(code=40001, message="用户名或密码错误")
 
         if not verify_password(request.password, user.password_hash):
