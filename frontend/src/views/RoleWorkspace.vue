@@ -710,6 +710,75 @@ function aiSourceText(content: any): string {
   return '可用'
 }
 
+/** 核心指标字段中文名：后端 metrics 的键是数据契约（英文标识符），
+ *  表格直接展示契约名会让用户看到 status_overview、should_submit 这类机器字段。
+ *  这里只做「键 → 展示名」映射，未登记的键原样回退，不改动任何数值。 */
+const METRIC_LABELS: Record<string, string> = {
+  // 客户经营分析
+  status_overview: '期末客户状态',
+  new_this_period: '本期新增客户',
+  new_outcomes: '本期新增结果',
+  // 期末状态 / 新增结果的枚举值
+  NEW: '新客户',
+  FOLLOWING: '跟进中',
+  STRONG: '意向强',
+  SIGNED: '已签约',
+  ENROLLED: '已入学',
+  LOST: '已流失',
+  total: '期末客户总数',
+  intent: '意向客户',
+  converted: '已成交',
+  lost: '已流失',
+  signed: '已签约',
+  enrolled: '已入学',
+  // 员工日报 / 周报
+  days: '每日提交明细',
+  week_total: '全周合计',
+  departments: '部门提交汇总',
+  date: '日期',
+  should_submit: '应交',
+  submitted: '已交',
+  missing: '未交',
+  // 学生心理周报
+  covered_students: '覆盖学生数',
+  risk: '风险分布',
+  // 投诉处理周报
+  orders_total: '工单总量',
+  pending_analysis: '待分析工单',
+  analyzed_count: '已完成分析',
+  new_count: '本期投诉',
+  resolved_in_period: '本期已解决',
+  open_count: '期末未解决',
+  over7_unresolved: '超 7 天未解决',
+  first_response_count: '已首次响应',
+  not_responded_count: '未响应',
+  avg_first_response_seconds: '平均首次响应时长（秒）',
+  max_first_response_seconds: '最长首次响应时长（秒）',
+  satisfaction: '满意度分布',
+  low_satisfaction_candidates: '低满意候选',
+  high_risk_candidates: '高风险候选',
+  special_cases: '特别案例',
+}
+
+/** 二级字段名（父键.子键）：仅用于消歧 —— status_overview 同时含 LOST（期末某状态）
+ *  与 lost（流失合计），只按子键查表会渲染出两行「已流失」；new_outcomes.intent
+ *  也需与 status_overview.intent 区分。未登记的二级键回退到 METRIC_LABELS。 */
+const METRIC_SUBLABELS: Record<string, string> = {
+  'status_overview.total': '期末总数',
+  'status_overview.intent': '意向客户合计',
+  'status_overview.converted': '成交合计',
+  'status_overview.lost': '流失合计',
+  'new_outcomes.intent': '其中意向',
+  'new_outcomes.signed': '其中签约',
+  'new_outcomes.enrolled': '其中入学',
+  'new_outcomes.lost': '其中流失',
+}
+
+/** 指标字段展示名（未登记的键原样返回，如 departments 下的部门名、risk 下的「高/中/低」） */
+function metricLabel(key: string): string {
+  return METRIC_LABELS[key] ?? key
+}
+
 /** 指标值渲染：null 一律显示「数据不可得」，不用 0 冒充（v6.11.0 §2.8）
  *  数组/嵌套对象递归转为可读摘要，不吐原始 JSON（否则员工日报/周报的 days、departments 会出现整段机器 JSON） */
 function metricValueText(value: any): string {
@@ -719,7 +788,7 @@ function metricValueText(value: any): string {
     return value.map((item) => metricValueText(item)).join('；')
   }
   if (typeof value === 'object') {
-    return Object.entries(value).map(([k, v]) => `${k}=${metricValueText(v)}`).join(' / ')
+    return Object.entries(value).map(([k, v]) => `${metricLabel(k)}=${metricValueText(v)}`).join(' / ')
   }
   return String(value)
 }
@@ -788,11 +857,13 @@ function metricRows(metrics: any): { key: string; value: any }[] {
   for (const [key, value] of Object.entries(metrics)) {
     if (key === 'profiles' || key === 'profile_denominator' || key === 'availability') continue
     if (Array.isArray(value)) {
-      rows.push({ key, value })
+      rows.push({ key: metricLabel(key), value })
     } else if (value !== null && typeof value === 'object') {
-      for (const [k2, v2] of Object.entries(value as any)) rows.push({ key: key + ' · ' + k2, value: v2 })
+      for (const [k2, v2] of Object.entries(value as any)) {
+        rows.push({ key: metricLabel(key) + ' · ' + (METRIC_SUBLABELS[`${key}.${k2}`] ?? metricLabel(k2)), value: v2 })
+      }
     } else {
-      rows.push({ key, value })
+      rows.push({ key: metricLabel(key), value })
     }
   }
   return rows
