@@ -326,12 +326,21 @@ async function searchOrg() {
     orgTree.value = rows.length ? rows : itemsOf(await platformApi.employee.org())
   } catch {}
 }
-// 部门与负责人清单（树展平，负责人从员工/同事列表反查姓名）
+// 部门与负责人清单（树展平，负责人从员工/同事列表反查姓名；展示 employee_org 既有字段）
+const userTypeCNMap: Record<string, string> = { PROSPECT: '意向客户', STUDENT: '留学生', EMPLOYEE: '员工', MANAGER: '管理层', ADMIN: '管理员' }
+const orgTypeCNMap: Record<string, string> = { department: '部门', company: '公司', team: '团队' }
+const orgStatusCNMap: Record<string, string> = { active: '启用', inactive: '停用' }
 const orgDeptRows = computed(() => {
   const rows: any[] = []
   const walk = (nodes: any[]) => {
     for (const node of nodes || []) {
-      rows.push({ id: node.id, name: node.name, leader: employeeName(node.leader_id) })
+      rows.push({
+        id: node.id,
+        name: node.name,
+        leader: employeeName(node.leader_id),
+        type: orgTypeCNMap[node.org_type] || node.org_type || '—',
+        status: orgStatusCNMap[node.status] || node.status || '—',
+      })
       if (Array.isArray(node.children) && node.children.length) walk(node.children)
     }
   }
@@ -1456,7 +1465,7 @@ function revealPhone(member: any) {
 <div v-if="activeReport"> <h2>{{ activeReport.report_date }}</h2> <p>{{ activeReport.content }}</p> </div>
 </template> </el-drawer> </template>
     <template v-else-if="role === 'EMPLOYEE' && section === 'org'">
-      <div class="two-column"><section class="surface panel"><SectionTitle title="组织架构查询" desc="联系方式默认脱敏，查看完整号码需要二次确认。" /><el-tree :data="orgTree" :props="orgTreeProps" default-expand-all /><el-empty v-if="!orgTree.length" description="暂无组织数据" /><SectionTitle title="同事联系方式" desc="按姓名搜索，默认脱敏；查看完整号码需二次确认并记入操作日志。" /><el-input v-model="orgKeyword" :prefix-icon="Search" placeholder="搜索同事姓名" clearable @keyup.enter="loadOrgMembers" @clear="loadOrgMembers" /><el-button type="primary" @click="loadOrgMembers">搜索</el-button><div v-for="member in orgMembers" :key="member.user_id" class="task-row"><b>{{ (member.real_name || '?').slice(0, 1) }}</b><div><strong>{{ member.real_name }}</strong><small>{{ member.department || '—' }} · {{ revealedPhones[member.user_id] || member.phone_masked || '—' }}</small></div><el-button text type="primary" @click="revealPhone(member)">查看完整号码</el-button></div><el-empty v-if="!orgMembers.length" description="暂无同事数据" /></section><section class="surface panel"><SectionTitle title="新人指引" desc="章节内容来自《公司新人指南》，点击查看问答详情。" /><div v-for="(item, index) in guideSections" :key="item.key" class="task-row"><b>0{{ index + 1 }}</b><div><strong>{{ item.title }}</strong><small>{{ item.summary }}</small></div><el-button text type="primary" @click="openGuide(item)">打开</el-button></div><el-empty v-if="!guideSections.length" description="暂无指引内容" /></section></div>
+      <div class="two-column"><section class="surface panel"><SectionTitle title="组织架构查询" desc="联系方式默认脱敏，查看完整号码需要二次确认。" /><el-tree :data="orgTree" :props="orgTreeProps" default-expand-all /><el-empty v-if="!orgTree.length" description="暂无组织数据" /><SectionTitle title="同事联系方式" desc="按姓名搜索，默认脱敏；查看完整号码需二次确认并记入操作日志。" /><el-input v-model="orgKeyword" :prefix-icon="Search" placeholder="搜索同事姓名" clearable @keyup.enter="loadOrgMembers" @clear="loadOrgMembers" /><el-button type="primary" @click="loadOrgMembers">搜索</el-button><div v-for="member in orgMembers" :key="member.user_id" class="task-row"><b>{{ (member.real_name || '?').slice(0, 1) }}</b><div><strong>{{ member.real_name }}</strong><small>{{ userTypeCNMap[member.user_type] || member.user_type || '—' }} · {{ member.employee_role || '—' }} · {{ member.department || '—' }}</small><small>{{ revealedPhones[member.user_id] || member.phone_masked || '—' }}<template v-if="member.contact_info"> · {{ member.contact_info }}</template></small></div><el-button text type="primary" @click="revealPhone(member)">查看完整号码</el-button></div><el-empty v-if="!orgMembers.length" description="暂无同事数据" /></section><section class="surface panel"><SectionTitle title="新人指引" desc="章节内容来自《公司新人指南》，点击查看问答详情。" /><div v-for="(item, index) in guideSections" :key="item.key" class="task-row"><b>0{{ index + 1 }}</b><div><strong>{{ item.title }}</strong><small>{{ item.summary }}</small></div><el-button text type="primary" @click="openGuide(item)">打开</el-button></div><el-empty v-if="!guideSections.length" description="暂无指引内容" /></section></div>
     </template>
 
     <template v-else-if="role === 'EMPLOYEE' && section === 'todos'">
@@ -1825,10 +1834,10 @@ function revealPhone(member: any) {
         </section>
         <section class="surface panel">
           <SectionTitle title="部门与负责人" />
-          <div v-for="dept in orgDeptRows" :key="dept.id" class="task-row"><b>{{ (dept.name || '?').slice(0, 1) }}</b><div><strong>{{ dept.name }}</strong><small>负责人：{{ dept.leader }}</small></div></div>
+          <div v-for="dept in orgDeptRows" :key="dept.id" class="task-row"><b>{{ (dept.name || '?').slice(0, 1) }}</b><div><strong>{{ dept.name }}</strong><small>负责人：{{ dept.leader }} · {{ dept.type }} · {{ dept.status }}</small></div></div>
           <el-empty v-if="!orgDeptRows.length" description="暂无部门数据" />
           <SectionTitle title="同事联系方式" desc="按姓名搜索，默认脱敏；查看完整号码需二次确认并记入操作日志。" />
-          <div v-for="member in orgMembers" :key="member.user_id" class="task-row"><b>{{ (member.real_name || '?').slice(0, 1) }}</b><div><strong>{{ member.real_name }}</strong><small>{{ member.department || '—' }} · {{ revealedPhones[member.user_id] || member.phone_masked || '—' }}</small></div><el-button text type="primary" @click="revealPhone(member)">查看完整号码</el-button></div>
+          <div v-for="member in orgMembers" :key="member.user_id" class="task-row"><b>{{ (member.real_name || '?').slice(0, 1) }}</b><div><strong>{{ member.real_name }}</strong><small>{{ userTypeCNMap[member.user_type] || member.user_type || '—' }} · {{ member.employee_role || '—' }} · {{ member.department || '—' }}</small><small>{{ revealedPhones[member.user_id] || member.phone_masked || '—' }}<template v-if="member.contact_info"> · {{ member.contact_info }}</template></small></div><el-button text type="primary" @click="revealPhone(member)">查看完整号码</el-button></div>
           <el-empty v-if="!orgMembers.length" description="暂无同事数据" />
         </section>
       </div>

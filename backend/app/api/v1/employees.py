@@ -258,6 +258,7 @@ async def list_org_members(
                     user_type=u.user_type,
                     employee_role=u.employee_role,
                     department=u.department,
+                    contact_info=u.contact_info,
                     phone_masked=EmployeeService.mask_phone(u.phone),
                 ) for u in users
             ],
