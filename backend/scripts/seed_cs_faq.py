@@ -5,7 +5,9 @@
 用法: python -m scripts.seed_cs_faq
 幂等策略: 按 question upsert（新增 / 原位更新 category/answer/keywords/sort_order）；
         旧问法经 QUESTION_RENAMES 原位改名，不产生重复行。第二次运行应零变更。
-注意: scripts/seed_data.py 会 drop_all 重建全库（清空本表），重建后需重跑本脚本补种 FAQ。
+注意: scripts/seed_data.py 会 drop_all 重建全库（清空本表）。v6.11.42 起 seed_data.py
+      已直接落库同一份 cs_faq_seed.json（37 条），全库重建后无需再跑本脚本；
+      本脚本保留用于单独补种或按 question 幂等更新 FAQ。
 """
 import asyncio
 import json

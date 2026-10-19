@@ -287,17 +287,20 @@ EVENT_DESCRIPTIONS = [
 # 类型也是随机抽的（「XX说明会」可能被标成「沙龙」）。
 # 改为固定排期后：类型与活动名称一致、end_time = start_time + 持续天数（恒晚于开始）、
 # 已报名 ≤ 容量、过去的活动为「已结束」、报名数达容量的为「已满员」、其余为「报名中」。
+# v6.11.46：容量与已报名人数整体下调到 12-44 区间。原因是 event_registration 有
+# (event_id, user_id) 唯一约束、种子报名用户池只有「意向客户 + 留学生」44 人，
+# 原 40-300 的报名数无法生成等量报名行（详见下方报名数据生成处）。
 EVENT_SCHEDULE = [
-    ("说明会", "广州总部教室A", -21, 1, 120, 98, "已结束"),
-    ("公开课", "线上直播", -12, 1, 300, 245, "已结束"),
-    ("讲座", "线上直播", 3, 1, 300, 260, "报名中"),
-    ("分享会", "深圳分部教室", 6, 1, 60, 60, "已满员"),
-    ("工作坊", "广州总部教室B", 9, 1, 40, 27, "报名中"),
-    ("说明会", "广州总部教室A", 13, 1, 120, 58, "报名中"),
-    ("说明会", "东莞教学点", 17, 1, 200, 200, "已满员"),
-    ("分享会", "深圳分部教室", 21, 1, 80, 34, "报名中"),
-    ("沙龙", "广州总部教室B", 26, 1, 40, 19, "报名中"),
-    ("开放日", "东莞教学点", 32, 1, 200, 121, "报名中"),
+    ("说明会", "广州总部教室A", -21, 1, 40, 36, "已结束"),
+    ("公开课", "线上直播", -12, 1, 44, 41, "已结束"),
+    ("讲座", "线上直播", 3, 1, 40, 32, "报名中"),
+    ("分享会", "深圳分部教室", 6, 1, 24, 24, "已满员"),
+    ("工作坊", "广州总部教室B", 9, 1, 30, 21, "报名中"),
+    ("说明会", "广州总部教室A", 13, 1, 36, 26, "报名中"),
+    ("说明会", "东莞教学点", 17, 1, 28, 28, "已满员"),
+    ("分享会", "深圳分部教室", 21, 1, 32, 19, "报名中"),
+    ("沙龙", "广州总部教室B", 26, 1, 20, 12, "报名中"),
+    ("开放日", "东莞教学点", 32, 1, 40, 27, "报名中"),
 ]
 DAILY_REPORT_CONTENTS = [
     "今日回访客户 6 位，新增意向客户 2 位，跟进德国双元制项目 1 单。",
@@ -651,6 +654,7 @@ async def seed():
 
         # ── Events（v6.11.42：10 条，字段自洽；见 EVENT_SCHEDULE 说明）──
         events = []
+        event_plans = []
         event_base = datetime.now().replace(minute=0, second=0, microsecond=0)
         for ev_name, ev_desc, ev_plan in zip(EVENT_NAMES, EVENT_DESCRIPTIONS, EVENT_SCHEDULE):
             ev_type, ev_loc, start_offset, duration_days, capacity, joined, ev_status = ev_plan
@@ -668,15 +672,21 @@ async def seed():
             )
             session.add(ev)
             events.append(ev)
+            event_plans.append((ev, joined, ev_status))
         await session.flush()
 
+        # 活动报名（v6.11.46）：按每个活动的 current_participants 生成等量报名记录，
+        # 保证「活动报名表行数 == 活动报名人数」。原实现固定 100 行、按 i % len(events)
+        # 轮转分配（每活动恒 10 行），与 current_participants（98/245/260…）完全对不上。
+        # 因 event_registration 有 (event_id, user_id) 唯一约束，同一活动内取不重复用户；
+        # 报名人池 = 意向客户 + 留学生（44 人），故各活动报名人数上限为 44（见 EVENT_SCHEDULE）。
         reg_users = prospect_ids + student_ids
-        for i in range(100):
-            session.add(EventRegistration(
-                event_id=events[i % len(events)].id,
-                user_id=reg_users[i % len(reg_users)],
-                status=random.choice(["已报名", "已签到", "已取消"]),
-            ))
+        for ev, joined, ev_status in event_plans:
+            # 已结束的活动报名状态为「已签到」，其余为「已报名」；不再生成「已取消」，
+            # 否则「行数 == 报名人数」的口径会被取消记录破坏。
+            reg_status = "已签到" if ev_status == "已结束" else "已报名"
+            for user_id in random.sample(reg_users, min(joined, len(reg_users))):
+                session.add(EventRegistration(event_id=ev.id, user_id=user_id, status=reg_status))
 
         # ── 业务项目（四条核心业务线，见《项目需求文档》1.1） ──
         from app.models.course import CourseProject
@@ -1033,7 +1043,7 @@ async def seed():
     print(f"  客户主表: 127（含核心员工 13810000003 名下 4 个意向客户 + 3 位在读学员）, 待补全线索: 15")
     print(f"  CRM线索: 110, 研判: 150, 跟进: 123（含 3 条核心员工已到期跟进）")
     print(f"  FAQ: 37（官方问答对，零重复）, 会话: 110, 消息: 200, 意图: 100, 推荐日志: 150")
-    print(f"  活动: 10, 报名: 100, 业务项目: {len(BUSINESS_PROJECTS)}（四条核心业务线）")
+    print(f"  活动: {len(EVENT_SCHEDULE)}, 报名: {sum(p[5] for p in EVENT_SCHEDULE)}（与各活动报名人数一致）, 业务项目: {len(BUSINESS_PROJECTS)}（四条核心业务线）")
     print(f"  政策资讯: {policy_seed_count}")
     print(f"  组织架构: 10, 日报: 120, 待办: 100, 成绩: 100")
     print(f"  学生服务: 100, 心理画像: 100, 心理预警: 103（含核心员工名下在读学员 3 条）, 反馈工单: 100, 工单AI分析: ~80")
