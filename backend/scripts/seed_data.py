@@ -456,7 +456,10 @@ async def seed():
                 status=random.choice(CUSTOMER_STATUSES),
                 phone_status="normal",
                 first_register_at=datetime.now() - timedelta(days=random.randint(0, 180)),
-                sys_user_id=random.choice(prospect_ids) if i < len(prospect_ids) else None,
+                # v6.11.41：sys_user_id 必须一对一，改由下方「意向客户账号 → 本人客户档案」
+                # 统一分配；此前用 random.choice 会让多个意向客户账号指向同一条客户档案，
+                # 而核心账号 13810000001 可能一条都没有。
+                sys_user_id=None,
             )
             session.add(c)
             customers.append(c)
@@ -493,13 +496,6 @@ async def seed():
             customers.append(c)
         await session.flush()
 
-        # v6.11.38：已签约/已入学客户已转为在读学员，sys_user_id 必须指向真实 STUDENT 用户。
-        # 此前统一指向 PROSPECT 用户，而心理预警的 student_id 取的是 STUDENT 用户，
-        # 两者集合不相交，导致员工端「心理预警」按 Customer.sys_user_id 关联学员时恒为空。
-        converted_customers = [c for c in customers if c.status in ("SIGNED", "ENROLLED")]
-        for idx, c in enumerate(converted_customers[: len(student_ids)]):
-            c.sys_user_id = student_ids[idx]
-
         # 核心员工（13810000003）名下固定补 3 位「在读学员」：状态 ENROLLED 且
         # sys_user_id 指向真实 STUDENT 用户，保证员工端「心理预警」能查到本人负责学员。
         core_students = [
@@ -508,9 +504,23 @@ async def seed():
             ("郑一鸣", "13700002002", "男", 21, "大专"),
             ("何静怡", "13700002003", "女", 19, "高中"),
         ]
+
+        # v6.11.38：已签约/已入学客户已转为在读学员，sys_user_id 必须指向真实 STUDENT 用户。
+        # 此前统一指向 PROSPECT 用户，而心理预警的 student_id 取的是 STUDENT 用户，
+        # 两者集合不相交，导致员工端「心理预警」按 Customer.sys_user_id 关联学员时恒为空。
+        # v6.11.41：sys_user_id 必须一对一（一个系统用户最多关联一条客户档案）。末 N 位
+        # student_id 预留给下方核心学员，其余才分给已签约/已入学客户；此前两处都从
+        # student_ids[0] 起取，导致同一 STUDENT 用户挂两条客户档案，/customers/me 命中
+        # 多行抛 MultipleResultsFound（接口 500）。
+        converted_student_ids = student_ids[: max(0, len(student_ids) - len(core_students))]
+        converted_customers = [c for c in customers if c.status in ("SIGNED", "ENROLLED")]
+        for idx, c in enumerate(converted_customers[: len(converted_student_ids)]):
+            c.sys_user_id = converted_student_ids[idx]
+        reserved_student_ids = student_ids[len(converted_student_ids):]
+
         core_student_user_ids: list[int] = []
         for idx, (sname, sphone, sgender, sage, sedu) in enumerate(core_students):
-            suid = student_ids[idx % len(student_ids)]
+            suid = reserved_student_ids[idx % len(reserved_student_ids)]
             session.add(Customer(
                 phone=sphone,
                 name=sname,
@@ -527,6 +537,14 @@ async def seed():
             ))
             core_student_user_ids.append(suid)
         await session.flush()
+
+        # 意向客户账号 → 本人客户档案（v6.11.41）：从未被占用的客户行里按顺序一对一分配，
+        # 保证每个意向客户账号恰好一条客户档案，/customers/me 不再出现「未关联客户档案」。
+        available_customers = [c for c in customers if c.sys_user_id is None]
+        for idx, pid in enumerate(prospect_ids):
+            if idx >= len(available_customers):
+                break
+            available_customers[idx].sys_user_id = pid
 
         customer_ids = [c.id for c in customers]
 
