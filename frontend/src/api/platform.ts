@@ -143,6 +143,8 @@ export const platformApi = {
   markNotificationRead: (id: number) => toData(request.put('/notifications/' + id + '/read')),
   markAllNotificationsRead: () => toData(request.put('/notifications/read-all')),
   customers: (params: AnyRecord = {}) => fallback(() => request.get('/customers', { params: query(params) }), async () => { const list = (await demo()).customers; return { items: list, total: list.length, page: 1, page_size: 20 } }, '客户列表'),
+  // v6.11.19：本人客户档案（PROSPECT/STUDENT 自助查询，含 convert_status 转化申请状态）
+  myCustomer: () => toData(request.get('/customers/me')),
   customer: (id: number) => toData(request.get('/customers/' + id)),
   createCustomer: (data: AnyRecord) => toData(request.post('/customers', data)),
   updateCustomer: (id: number, data: AnyRecord) => toData(request.put('/customers/' + id, data)),

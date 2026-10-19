@@ -12,6 +12,7 @@ from app.schemas.customer import (
     CustomerOut,
     CustomerStatusChange,
     CustomerUpdate,
+    MyCustomerOut,
     PendingLeadCreate,
     PendingLeadMerge,
     PendingLeadOut,
@@ -83,6 +84,17 @@ async def merge_pending_lead(
 ):
     pending = await service.merge_pending_lead(lead_id, data, current_user)
     return success_response(data=PendingLeadOut.model_validate(pending), message="合并成功")
+
+
+@router.get("/me", summary="本人客户档案（PROSPECT/STUDENT 自助查询，v6.11.19）")
+async def get_my_customer(
+    current_user: User = Depends(get_current_user),
+    service: CustomerService = Depends(_get_service),
+):
+    customer, convert_status = await service.get_my_customer(current_user)
+    data = MyCustomerOut.model_validate(customer)
+    data.convert_status = convert_status
+    return success_response(data=data)
 
 
 @router.get("/{customer_id}", summary="客户详情")
