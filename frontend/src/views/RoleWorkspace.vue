@@ -511,7 +511,12 @@ async function loadOperationLogs() {
 
 // 消息中心：此前通知行是纯 div，点了没反应；后端 PUT /notifications/{id}/read 一直没接
 async function markNotification(item: any) {
-  if (!item || item.is_read) return
+  if (!item) return
+  // 已读消息不再静默 return：此前直接返回、无任何提示，用户表现为「点了没反应」
+  if (item.is_read) {
+    notifyInfo('该消息已是已读状态')
+    return
+  }
   try {
     await platformApi.markNotificationRead(item.id)
     item.is_read = true
@@ -569,6 +574,8 @@ onMounted(async () => {
   if (role.value === 'MANAGER') {
     await loadApprovals()
     await loadOperationLogs()
+    // 管理层经营看板「近期预警与待办」面板的数据源（该面板此前是写死的 el-empty「暂无数据」）
+    try { todoRows.value = itemsOf(await platformApi.employee.listTodos({ page: 1, page_size: 10 })) } catch { todoRows.value = [] }
   }
   if (role.value === 'PROSPECT') {
     loadConsultRows()
@@ -1697,8 +1704,10 @@ function revealPhone(member: any) {
           </el-table>
         </section>
         <section class="surface panel">
-          <SectionTitle title="近期预警与待办" />
-          <el-empty description="暂无数据" />
+          <SectionTitle title="近期预警与待办" desc="归属本人的待办与负责学生的心理预警，可直接处理。" />
+          <div v-for="item in todoRows" :key="'todo-' + item.id" class="task-row"><b>!</b><div><strong>{{ item.title }}</strong><small>{{ todoStatusLabel[item.status] || item.status }} · 优先级{{ todoPriorityLabel[item.priority] || item.priority }}</small></div><el-button text type="primary" :disabled="item.status === 'done'" @click="handleTodo(item)">{{ item.status === 'done' ? '已完成' : '处理' }}</el-button></div>
+          <div v-for="alert in psychAlertRows.slice(0, 5)" :key="'alert-' + alert.id" class="task-row"><b>心</b><div><strong>{{ alert.student_name || ('学生#' + alert.student_id) }}</strong><small>{{ alert.risk_level }} · {{ alert.trigger_reason }}</small></div><el-tag v-if="alert.status !== '未处理'" type="success" size="small">{{ psychActionCN[alert.handled_action] || alert.status }}</el-tag><template v-else><el-button text type="primary" @click="handlePsychAlertItem(alert, 'communicated')">已沟通</el-button><el-button text @click="handlePsychAlertItem(alert, 'referred')">已转介</el-button><el-button text @click="handlePsychAlertItem(alert, 'resolved')">已解决</el-button></template></div>
+          <el-empty v-if="!todoRows.length && !psychAlertRows.length" description="暂无待办与预警" />
         </section>
       </div>
     </template>
