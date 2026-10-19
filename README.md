@@ -187,7 +187,7 @@
 - ✅ CSV 导出（客户/投诉记录）
 
 #### 部署与运维
-- ✅ 一键启动脚本（start-project.bat：依赖安装 → 后端健康轮询 → 前端构建 → 公网穿透）
+- ✅ 一键启动脚本（start-project.bat：.env 自动补建/模型凭据预检 → docker compose 全栈（含 Dify 初始化）→ 前端构建 → 后端健康轮询 + 种子保险 → 公网穿透）
 - ✅ 一键内网穿透（localtunnel 免注册，自动探测端口 + 抓取公网 URL + 访客密码）
 - ✅ Dify 一体化打包（dify_init.py 自动完成：创建管理员 → 配模型供应商 → 导入应用 → 绑模型 → 写入共享卷）
 - ✅ dify-init 加固（HTTP 节点旧地址自愈 / 同名应用确定性去重 key 不漂移 / app key POSIX 格式输出 / 模型级凭证兼容）
@@ -456,16 +456,16 @@ cd backend
 ```powershell
 # 前置条件：Docker Desktop + WSL2 + 端口 59000/6379/8000/8080/8081 空闲
 
-# 1. 复制环境配置
+# 1. 环境配置（可选——start-project.bat 会自动补建缺失的根 .env 与 dify\docker\.env 模板）
 Copy-Item .env.example .env
 Copy-Item dify\docker\.env.example dify\docker\.env
 
-# 2. 配置 Dify 模型凭据（dify\docker\.env 中）
+# 2. 配置 Dify 模型凭据（dify\docker\.env 中，三项必填；启动脚本会预检，空配置直接阻断）
 #    - DIFY_MODEL_API_KEY=你的模型 API Key
 #    - DIFY_MODEL_BASE_URL=兼容 OpenAI 的模型端点
 #    - DIFY_MODEL_NAME=模型名称
 
-# 3. 一键启动（自动完成依赖安装 → 全栈启动（空库自动注入种子）→ 后端健康轮询 → 前端构建 → Dify 初始化 → 内网穿透）
+# 3. 一键启动（自动完成 .env 补建/校验 → docker compose 全栈（含 Dify 初始化）→ 前端构建 → 后端健康轮询（空库自动注入种子 + 幂等保险）→ vite 开发服务 → 内网穿透）
 .\start-project.bat
 ```
 
@@ -473,18 +473,17 @@ Copy-Item dify\docker\.env.example dify\docker\.env
 
 - 本地前端地址：http://localhost:8080
 - 本地后端地址：http://localhost:8000
-- **公网穿透地址**：免费隧道（localtunnel）每次重启会变化，以 `start-project.bat` 启动输出为准（最近一次为 https://nine-peaches-fetch.loca.lt）
+- **公网穿透地址**：免费隧道（localtunnel）每次重启会变化，以 `start-project.bat` 启动输出为准（最近一次为 https://solid-kids-lose.loca.lt）
 - 访客密码：本机出口 IP（如 113.80.207.199），启动输出中一并显示
 
 ### 8.2 手动启动
 
 ```powershell
-# 仅启动核心业务（不含 Dify）
-docker compose up -d mysql redis backend nginx
+# 全栈启动（含 Dify；dify-init 自动完成初始化，backend 等待其成功后启动）
+docker compose up -d
 
-# 启动 Dify（首次需先启动 dify-init）
-docker compose up -d api worker postgres redis sandbox plugin_daemon agent_backend
-docker compose run dify-init
+# 仅数据层（MySQL + Redis；backend 对 dify-init 有硬依赖，无法脱离 Dify 单起）
+docker compose up -d mysql redis
 
 # 一键内网穿透（独立入口）
 .\start-tunnel.bat
