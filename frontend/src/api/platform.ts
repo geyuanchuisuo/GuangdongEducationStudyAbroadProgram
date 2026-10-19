@@ -111,7 +111,8 @@ export const platformApi = {
     }
     return []
   },
-  csChat: (data: AnyRecord) => toData(request.post('/ai/customer-service/chat', data)),
+  // v6.11.30：AI 对话请求单独放宽超时到 70s（>后端→Dify 25s+降级链），慢回答不再被 30s 全局超时误杀
+  csChat: (data: AnyRecord) => toData(request.post('/ai/customer-service/chat', data, { timeout: 70000 })),
   // v6.10.3：客服开场白（AgentDock 打开客服窗时拉取；Dify opening_statement 不经 Service API 返回，由后端统一供文案）
   csGreeting: () => toData(request.get('/cs/greeting')),
   // v6.11.20：客服会话消息历史（公开客服允许匿名凭会话ID查询）
@@ -207,7 +208,7 @@ export const platformApi = {
     exportDailyReports: (params: AnyRecord = {}) => request.get('/employee/export/daily-reports', { params: query(params), responseType: 'blob' }),
     exportTickets: (params: AnyRecord = {}) => request.get('/employee/export/tickets', { params: query(params), responseType: 'blob' }),
     exportFollowUps: (params: AnyRecord = {}) => request.get('/employee/export/follow-ups', { params: query(params), responseType: 'blob' }),
-    agentChat: (data: AnyRecord) => toData(request.post('/employee/agent/chat', data)),
+    agentChat: (data: AnyRecord) => toData(request.post('/employee/agent/chat', data, { timeout: 70000 })),
     guideOnboarding: () => toData(request.get('/employee/guide/onboarding')),
     guideAsk: (data: AnyRecord) => toData(request.post('/employee/guide/ask', data)),
     dashboard: () => toData(request.get('/employee/dashboard')),
@@ -253,7 +254,7 @@ export const platformApi = {
     updateProgress: (studentId: number, data: AnyRecord) => toData(request.put('/employee/students/' + studentId + '/progress', data)),
     lifeFaq: () => toData(request.get('/student/life/faq')),
     moreServices: () => toData(request.get('/student/services')),
-    agentChat: (data: AnyRecord) => toData(request.post('/student/agent/chat', data)),
+    agentChat: (data: AnyRecord) => toData(request.post('/student/agent/chat', data, { timeout: 70000 })),
     reminders: () => toData(request.get('/student/reminders')),
   },
   users: {

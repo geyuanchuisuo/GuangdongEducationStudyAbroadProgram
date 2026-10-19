@@ -139,28 +139,6 @@ const studentDdlRows = computed(() => itemsOf(studentReminders.value?.academic_d
   due: String(item.due_time || '').slice(0, 10) || '—',
   tone: (item.days_left ?? 99) <= 1 ? 'coral' : (item.days_left ?? 99) <= 2 ? 'amber' : 'blue',
 })))
-// 学生学业页：DDL 列表取 academic_items；统计卡由 academic_items/score_summary 真实字段推导
-const studentAcademicItems = computed(() => itemsOf(studentAcademic.value?.academic_items))
-const studentAcademicStats = computed(() => {
-  const now = Date.now()
-  const week = 7 * 24 * 60 * 60 * 1000
-  const items = studentAcademicItems.value
-  const dueWithin7d = items.filter((i: any) => {
-    const t = new Date(i.due_time).getTime()
-    return !isNaN(t) && t >= now && t - now <= week
-  }).length
-  const pending = items.filter((i: any) => i.item_type === '作业' && new Date(i.due_time).getTime() >= now).length
-  const pushed = items.filter((i: any) => i.reminder_sent).length
-  const summary = studentAcademic.value?.score_summary || {}
-  return {
-    due7d: dueWithin7d,
-    pending,
-    gpa: summary.average != null ? String(summary.average) : '—',
-    pushed,
-    scoreCount: summary.count ?? 0,
-  }
-})
-
 // 学生申请进度：GET /student/progress（真实阶段/状态/备注），按更新时间升序作为步骤顺序
 const studentProgressSteps = computed(() => [...studentProgressRows.value].sort(
   (a: any, b: any) => new Date(a.update_time || 0).getTime() - new Date(b.update_time || 0).getTime(),
