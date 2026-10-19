@@ -30,7 +30,7 @@ const customerDialog = ref(false)
 const leaveDialog = ref(false)
 const psychScore = ref<number | string>('—')
 const customerForm = reactive({ name: '', phone: '', gender: '', age: '', education: '', project: '新加坡本硕', note: '' })
-const leaveForm = reactive({ type: '事假', start: '', end: '', reason: '' })
+const leaveForm = reactive({ type: '事假', start: '', end: '', reason: '', missed: '' })
 const ticketForm = reactive({ type: '服务咨询', title: '', detail: '', formal: false })
 const reportForm = reactive({ date: new Date().toISOString().slice(0, 10), content: '' })
 const convertForm = reactive({ customerId: 1, project: '新加坡国际本硕升学计划', title: '', approverId: 4 })
@@ -1166,11 +1166,14 @@ function submitLeave() {
   }
   confirmWrite('确认提交请假申请吗？提交后将通知负责员工审批。', async () => {
     try {
+      // v6.11.50：与后端 student_admin_service 结构对齐。service_type 统一存「请假」
+      // （库内现有数据即为「请假/转班/休学」纯类型），请假类型与预计缺课并入 reason 文本；
+      // 日期补全为 datetime，避免只提交「2026-10-18」这种纯日期字符串。
       await platformApi.student.submitAdminService({
-        service_type: '请假（' + leaveForm.type + '）',
-        start_time: leaveForm.start,
-        end_time: leaveForm.end,
-        reason: leaveForm.reason,
+        service_type: '请假',
+        start_time: leaveForm.start.includes('T') ? leaveForm.start : leaveForm.start + 'T00:00:00',
+        end_time: leaveForm.end.includes('T') ? leaveForm.end : leaveForm.end + 'T23:59:59',
+        reason: `【${leaveForm.type}】${leaveForm.missed ? '预计缺课 ' + leaveForm.missed + ' 节；' : ''}${leaveForm.reason}`,
       })
       leaveDialog.value = false
       await loadMyServices()
@@ -1590,7 +1593,7 @@ function revealPhone(member: any) {
 
     <template v-else-if="role === 'STUDENT' && section === 'admin'">
       <div class="two-column">
-        <section class="surface panel"><SectionTitle title="提交请假申请" desc="支持页面提交，也可以直接使用学生助手代办。" /><el-form label-position="top"><div class="form-grid"><el-form-item label="请假类型"><el-select v-model="leaveForm.type" style="width:100%"><el-option v-for="item in ['事假','病假','考试假','其他']" :key="item" :label="item" :value="item" /></el-select></el-form-item><el-form-item label="开始日期"><el-input v-model="leaveForm.start" placeholder="2026-10-18" /></el-form-item><el-form-item label="结束日期"><el-input v-model="leaveForm.end" placeholder="2026-10-20" /></el-form-item><el-form-item label="预计缺课"><el-input placeholder="3节" /></el-form-item></div><el-form-item label="请假事由"><el-input v-model="leaveForm.reason" type="textarea" :rows="4" /></el-form-item><el-button type="primary" size="large" @click="submitLeave">提交请假申请</el-button></el-form></section>
+        <section class="surface panel"><SectionTitle title="提交请假申请" desc="支持页面提交，也可以直接使用学生助手代办。" /><el-form label-position="top"><div class="form-grid"><el-form-item label="请假类型"><el-select v-model="leaveForm.type" style="width:100%"><el-option v-for="item in ['事假','病假','考试假','其他']" :key="item" :label="item" :value="item" /></el-select></el-form-item><el-form-item label="开始日期"><el-input v-model="leaveForm.start" placeholder="2026-10-18" /></el-form-item><el-form-item label="结束日期"><el-input v-model="leaveForm.end" placeholder="2026-10-20" /></el-form-item><el-form-item label="预计缺课"><el-input v-model="leaveForm.missed" placeholder="3节" /></el-form-item></div><el-form-item label="请假事由"><el-input v-model="leaveForm.reason" type="textarea" :rows="4" /></el-form-item><el-button type="primary" size="large" @click="submitLeave">提交请假申请</el-button></el-form></section>
         <section class="surface panel"><SectionTitle title="申请状态" desc="来自我的行政服务申请（真实记录）" /><el-timeline><el-timeline-item v-for="item in myServices.slice(0, 6)" :key="item.id" :type="item.status === '已通过' ? 'success' : item.status === '已拒绝' ? 'danger' : 'warning'" :timestamp="String(item.create_time || '').slice(0, 16) || '—'">{{ item.service_type || '行政服务' }} · {{ item.status }}</el-timeline-item><el-timeline-item v-if="!myServices.length">暂无申请记录，提交后将在这里跟踪进度</el-timeline-item></el-timeline></section>
       </div>
     </template>
@@ -2095,11 +2098,10 @@ function revealPhone(member: any) {
       </section>
     </template>
 
-    <!-- v6.11.43：意向客户「个人信息」（原落到占位页）。账号资料走 PUT /users/me 可自助修改；
-         客户档案来自 GET /customers/me，后端无自助修改接口，故只读展示并指引联系顾问。 -->
+    <!-- v6.11.50：意向客户「个人信息」与学生端保持一致，只保留可自助修改的账号资料。
+         客户状态/转化进度已在「我的首页」展示，不再在此重复出现后端客户档案字段。 -->
     <template v-else-if="role === 'PROSPECT' && section === 'profile'">
       <section class="surface profile-card"><SectionTitle title="账号资料" /><el-form label-position="top"><div class="form-grid"><el-form-item label="姓名"><el-input v-model="profileForm.real_name" /></el-form-item><el-form-item label="联系方式"><el-input v-model="profileForm.contact_info" /></el-form-item><el-form-item label="账号"><el-input :model-value="userStore.userInfo?.username || '—'" disabled /></el-form-item><el-form-item label="角色"><el-input :model-value="userStore.userInfo?.user_type || '—'" disabled /></el-form-item></div><el-button type="primary" @click="confirmWrite('确认保存个人信息修改吗？', saveEmployeeProfile)">保存修改</el-button></el-form></section>
-      <section class="surface profile-card" style="margin-top:20px"><SectionTitle title="我的客户档案" desc="由顾问维护，仅供查看；如需变更留学意向请联系你的专属顾问。" /><el-form v-if="myCustomer" label-position="top"><div class="form-grid"><el-form-item label="客户状态"><el-input :model-value="customerStatusCN(myCustomer.status)" disabled /></el-form-item><el-form-item label="转化申请"><el-input :model-value="convertStatusCN(myCustomer.convert_status)" disabled /></el-form-item><el-form-item label="留学意向"><el-input :model-value="myCustomer.study_intent || '—'" disabled /></el-form-item><el-form-item label="学历"><el-input :model-value="myCustomer.education || '—'" disabled /></el-form-item></div></el-form><el-empty v-else description="暂无客户档案信息" :image-size="60" /></section>
     </template>
 
     <template v-else>
