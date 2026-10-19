@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { reactive, ref } from 'vue'
 import { ElMessage, type UploadFile } from 'element-plus'
 import { Search, Loading, UploadFilled } from '@element-plus/icons-vue'
 import { platformApi as api } from '../api/platform'
@@ -11,6 +11,11 @@ const content = ref('')
 const loading = ref(false)
 const result = ref<any>(null)
 const selectedFile = ref<File | null>(null)
+
+// 注册信息渠道：真实结构化表单（原为写死示例"李四"，v6.11.35 改为用户输入真实注册字段）
+const registrationForm = reactive({
+  姓名: '', 性别: '', 年龄: '', 联系方式: '', 学历: '', 职业需求: '', 德语能力: '',
+})
 
 const samples: Record<SourceType, string> = {
   text: '姓名 张三 性别 男 年龄 19岁 家里很有钱 电话 13800138000',
@@ -77,7 +82,12 @@ async function runAssess() {
     } else {
       const payload: any = { source_type: source.value, content: content.value }
       if (source.value === 'registration') {
-        payload.registration = { 姓名: '李四', 性别: '女', 年龄: '22', 联系方式: '13912345678', 学历: '本科毕业（2026年6月毕业）', 职业需求: '希望提升就业竞争力、获得稳定工作', 德语能力: '零基础' }
+        const reg: Record<string, string> = {}
+        for (const [key, value] of Object.entries(registrationForm)) {
+          if (String(value).trim()) reg[key] = String(value).trim()
+        }
+        if (!reg['联系方式']) { ElMessage.warning('注册信息研判必须提供联系方式（电话号码）'); loading.value = false; return }
+        payload.registration = reg
       }
       result.value = await api.assessText(payload)
     }
@@ -143,9 +153,22 @@ async function runBatch() {
           :rows="8"
           placeholder="粘贴客户信息，如：姓名 张三 性别 男 年龄 19岁 家里很有钱 电话 13800138000"
         />
-        <el-alert v-else-if="source === 'registration'" title="注册信息渠道" type="info" :closable="false" show-icon style="margin-bottom: 12px">
-          <template #default>将使用结构化注册字段示例（李四，22岁本科）进行研判。</template>
-        </el-alert>
+        <div v-else-if="source === 'registration'" class="at-reg-form">
+          <el-alert title="注册信息渠道" type="info" :closable="false" show-icon style="margin-bottom: 12px">
+            <template #default>按注册表单字段填写真实客户信息，联系方式（电话号码）为必填。</template>
+          </el-alert>
+          <el-form label-position="top" size="default">
+            <div class="at-reg-grid">
+              <el-form-item label="姓名"><el-input v-model="registrationForm.姓名" placeholder="如：李四" /></el-form-item>
+              <el-form-item label="性别"><el-select v-model="registrationForm.性别" style="width:100%" placeholder="选填"><el-option label="男" value="男" /><el-option label="女" value="女" /></el-select></el-form-item>
+              <el-form-item label="年龄"><el-input v-model="registrationForm.年龄" placeholder="选填，如 22" /></el-form-item>
+              <el-form-item label="联系方式（必填）"><el-input v-model="registrationForm.联系方式" placeholder="手机号码" /></el-form-item>
+              <el-form-item label="学历"><el-input v-model="registrationForm.学历" placeholder="选填，如 本科毕业" /></el-form-item>
+              <el-form-item label="职业需求"><el-input v-model="registrationForm.职业需求" placeholder="选填" /></el-form-item>
+              <el-form-item label="德语能力"><el-input v-model="registrationForm.德语能力" placeholder="选填，如 零基础" /></el-form-item>
+            </div>
+          </el-form>
+        </div>
         <div v-else class="at-file-zone">
           <el-upload
             :auto-upload="false"
@@ -281,6 +304,8 @@ async function runBatch() {
 .at-card-title { display: flex; align-items: center; gap: 8px; font-weight: 600; }
 .at-source { margin-bottom: 14px; }
 .at-actions { margin-top: 14px; display: flex; gap: 10px; }
+.at-reg-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }
+.at-reg-grid .el-form-item { margin-bottom: 12px; }
 .at-hint { color: #909399; font-size: 12px; margin: 10px 0 0; }
 .at-file-zone { border: 1px dashed #dcdfe6; border-radius: 8px; padding: 20px; text-align: center; }
 .at-upload-icon { font-size: 48px; color: #c0c4cc; }

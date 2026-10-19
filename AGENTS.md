@@ -6,6 +6,7 @@
 
 ## 零、快速定位（打开项目先看这里）
 
+> v6.11.35（2026-10-19，longtrying_test）：**前端批量缺陷修复 11 项（#28~#38）**——客户搜索空安全防崩溃、代客候选过滤已转化、政策完整指南弹窗、客户抽屉/研判注册表单真实化、待办页补消息通知、线索姓名手机来源打通（join customer）、管理层通知种子补齐、心理预警模块补全（新增 GET /employee/psych-alerts，路由 110→111）、项目口径修正为四大业务线（seed_projects 幂等）。详见更新记录 v6.11.35 / LOG-093。
 > v6.11.34（2026-10-19，longtrying_test）：**组织架构树点击无效果修复**——两处 el-tree 原为裸组件无事件绑定，补 @node-click 按部门过滤同事列表（复用 /org/members?department_id= 既有参数）+ 可关闭过滤标签。详见更新记录 v6.11.34 / LOG-092。
 > v6.11.33（2026-10-19，longtrying_test）：**组织架构信息展示补全**——同事行显示「角色·岗位·部门」+电话（+企业微信 contact_info），部门行显示「负责人·类型·状态」，OrgMemberItem 补返回 sys_user 既有列 contact_info；按用户指示不新建字段（部门地址模型无此字段不建），误起的 address 改动已回滚。详见更新记录 v6.11.33 / LOG-091。
 > v6.11.32（2026-10-19，longtrying_test）：**组织架构查询页空壳修复**——MANAGER org 页「组织能力」4 张写死静态卡片→真实「部门与负责人」+「同事联系方式」（orgMembers+revealPhone），死搜索框接线（searchOrg：姓名→成员/部门名→树过滤+回落），EMPLOYEE 新人指引 5 行死文案→GET /guide/onboarding 真实 10 章+Q/A 弹窗；后端 /employee/org 无辜（数据正常）。详见更新记录 v6.11.32 / LOG-090。

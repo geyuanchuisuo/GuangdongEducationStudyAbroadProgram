@@ -16,10 +16,22 @@ onMounted(async () => {
   projects.value = await platformApi.projects()
 })
 
-const filtered = computed(() => projects.value.filter((item) =>
-  (category.value === '全部' || item.category === category.value) &&
-  (!keyword.value || item.title.includes(keyword.value) || item.summary.includes(keyword.value)),
-))
+// v6.11.35：筛选按业务线包含匹配（course_project.category 为四大业务线全称，如"新加坡国际本硕升学"）；空安全防崩溃
+const categoryMatch = (itemCat: unknown, selected: string) => {
+  if (selected === '全部') return true
+  const c = String(itemCat ?? '')
+  if (selected === '德国双元制') return c.includes('德国')
+  if (selected === '新加坡本硕') return c.includes('新加坡')
+  return c.includes(selected)
+}
+const filtered = computed(() => {
+  const kw = keyword.value.trim()
+  return projects.value.filter((item) => {
+    const title = String(item?.title ?? '')
+    const summary = String(item?.summary ?? '')
+    return categoryMatch(item?.category, category.value) && (!kw || title.includes(kw) || summary.includes(kw))
+  })
+})
 </script>
 
 <template>

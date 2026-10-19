@@ -532,6 +532,18 @@ async def handle_ticket(
 
 
 # ── 心理关怀待办标记 ──────────────────────────────────
+@router.get("/psych-alerts", summary="心理预警列表（EMPLOYEE 负责学生 / MANAGER 全量）")
+async def list_psych_alerts(
+    status: str | None = Query(None, description="按状态过滤：未处理/已处理"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    current_user: User = Depends(require_user_type("EMPLOYEE", "MANAGER")),
+    service: EmployeeService = Depends(_get_service),
+):
+    items, total = await service.list_psych_alerts(current_user, status, page, page_size)
+    return success_response(data={"items": items, "total": total, "page": page, "page_size": page_size})
+
+
 @router.post("/psych-alerts/{alert_id}/handle", summary="标记心理预警处理（communicated/referred/resolved）")
 async def handle_psych_alert(
     alert_id: int,

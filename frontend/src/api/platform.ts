@@ -192,6 +192,8 @@ export const platformApi = {
     createFollowUp: (data: AnyRecord) => toData(request.post('/employee/crm/follow-ups', data)),
     deleteFollowUp: (id: number) => toData(request.delete('/employee/crm/follow-ups/' + id)),
     listFollowUps: (params: AnyRecord = {}) => toData(request.get('/employee/crm/follow-ups', { params: query(params) })),
+    // v6.11.35：心理预警列表（EMPLOYEE 负责学生 / MANAGER 全量；handlePsychAlert 已存在下方）
+    listPsychAlerts: (params: AnyRecord = {}) => toData(request.get('/employee/psych-alerts', { params: query(params) })),
     parseCommand: (data: AnyRecord) => toData(request.post('/employee/commands/parse', data)),
     executeCommand: (data: AnyRecord) => toData(request.post('/employee/commands/execute', data)),
     updateCustomerStatus: (id: number, data: AnyRecord) => toData(request.patch('/employee/customers/' + id + '/status', data)),
