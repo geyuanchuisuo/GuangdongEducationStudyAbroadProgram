@@ -64,6 +64,12 @@ class CustomerOut(CustomerBase):
     model_config = {"from_attributes": True}
 
 
+class MyCustomerOut(CustomerOut):
+    """本人客户档案（v6.11.19）：CustomerOut + 转化申请状态"""
+
+    convert_status: str = Field("none", description="转化申请状态(none/pending/approved/rejected/cancelled)")
+
+
 class LeadCreate(BaseModel):
     source: Optional[str] = Field(None, max_length=32, description="线索来源")
     raw_input: Optional[str] = Field(None, description="原始录入信息")

@@ -2,6 +2,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.customer import Customer, PendingLead
+from app.models.system import ApprovalInstance
 
 
 class CustomerRepository:
@@ -10,6 +11,21 @@ class CustomerRepository:
 
     async def get_by_id(self, customer_id: int) -> Customer | None:
         result = await self.db.execute(select(Customer).where(Customer.id == customer_id))
+        return result.scalar_one_or_none()
+
+    async def get_by_sys_user_id(self, sys_user_id: int) -> Customer | None:
+        result = await self.db.execute(select(Customer).where(Customer.sys_user_id == sys_user_id))
+        return result.scalar_one_or_none()
+
+    async def get_latest_convert_status(self, customer_id: int) -> str | None:
+        """只读查 approval_instance 表最新一条 convert 审批状态（v6.11.19，M1 只读 M0 表）。"""
+        stmt = (
+            select(ApprovalInstance.status)
+            .where(ApprovalInstance.biz_type == "convert", ApprovalInstance.biz_id == customer_id)
+            .order_by(ApprovalInstance.created_at.desc(), ApprovalInstance.id.desc())
+            .limit(1)
+        )
+        result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
     async def get_by_phone(self, phone: str) -> Customer | None:
