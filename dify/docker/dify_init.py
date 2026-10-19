@@ -100,8 +100,9 @@ def _env_name_for(app_name: str) -> str | None:
     """应用名 → shell 环境变量名；留档版/未登记返回 None（跳过输出）。
 
     兼容两种命名：yml 主干名（粤教客服__advanced-chat）与裸应用名（粤教客服Agent）。
+    名字可带【调用中】/【废案】状态标记（v6.11.38 命名规则），基名前缀匹配不受影响。
     """
-    if app_name in ARCHIVED_APPS or "留档" in app_name:
+    if app_name in ARCHIVED_APPS or "留档" in app_name or "废案" in app_name:
         return None
     base = app_name.split("__", 1)[0]
     if base in APP_KEY_ENV_MAP:
@@ -444,7 +445,10 @@ def import_apps(client: httpx.Client, token: str) -> dict:
         # 与 Dify 中的应用显示名「智能报告」并不相同；用文件名比对永远匹配不上，
         # 每跑一次就重复导入一份副本（历史缺陷：曾累积到 5 个应用 × 3 份副本）
         name = _dsl_app_name(dsl_content) or Path(yml_path).stem
-        if name in existing:
+        # 已存在判定按基名（剥掉【调用中】/【废案】状态标记与·N 序号）：应用被命名规范化改名后
+        # 仍视为同一应用，不重复导入（v6.11.38 命名规则配套）
+        base = re.sub(r"【(调用中|废案)】|·\d+$", "", name)
+        if name in existing or any(re.sub(r"【(调用中|废案)】|·\d+$", "", en) == base for en in existing):
             log(f"  跳过已存在应用: {name}（{Path(yml_path).name}）")
             continue
         log(f"  导入应用: {name}（{Path(yml_path).name}）...")
@@ -582,6 +586,56 @@ def publish_workflows(client: httpx.Client, token: str, apps: dict) -> None:
             log(f"    （{name} 非工作流应用或已发布，跳过：{r.status_code}）")
 
 
+# ── 步骤 5.6：应用命名规范化（硬性规则：名字必须写明【调用中】/【废案】）──
+def normalize_app_names(client: httpx.Client, token: str, apps: dict) -> None:
+    """Dify 应用名必须带状态标记，每次初始化自动核对写明（幂等）。
+
+    规则（AGENTS.md §7.5，v6.11.38）：
+      - 调用中（后端按 App Key 实际调用）→「原名【调用中】」
+      - 其余（废案/留档/重复副本）      →「原名【废案】」
+    每次修改 Dify 应用（导入/换 key/停用）后必须重新写明标记；本步骤在每次
+    dify-init 运行时自动规范化，保证重拉起后标记不丢失、不错误。
+    """
+    headers = build_headers(client, token)
+    r = client.get(f"{DIFY_API_URL}/console/api/apps?page=1&limit=100", headers=headers, timeout=30)
+    if r.status_code != 200:
+        log(f"    ⚠️ 应用命名规范化跳过（应用列表获取失败 {r.status_code}）")
+        return
+    all_apps = r.json().get("data", []) or []
+    # 调用中判定：被选定且会输出 App Key 的应用（_env_name_for 非空）
+    active_ids = {app_id for name, app_id in apps.items() if _env_name_for(name)}
+    # 排序保证同基名废案副本的序号分配稳定（幂等）
+    all_apps.sort(key=lambda a: str(a.get("id") or ""))
+    used: set[str] = set()
+    renamed = 0
+    for a in all_apps:
+        raw = a.get("name") or ""
+        base = re.sub(r"【(调用中|废案)】|·\d+$", "", raw).strip()
+        marker = "【调用中】" if a.get("id") in active_ids else "【废案】"
+        target = f"{base}{marker}"
+        if target in used:  # 同基名多个废案副本：加序号区分
+            idx = 2
+            while f"{base}{marker}·{idx}" in used:
+                idx += 1
+            target = f"{base}{marker}·{idx}"
+        used.add(target)
+        if target == raw:
+            continue
+        r2 = client.put(
+            f"{DIFY_API_URL}/console/api/apps/{a['id']}",
+            headers=headers,
+            json={"name": target},
+            timeout=30,
+        )
+        if r2.status_code in (200, 201):
+            log(f"    ✅ 应用命名规范化: {raw} → {target}")
+            renamed += 1
+        else:
+            log(f"    ⚠️ 应用改名失败 {r2.status_code}: {r2.text[:120]}")
+    if not renamed:
+        log("    ✅ 全部应用命名已符合【调用中】/【废案】标记规则")
+
+
 # ── 步骤 6：输出 app key ──────────────────────────────────
 def export_app_keys(client: httpx.Client, token: str, apps: dict) -> None:
     headers = build_headers(client, token)
@@ -683,6 +737,8 @@ def main() -> None:
             publish_workflows(client, token, apps)
 
         if apps:
+            log("应用命名规范化（调用中/废案）...")
+            normalize_app_names(client, token, apps)
             export_app_keys(client, token, apps)
         else:
             log("⚠️  无应用可导出 key")
