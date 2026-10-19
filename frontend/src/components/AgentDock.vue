@@ -85,6 +85,26 @@ async function send(text = input.value) {
     messages.value.push({ role: 'agent', text: '当前助手服务暂不可用，请稍后重试。' })
   }
 }
+
+// v6.11.20：历史会话查看（GET /cs/sessions/{id}/messages，公开客服匿名凭会话ID查询）
+const historyLoading = ref(false)
+async function loadHistory() {
+  if (sessionId.value === 'new') return
+  historyLoading.value = true
+  try {
+    const data: any = await platformApi.csSessionMessages(sessionId.value)
+    const items: any[] = Array.isArray(data) ? data : (data?.items || data?.messages || [])
+    for (const it of items) {
+      const role = (it.role || it.role_type) === 'user' ? 'user' : 'agent'
+      messages.value.push({ role, text: it.content || it.message || '' })
+    }
+    if (!items.length) messages.value.push({ role: 'agent', text: '该会话暂无历史消息。' })
+  } catch {
+    messages.value.push({ role: 'agent', text: '历史会话加载失败，请稍后重试。' })
+  } finally {
+    historyLoading.value = false
+  }
+}
 </script>
 
 <template>
@@ -96,6 +116,7 @@ async function send(text = input.value) {
             <strong>{{ name }}</strong>
             <small>在线 · 实时服务</small>
           </div>
+          <el-button v-if="props.type !== 'student' && props.type !== 'employee' && props.type !== 'manager' && sessionId !== 'new'" text size="small" :loading="historyLoading" @click="loadHistory">历史记录</el-button>
           <el-button text :icon="Close" @click="open = false" />
         </header>
         <div ref="messageList" class="messages">

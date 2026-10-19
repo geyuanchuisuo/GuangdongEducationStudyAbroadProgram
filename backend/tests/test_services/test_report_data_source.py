@@ -60,10 +60,12 @@ async def test_fetch_customers_maps_latest_valid_assessment(db):
     ])
     db.add_all([
         # 客户1：两条 valid 研判，id 大的是最新（matched）
-        CustomerAssessment(id=1, customer_id=1, status="valid", sg_conclusion="partial", de_conclusion="not_matched"),
-        CustomerAssessment(id=2, customer_id=1, status="valid", sg_conclusion="matched", de_conclusion="not_matched"),
+        # 注意：created_at 必须显式落在周期内——模型默认填 now()，跑测日期 >= END(2026-10-19) 时
+        # 会被"周期后研判不用于该周期"过滤掉，造成时间炸弹（2026-10-19 实测踩雷，LOG-078）
+        CustomerAssessment(id=1, customer_id=1, status="valid", sg_conclusion="partial", de_conclusion="not_matched", created_at=datetime(2026, 10, 14, 10)),
+        CustomerAssessment(id=2, customer_id=1, status="valid", sg_conclusion="matched", de_conclusion="not_matched", created_at=datetime(2026, 10, 15, 10)),
         # 客户2：invalid 研判不算
-        CustomerAssessment(id=3, customer_id=2, status="invalid_phone", sg_conclusion="matched", de_conclusion="matched"),
+        CustomerAssessment(id=3, customer_id=2, status="invalid_phone", sg_conclusion="matched", de_conclusion="matched", created_at=datetime(2026, 10, 16, 10)),
     ])
     await db.commit()
 

@@ -6,6 +6,14 @@
 
 ## 零、快速定位（打开项目先看这里）
 
+> v6.11.22（2026-10-19，longtrying_test）：**P0 方案A 落地：种子数据归属重分配**——新增 `backend/scripts/seed_owner_rebalance_v6_11_22.py`（幂等、仅动归属字段，经用户批准）：EMPLOYEE(13810000003) 名下 customer/todo/follow_up/lead/通知 60/50 条、STUDENT(13810000002) 名下 ticket/admin_service/academic/通知 60/50 条，测试账号登录即见满屏真实数据。**结构性上限**：日报 8 条（UNIQUE(emp,date)×全库 8 日期）、成绩 32 条（UNIQUE 学生课程学期×32 组合），重建库时 seed 扩分布可解除。API 验收达标 + pytest 164/164。详见更新记录 v6.11.22 / LOG-080。
+>
+> v6.11.21（2026-10-19，longtrying_test）：**第十三次同步 gitea/master→longtrying_test（工作台双轨修复融合）**——master 3729eba 与本线 v6.11.20 同区域双轨修复合并：seed_data.py 种子补齐/vite 分包移除/nginx 禁缓存直入；RoleWorkspace.vue 6 冲突块双向融合（本线为基础+master 差异字段：MANAGER 看板漏斗/todoRows/orgTree/勾选式批量审批等）；dify_init.py 按用户裁定以本线为基准。pytest 164/164 + build ✓。**遗留已销账**：dify_init.py 键值格式断点已修（APP_KEY_ENV_MAP 输出 shell 变量名 + 留档版跳过 + 前缀容错，POSIX sh source 实测通过）。详见更新记录 v6.11.21 / LOG-079。
+>
+> v6.11.20（2026-10-19，longtrying_test）：**前后端假联通清零 + 七缺口接线 + 测试时间炸弹修复**——ProjectDetail「报名咨询」假成功→接 `POST /customers/pending-leads` 真落库（落库选型经后端代码确认，鉴权匹配"先登录再咨询"）；Home 项目/活动切真实接口；demo 硬编码清零（批量审批 id/approve 兜底 id/个人信息/StatCard/审批卡片）；PROSPECT 工作台"报名"假成功→真调 /events/{id}/register；七缺口全接线（operation-logs 日志表、pending-leads 面板+合并、assessments 保存/批量、leads 跟进/状态、cs 会话历史）；禁用按钮 tooltip。顺带修复 M5 测试时间炸弹（test_report_data_source 夹具未钉 created_at，跑测日≥2026-10-19 必红，LOG-078），pytest **164/164**。P0 数据可见性三选一待用户决策。详见更新记录 v6.11.20。
+>
+> v6.11.19（2026-10-19，longtrying_test）：**前后端全链路核验 + 一键启动增强 + 一键穿透**——运行时拨测 19 端点抓出 `/employee/customers` 50001 真缺陷（`CustomerQueryItem.recommended` dict→list 对齐 `recommended_json` 实际形状，已修复复测 200）；`start-project.bat` 增后端 /health 轮询就绪 + 8000/5173 健康复用 + 就绪后自动开浏览器；新增 `start-tunnel.bat` 一键内网穿透（自动探测 8080/5173，localtunnel 免注册）。**端到端实测通过**（start-project 全流程绿：依赖→8000 复用→4 账号 200→5173→页面 200→代理 API 200；start-tunnel 实测公网 URL 页面/API 双 200），并修复 bat 三连缺陷（UTF-8+LF 编码崩坏→纯 ASCII+CRLF+新增 `.gitattributes` 锁 CRLF、括号块内标签/计数器→顶层 goto、timeout 无 stdin→ping 延时）。详见更新记录 v6.11.19 与 LOG-076、LOG-077。
+>
 > v6.11.16（2026-10-19，longtrying_test）：**第十二次同步 gitea/master→longtrying_test**——Dify 核心全部以本线为准（v6.11.14 十项契约适配 + v6.11.15 加固）；M0 共享卷机制并入（`dify_app_keys` 卷，backend 启动自动加载 app_keys.env，dify_init.py 适配 APP_KEY_ENV_MAP 输出 shell env 格式）+ 根 `.env.example` 新增 + `dify/docker/.env` 改不入库；M2 意图码归一 + FAQ 缴费口径 + M5 投诉域 import 缺陷修复 + 种子 INTENT_TYPES 9 码归一经批准并入；解 13 冲突；pytest **164/164**；详见更新记录 v6.11.16 merge 条目与 LOG-075。
 >
 > v6.11.17（2026-10-19，ZNBG/M5）：**production 投诉域静默清零缺陷修复**——`report_data_source.py` 漏 import `ComplaintReportInput`（v6.11.0 引入），调用处 NameError 被 v6.9.6 逐行容错当脏行静默吞掉、报告仍 completed → production 任意含工单周期投诉指标恒 0（本库 105 行全跳过；mock 不受影响）；补 import + 防回退用例后实测 orders_total 0→9 / new_count 6 / analyzed_count 8；回归 compileall + pytest 158/158 + Docker E2E 81/81 + production 冒烟 7/7；详见更新记录 v6.11.17 与 LOG-074（ZNBG）。
@@ -585,6 +593,16 @@ docker compose down
 # 上传文件持久化位置：命名卷 backend_storage（容器内 /app/storage_data）
 docker volume inspect guangdongeducationstudyabroadprogram_backend_storage
 ```
+
+### 5.5 本地一键启动与公网穿透（v6.11.19）
+
+| 需求 | 命令 | 说明 |
+|------|------|------|
+| 本地一键拉起（mysql+redis+backend+前端 dev） | 双击 `start-project.bat` | ✅ 端到端实测通过。自动装依赖→建 4 测试账号→后端 /health 轮询就绪→自动开 http://localhost:5173；8000/5173 已被健康服务占用时自动复用（与 Docker 一体化栈共存不冲突）。bat 为纯 ASCII+CRLF（勿改回中文/UTF-8——cmd 按 GBK 解析会崩，`.gitattributes` 已锁 CRLF），等待延时用 ping 勿用 timeout（无 stdin 环境会失败） |
+| 公网穿透（给他人演示） | 双击 `start-tunnel.bat` | ✅ 实测公网可达。自动探测 8080（Docker nginx）或 5173（本地 dev），localtunnel 免注册出公网 URL；需固定域名改用 `scripts\start-ngrok.ps1`（8080） |
+| Docker 一体化全量（含 Dify） | `docker compose up -d` | 需先在 `dify/docker/.env` 配齐模型三项，否则 dify-init 失败阻塞 backend |
+
+> 内网穿透不并入主启动流程的原因：依赖第三方服务（localtunnel/ngrok）、产生公网暴露面、URL 随机变化，属可选演示能力，不应阻塞本地启动。详见 [REMOTE_ACCESS.md](./docs/REMOTE_ACCESS.md)。
 
 ---
 

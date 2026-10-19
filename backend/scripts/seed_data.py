@@ -16,14 +16,22 @@
 import asyncio
 import random
 from datetime import date, datetime, timedelta
+from itertools import product
 
 from sqlalchemy import select
 
 from app.database import async_session_factory, engine
 from app.models import Base
-from app.models.crm import AiReport, AiReportAttachment, CrmFollowUp, CrmLead, CustomerAssessment
+from app.models.crm import (
+    AiReport,
+    AiReportAttachment,
+    CrmFollowUp,
+    CrmLead,
+    CustomerAssessment,
+    TicketAIAnalysis,
+)
 from app.models.customer import Customer, PendingLead
-from app.models.customer_service import CsChatMessage, CsChatSession, CsFaq, CsIntentLog
+from app.models.customer_service import CsChatMessage, CsChatSession, CsFaq, CsIntentLog, CsRecommendLog
 from app.models.employee import EmployeeDailyReport, EmployeeOrg, EmployeeTodo
 from app.models.event import EventLecture, EventRegistration
 from app.models.student import (
@@ -265,15 +273,53 @@ async def seed():
 
         # ── Courses ──
         from app.models.course import CourseProject
+        courses = []
         for i in range(15):
-            session.add(CourseProject(
+            cp = CourseProject(
                 project_name=COURSE_NAMES[i % len(COURSE_NAMES)],
                 category=random.choice(["语言培训", "学科辅导", "留学规划", "背景提升"]),
                 description=f"课程描述_{i}",
                 tuition_fee=random.randint(5000, 50000),
                 duration=f"{random.randint(1, 12)}个月",
                 status="上架",
-            ))
+            )
+            session.add(cp)
+            courses.append(cp)
+        await session.flush()
+
+        # ── CS 推荐日志（客服 Agent 每次课程/活动推荐落库） ──
+        for i in range(150):
+            s = sessions[i % len(sessions)]
+            kind = random.choices(["course", "event", "other"], weights=[5, 3, 1])[0]
+            if kind == "course":
+                course = random.choice(courses)
+                session.add(CsRecommendLog(
+                    session_id=s.id,
+                    customer_id=s.customer_id,
+                    course_id=course.id,
+                    event_id=None,
+                    recommendation_type="course",
+                    item_name=course.project_name,
+                ))
+            elif kind == "event":
+                ev = random.choice(events)
+                session.add(CsRecommendLog(
+                    session_id=s.id,
+                    customer_id=s.customer_id,
+                    course_id=None,
+                    event_id=ev.id,
+                    recommendation_type="event",
+                    item_name=ev.event_name,
+                ))
+            else:
+                session.add(CsRecommendLog(
+                    session_id=s.id,
+                    customer_id=s.customer_id,
+                    course_id=None,
+                    event_id=None,
+                    recommendation_type="other",
+                    item_name=random.choice(["留学规划套餐", "一对一面试辅导", "背景提升项目"]),
+                ))
 
         # ── M3: Employee ──
         for i in range(10):
@@ -302,12 +348,15 @@ async def seed():
                 due_time=datetime.now() + timedelta(days=random.randint(-5, 30)),
             ))
 
-        for i in range(100):
+        # student_id+course_name+semester 为唯一约束：从全部组合中随机取 100 条，保证不重复
+        score_combos = list(product(student_ids, COURSE_NAMES, ["2026春季", "2026秋季"]))
+        random.shuffle(score_combos)
+        for sid, cname, sem in score_combos[:100]:
             session.add(StudentScore(
-                student_id=random.choice(student_ids),
-                course_name=random.choice(COURSE_NAMES),
+                student_id=sid,
+                course_name=cname,
                 score=round(random.uniform(40, 100), 1),
-                semester=random.choice(["2026春季", "2026秋季"]),
+                semester=sem,
             ))
 
         # ── M4: Student ──
@@ -337,12 +386,38 @@ async def seed():
                 teacher_id=random.choice(employee_ids + manager_ids),
             ))
 
+        tickets = []
         for i in range(100):
-            session.add(StudentFeedbackTicket(
+            t = StudentFeedbackTicket(
                 student_id=random.choice(student_ids),
                 content=f"反馈工单_{i}",
                 detail=f"工单内容_{i}",
                 status=random.choice(["待处理", "处理中", "已解决"]),
+            )
+            session.add(t)
+            tickets.append(t)
+        await session.flush()
+
+        # ── 投诉工单 AI 分析（只引用 M4 工单ID，不建外键） ──
+        for i, t in enumerate(tickets):
+            if i % 5 == 4:
+                continue  # 约 80% 工单已有 AI 分析留痕
+            roll = random.random()
+            status = "succeeded" if roll < 0.85 else ("pending" if roll < 0.95 else "failed")
+            done = status == "succeeded"
+            session.add(TicketAIAnalysis(
+                ticket_id=t.id,
+                category=random.choice(["投诉", "建议", "咨询"]) if done else None,
+                low_satisfaction_candidate=bool(random.random() > 0.7) if done else False,
+                high_risk=bool(random.random() > 0.85) if done else False,
+                summary=f"工单 {t.id} 的 AI 归纳摘要（不含原文）" if done else None,
+                special_reason=("多次投诉，列为特别案例" if (done and random.random() > 0.9) else None),
+                model_source="dify" if done else None,
+                prompt_version="TICKET-ANALYSIS-v1.0" if done else None,
+                raw_output='{"category":"投诉"}' if done else None,
+                status=status,
+                error_message="LLM 调用超时" if status == "failed" else None,
+                analyzed_at=(datetime.now() - timedelta(days=random.randint(0, 30))) if done else None,
             ))
 
         for i in range(100):
@@ -362,8 +437,9 @@ async def seed():
             ))
 
         # ── M5: Reports（20 条，version 递增确保 uq_ai_report_version 唯一约束不冲突） ──
+        reports = []
         for i in range(20):
-            session.add(AiReport(
+            r = AiReport(
                 report_type=random.choice(["daily", "weekly", "monthly", "psych", "business"]),
                 report_title=f"报告_{i}",
                 status=random.choice(["generating", "completed", "failed"]),
@@ -371,7 +447,20 @@ async def seed():
                 time_range_start=datetime.now() - timedelta(days=random.randint(1, 30)),
                 time_range_end=datetime.now(),
                 version=i + 1,
-            ))
+            )
+            session.add(r)
+            reports.append(r)
+        await session.flush()
+
+        # ── 报告附件 ──
+        for r in reports:
+            for j in range(random.randint(1, 2)):
+                ft = random.choice(["pdf", "xlsx", "png"])
+                session.add(AiReportAttachment(
+                    report_id=r.id,
+                    file_path=f"/data/reports/{r.id}/attachment_{j}.{ft}",
+                    file_type=ft,
+                ))
 
         # ── M0: System ──
         event_types = [
@@ -448,12 +537,12 @@ async def seed():
     print(f"  用户: 120 (ADMIN/MANAGER/EMPLOYEE/STUDENT/PROSPECT)")
     print(f"  客户主表: 120, 待补全线索: 15")
     print(f"  CRM线索: 110, 研判: 150, 跟进: 120")
-    print(f"  FAQ: 105, 会话: 110, 消息: 200, 意图: 100")
+    print(f"  FAQ: 105, 会话: 110, 消息: 200, 意图: 100, 推荐日志: 150")
     print(f"  活动: 20, 报名: 100, 课程: 15")
     print(f"  组织架构: 10, 日报: 120, 待办: 100, 成绩: 100")
-    print(f"  学生服务: 100, 心理画像: 100, 心理预警: 100, 反馈工单: 100")
+    print(f"  学生服务: 100, 心理画像: 100, 心理预警: 100, 反馈工单: 100, 工单AI分析: ~80")
     print(f"  学业: 100, 申请进度: 100")
-    print(f"  报告: 20")
+    print(f"  报告: 20, 报告附件: ~30")
     print(f"  系统事件: 100, 审批实例: 100, 审批任务: 100, 通知: 100, 操作日志: 100")
     print("=" * 60)
 

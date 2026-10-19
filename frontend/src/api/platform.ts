@@ -87,8 +87,23 @@ export const platformApi = {
   csChat: (data: AnyRecord) => toData(request.post('/ai/customer-service/chat', data)),
   // v6.10.3：客服开场白（AgentDock 打开客服窗时拉取；Dify opening_statement 不经 Service API 返回，由后端统一供文案）
   csGreeting: () => toData(request.get('/cs/greeting')),
+  // v6.11.20：客服会话消息历史（公开客服允许匿名凭会话ID查询）
+  csSessionMessages: (sessionId: number | string) => toData(request.get('/cs/sessions/' + sessionId + '/messages')),
+  // v6.11.20：待补全线索——访客项目咨询落库（ProjectDetail 报名咨询）+ 员工端处理
+  createPendingLead: (data: AnyRecord) => toData(request.post('/customers/pending-leads', data)),
+  listPendingLeads: (params: AnyRecord = {}) => toData(request.get('/customers/pending-leads', { params: query(params) })),
+  mergePendingLead: (id: number, data: AnyRecord) => toData(request.post('/customers/pending-leads/' + id + '/merge', data)),
+  // v6.11.20：线索管理（GET /crm/leads + 跟进 + 状态流转）
+  listLeads: (params: AnyRecord = {}) => toData(request.get('/crm/leads', { params: query(params) })),
+  leadAddFollowUp: (id: number, data: AnyRecord) => toData(request.post('/crm/leads/' + id + '/follow-ups', data)),
+  leadChangeStatus: (id: number, data: AnyRecord) => toData(request.patch('/crm/leads/' + id + '/status', data)),
+  // v6.11.20：操作日志查询（MANAGER）
+  operationLogs: (params: AnyRecord = {}) => toData(request.get('/operation-logs', { params: query(params) })),
   // 客户研判工具页：单条研判（文本/对话/注册信息渠道）
   assessText: (data: AnyRecord) => toData(request.post('/crm/assessments/text', data)),
+  // v6.11.20：研判结果显式落库 + 批量研判
+  saveAssessment: (data: AnyRecord) => toData(request.post('/crm/assessments/save', data)),
+  batchAssess: (data: AnyRecord) => toData(request.post('/crm/assessments/batch', data)),
   // 客户研判工具页：文件研判（PDF/Excel/Word 等，后端 extract_text → assess_text）
   assessFile: (file: File) => {
     const fd = new FormData()
