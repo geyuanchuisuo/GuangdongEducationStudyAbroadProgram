@@ -74,7 +74,7 @@ function submit() {
   <div class="page-wrap detail">
     <el-button text :icon="ArrowLeft" @click="router.push('/projects')">返回项目列表</el-button>
     <header>
-      <div><span class="badge">{{ project.category }} · {{ project.tag }}</span><h1>{{ project.title }}</h1></div>
+      <div><span class="badge">{{ project.category }}<template v-if="project.tag"> · {{ project.tag }}</template></span><h1>{{ project.title }}</h1></div>
       <div class="apply-box"><small>费用说明</small><strong>{{ project.fee }}</strong><el-button type="primary" size="large" round @click="apply">立即报名咨询</el-button></div>
     </header>
     <section class="content-grid">

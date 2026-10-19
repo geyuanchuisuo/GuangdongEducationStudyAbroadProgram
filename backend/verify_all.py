@@ -15,16 +15,16 @@ def test(name, fn):
         print(f'  FAIL: {name} -> {e}')
         failed += 1
 
-# ===== Suite 1: 34 tables =====
+# ===== Suite 1: 35 tables =====
 print('=' * 60)
-print('Suite 1: Model Import (34 tables)')
+print('Suite 1: Model Import (35 tables)')
 print('=' * 60)
 
 from app.models import Base
 all_tables = sorted(Base.metadata.tables.keys())
 print(f'  Tables ({len(all_tables)}): {all_tables}')
-test(f'table count = 34 (got {len(all_tables)})',
-     lambda: None if len(all_tables) == 34 else
+test(f'table count = 35 (got {len(all_tables)})',
+     lambda: None if len(all_tables) == 35 else
      (_ for _ in ()).throw(Exception(f'got {len(all_tables)}')))
 
 from app.models.user import User

@@ -58,7 +58,9 @@ export const platformApi = {
           id: i.id,
           title: i.project_name,
           category: i.category || '国际留学',
-          tag: i.status || '热招',
+          // v6.11.33：原先把内部状态（上架）当营销标签，"业务项目/项目详情"页会出现「德国双元制 · 上架」。
+          // course_project 表没有营销标签列，不再编造，由页面按"无标签"渲染。
+          tag: '',
           summary: i.description || '—',
           audience: i.target_audience || '—',
           duration: i.duration || '—',
