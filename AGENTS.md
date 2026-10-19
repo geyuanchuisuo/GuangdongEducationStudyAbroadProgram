@@ -19,6 +19,8 @@
 > v6.11.21（2026-10-19，anhoa）：**FAQ 知识库重建+检索节点挂回**——Dify 知识库是实例级资源不随 DSL 迁移，本机重建「FAQ知识库」（economy 关键词索引，37 条），kr_6 挂回 FAQ 分支并恢复 llm_6 context；实测 1.16 economy 检索三路径全瘫（keyword_search 500 / full_text 中文 0 命中 / semantic 需 embedding），精准回答主走 llm_6 内嵌速查表，端到端 6 问全对；详见更新记录 v6.11.21 与 LOG-077（anhoa）。
 >
 > v6.11.22（2026-10-19，anhoa）：**多轮 [intent:] 标记全剥离修复+「重复答案」排查闭环**——排查「还是只重复回答一个答案」：链路分层验证（后端直连/Dify 直连/vite 代理空载）均正常，所见重复文案实为前端 AgentDock 固定兜底（v6.11.21 发布+压测维护窗口致超时/空回答触发）；顺手修复多轮标记泄漏——Dify 会话历史含原始标记致模型模仿输出多个 [intent:]，`_extract_intent` 由剥首个改为 `INTENT_RE.sub` 全剥离；3 轮实测回答各异、意图正确、marker_leaked=False×3；详见更新记录 v6.11.22 与 LOG-078（anhoa）。
+>
+> v6.11.23（2026-10-19，anhoa）：**第十六次同步 origin/master→anhoa**——并入 master 7 提交（v6.11.14~16 Dify 1.16 基建；无 backend 业务变更），公共模块（dify_init.py / start-project.bat / 5 yml）经用户批准；就 dify_init.py 两套实现与 yml mode 互斥问题请示后**用户裁定选项 A（保持 master 方案）**；解 2 冲突（客服 yml 保留 anhoa 完整版、更新记录并集）；回归 compileall + verify_all 29/29 + 前端 build ✅，pytest 169/1（失败项为既有时间相关 flaky，见 LOG-079）；详见更新记录 v6.11.23 与 LOG-079（anhoa）。
 
 > v6.11.16（2026-10-19，ZNBG 线，与本线 v6.11.16 同号异义）：Dify 1.16 首启脚本修正到 `/console/api/*` 并使用 cookie/CSRF 登录，补入智能报告 app key 映射；Agnes 模型配置仅保存在忽略的 `dify/docker/.env`。Dify API/Postgres/Redis/Sandbox 健康且管理员已创建，但 OpenAI 兼容插件和 DSL 依赖需访问 Marketplace；当前本机及容器均收到 403，dify-init 停在供应商配置，app keys 尚未生成。详见更新记录 v6.11.16、LOG-073。
 
