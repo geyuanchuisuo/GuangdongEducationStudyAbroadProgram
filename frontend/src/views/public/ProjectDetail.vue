@@ -1,17 +1,28 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowLeft, Check, Phone } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { projects } from '../../data/mock'
+import { platformApi } from '../../api/platform'
 import { useUserStore } from '../../stores/user'
 
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
 const dialog = ref(false)
+const submitting = ref(false)
 const project = computed(() => projects.find((item) => item.id === Number(route.params.id)) || projects[0])
 const form = ref({ name: '', phone: '', note: '' })
+
+// v6.11.20：项目详情接真实课程数据（从列表页点入 id 对齐 /cs/courses，mock 仅兜底）
+onMounted(async () => {
+  try {
+    const list: any[] = await platformApi.projects()
+    const hit = list.find((p) => p.id === Number(route.params.id))
+    if (hit) Object.assign(project.value, hit)
+  } catch { /* 兜底 mock 项目 */ }
+})
 
 function apply() {
   if (!userStore.isLoggedIn) {
@@ -32,9 +43,26 @@ function submit() {
     return
   }
   ElMessageBox.confirm('确认提交该项目的报名咨询吗？', '二次确认', { type: 'warning' })
-    .then(() => {
-      dialog.value = false
-      ElMessage.success('报名信息已提交，顾问将尽快联系你')
+    .then(async () => {
+      submitting.value = true
+      try {
+        // v6.11.20：咨询落库 pending_lead 待补全线索（员工端可查询并合并为客户）
+        await platformApi.createPendingLead({
+          name: form.value.name,
+          raw_info: `项目咨询：${project.value.title}；联系电话：${form.value.phone}；备注：${form.value.note || '无'}`,
+        })
+        try {
+          const saved = JSON.parse(localStorage.getItem('my_consultations') || '[]')
+          saved.unshift({ project: project.value.title, name: form.value.name, phone: form.value.phone, note: form.value.note, time: new Date().toLocaleString() })
+          localStorage.setItem('my_consultations', JSON.stringify(saved.slice(0, 20)))
+        } catch { /* 回执仅本地展示，失败不影响主流程 */ }
+        dialog.value = false
+        ElMessage.success('报名信息已提交，顾问将尽快联系你')
+      } catch {
+        ElMessage.error('提交失败，请稍后重试')
+      } finally {
+        submitting.value = false
+      }
     })
     .catch(() => undefined)
 }
@@ -63,7 +91,7 @@ function submit() {
     </section>
     <el-dialog v-model="dialog" title="项目报名咨询" width="min(520px, 92vw)">
       <el-form label-position="top"><el-form-item label="联系人"><el-input v-model="form.name" /></el-form-item><el-form-item label="手机号"><el-input v-model="form.phone" /></el-form-item><el-form-item label="补充说明"><el-input v-model="form.note" type="textarea" :rows="4" /></el-form-item></el-form>
-      <template #footer><el-button @click="dialog = false">取消</el-button><el-button type="primary" @click="submit">确认提交</el-button></template>
+      <template #footer><el-button @click="dialog = false">取消</el-button><el-button type="primary" :loading="submitting" @click="submit">确认提交</el-button></template>
     </el-dialog>
   </div>
 </template>

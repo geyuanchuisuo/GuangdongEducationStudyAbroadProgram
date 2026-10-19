@@ -6,6 +6,8 @@
 
 ## 零、快速定位（打开项目先看这里）
 
+> v6.11.20（2026-10-19，longtrying_test）：**前后端假联通清零 + 七缺口接线 + 测试时间炸弹修复**——ProjectDetail「报名咨询」假成功→接 `POST /customers/pending-leads` 真落库（落库选型经后端代码确认，鉴权匹配"先登录再咨询"）；Home 项目/活动切真实接口；demo 硬编码清零（批量审批 id/approve 兜底 id/个人信息/StatCard/审批卡片）；PROSPECT 工作台"报名"假成功→真调 /events/{id}/register；七缺口全接线（operation-logs 日志表、pending-leads 面板+合并、assessments 保存/批量、leads 跟进/状态、cs 会话历史）；禁用按钮 tooltip。顺带修复 M5 测试时间炸弹（test_report_data_source 夹具未钉 created_at，跑测日≥2026-10-19 必红，LOG-078），pytest **164/164**。P0 数据可见性三选一待用户决策。详见更新记录 v6.11.20。
+>
 > v6.11.19（2026-10-19，longtrying_test）：**前后端全链路核验 + 一键启动增强 + 一键穿透**——运行时拨测 19 端点抓出 `/employee/customers` 50001 真缺陷（`CustomerQueryItem.recommended` dict→list 对齐 `recommended_json` 实际形状，已修复复测 200）；`start-project.bat` 增后端 /health 轮询就绪 + 8000/5173 健康复用 + 就绪后自动开浏览器；新增 `start-tunnel.bat` 一键内网穿透（自动探测 8080/5173，localtunnel 免注册）。**端到端实测通过**（start-project 全流程绿：依赖→8000 复用→4 账号 200→5173→页面 200→代理 API 200；start-tunnel 实测公网 URL 页面/API 双 200），并修复 bat 三连缺陷（UTF-8+LF 编码崩坏→纯 ASCII+CRLF+新增 `.gitattributes` 锁 CRLF、括号块内标签/计数器→顶层 goto、timeout 无 stdin→ping 延时）。详见更新记录 v6.11.19 与 LOG-076、LOG-077。
 >
 > v6.11.16（2026-10-19，longtrying_test）：**第十二次同步 gitea/master→longtrying_test**——Dify 核心全部以本线为准（v6.11.14 十项契约适配 + v6.11.15 加固）；M0 共享卷机制并入（`dify_app_keys` 卷，backend 启动自动加载 app_keys.env，dify_init.py 适配 APP_KEY_ENV_MAP 输出 shell env 格式）+ 根 `.env.example` 新增 + `dify/docker/.env` 改不入库；M2 意图码归一 + FAQ 缴费口径 + M5 投诉域 import 缺陷修复 + 种子 INTENT_TYPES 9 码归一经批准并入；解 13 冲突；pytest **164/164**；详见更新记录 v6.11.16 merge 条目与 LOG-075。

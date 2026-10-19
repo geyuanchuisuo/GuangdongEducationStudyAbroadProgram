@@ -1,10 +1,25 @@
 <script setup lang="ts">
+import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ArrowRight, Calendar, DataAnalysis, Document, School, TrendCharts } from '@element-plus/icons-vue'
 import SectionTitle from '../../components/SectionTitle.vue'
-import { events, projects } from '../../data/mock'
+import { events as mockEvents, projects as mockProjects } from '../../data/mock'
+import { platformApi } from '../../api/platform'
 
 const router = useRouter()
+// v6.11.20：首页热门项目/近期活动接真实接口（/cs/courses + /events），失败降级 mock
+const projects = ref<any[]>(mockProjects.slice(0, 3))
+const events = ref<any[]>(mockEvents.slice(0, 3))
+onMounted(async () => {
+  try {
+    const list: any[] = await platformApi.projects()
+    if (list.length) projects.value = list.slice(0, 3)
+  } catch { /* 保持 mock 兜底 */ }
+  try {
+    const list: any[] = await platformApi.events()
+    if (list.length) events.value = list.slice(0, 3)
+  } catch { /* 保持 mock 兜底 */ }
+})
 const businesses = [
   { title: '德国双元制职业教育', desc: '企业带薪实习与职业院校双轨培养，毕业衔接就业。', icon: School, tone: 'lime' },
   { title: '新加坡国际本硕升学', desc: '短学制、路径清晰的国际本科与硕士升学方案。', icon: TrendCharts, tone: 'amber' },

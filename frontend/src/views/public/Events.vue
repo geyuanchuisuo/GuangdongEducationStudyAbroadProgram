@@ -93,7 +93,9 @@ function restoreIntent() {
           <h2>{{ item.title }}</h2>
           <p><el-icon><Location /></el-icon>{{ item.format }}</p><p><el-icon><User /></el-icon>{{ item.speaker }}</p>
           <div class="capacity"><span>已报名 {{ item.joined }} / {{ item.capacity }}</span><el-progress :percentage="Math.round(item.joined / item.capacity * 100)" :show-text="false" /></div>
-          <el-button type="primary" round :disabled="!canApply(item)" @click="apply(item)">{{ applyDisabledText(item) }}</el-button>
+          <el-tooltip :content="applyDisabledText(item)" :disabled="canApply(item)" placement="top">
+            <el-button type="primary" round :disabled="!canApply(item)" @click="apply(item)">{{ applyDisabledText(item) }}</el-button>
+          </el-tooltip>
         </div>
       </article>
     </div>
