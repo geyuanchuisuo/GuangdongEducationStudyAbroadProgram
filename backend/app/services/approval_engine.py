@@ -5,7 +5,8 @@ from sqlalchemy import select
 
 from app.core.exceptions import BusinessError
 from app.database import async_session_factory
-from app.models.system import ApprovalInstance, ApprovalTask
+from app.models.system import ApprovalInstance, ApprovalTask, SysOperationLog
+from app.models.user import User
 from app.services.event_bus import event_bus
 from app.services.event_contracts import EventType
 
@@ -98,7 +99,22 @@ class ApprovalEngine:
             if not task:
                 raise BusinessError(code=40401, message="当前审批任务不存在")
             if task.approver_id != approver_id:
-                raise BusinessError(code=40301, message="无权限审批")
+                # v6.11.52：原先「非指定审批人一律 40301」，导致管理层在审批中心看到的是全量待审单
+                # （/employee/approvals-center 不按审批人过滤），却只有被指派人能点通过，其余点一下
+                # 就是「无权限审批」。现放宽为：任一管理层均可审批；指派关系仍保留在 task.approver_id，
+                # 代审批这个动作写入操作日志留痕（记录实际操作人）。
+                actor_result = await session.execute(select(User).where(User.id == approver_id))
+                actor = actor_result.scalar_one_or_none()
+                if not actor or actor.user_type != "MANAGER":
+                    raise BusinessError(code=40301, message="无权限审批")
+                session.add(SysOperationLog(
+                    user_id=approver_id,
+                    module="approval",
+                    action=f"approve_on_behalf_{status.value}",
+                    target_type="approval_instance",
+                    target_id=instance_id,
+                    detail={"assigned_approver_id": task.approver_id, "action": status.value},
+                ))
 
             task.action = status.value
             task.comment = comment

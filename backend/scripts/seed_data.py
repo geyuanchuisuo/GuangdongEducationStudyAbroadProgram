@@ -365,11 +365,15 @@ ACADEMIC_ITEMS = [
     ("作业", "小组作业汇报", "以小组为单位提交 PPT 并做 10 分钟汇报，由组长汇总分工。"),
     ("选课", "学籍信息核对", "请在教务系统核对姓名、证件号与联系方式，确认无误后提交。"),
 ]
-APPROVAL_TITLES = [
-    "学生请假申请（事假）", "学生请假申请（病假）", "客户转化申请",
-    "日报补报申请", "学生休学申请", "学生复学申请",
-    "投诉处理结果确认", "转班申请", "客户线索转移申请", "报销单据审批",
-]
+# v6.11.52：按 biz_type 分组给出标题，保证「审批类型」与「标题」语义一致。
+# 原实现里 biz_type 与 title 是两条互不相关的随机线，会出现「biz_type=convert 却配『学生请假申请』」，
+# 前端按 biz_type 分类时就把请假申请与转化申请混在了一起。
+APPROVAL_TITLES_BY_BIZ = {
+    "leave": ["学生请假申请（事假）", "学生请假申请（病假）", "学生休学申请", "学生复学申请", "转班申请"],
+    "convert": ["客户转化申请"],
+    "late_report": ["日报补报申请"],
+    "complaint": ["投诉处理结果确认", "报销单据审批", "客户线索转移申请"],
+}
 APPROVAL_COMMENTS = [
     "情况属实，同意。", "已核实材料，批准。", "同意，请按流程办理。",
     "材料不全，请补充后重新提交。", "不符合规定，不予批准。",
@@ -971,12 +975,18 @@ async def seed():
             ))
 
         # ── 审批（双表设计） ──
+        # v6.11.52：先定 biz_type，再取该类型自己的标题（原来标题按下标取，与 biz_type 无关）。
+        # convert 的 biz_id 只从「非意向状态客户」里取，避免撞上核心员工名下 4 个意向客户，
+        # 否则「代客申请留学生」会被误判为「已有待审批的转化申请」而被拦。
+        non_intent_customer_ids = [c.id for c in customers if c.status not in ("NEW", "FOLLOWING", "STRONG")] or [1]
         approval_instances = []
         for i in range(100):
+            biz_type = random.choice(list(APPROVAL_TITLES_BY_BIZ))
+            biz_titles = APPROVAL_TITLES_BY_BIZ[biz_type]
             inst = ApprovalInstance(
-                biz_type=random.choice(["leave", "convert", "late_report", "complaint"]),
-                biz_id=random.randint(1, 500),
-                title=APPROVAL_TITLES[i % len(APPROVAL_TITLES)],
+                biz_type=biz_type,
+                biz_id=random.choice(non_intent_customer_ids) if biz_type == "convert" else random.randint(1, 500),
+                title=biz_titles[i % len(biz_titles)],
                 initiator_id=random.choice(employee_ids + student_ids),
                 status=random.choice(["pending", "approved", "rejected"]),
                 current_step=1,
