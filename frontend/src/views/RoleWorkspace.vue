@@ -1661,7 +1661,9 @@ function revealPhone(member: any) {
       <section class="surface panel"><SectionTitle title="心理预警处理" desc="本人负责学员的心理预警（情绪低分自动生成），处理后形成关怀记录。仅展示归属本人的在读学员。" /><div v-for="alert in psychAlertRows" :key="alert.id" class="task-row"><b>心</b><div><strong>{{ alert.student_name || ('学生#' + alert.student_id) }}</strong><small>{{ alert.risk_level }} · {{ alert.trigger_reason }} · {{ String(alert.create_time || '').slice(0, 10) }}</small></div><el-tag v-if="alert.status !== '未处理'" type="success" size="small">{{ psychActionCN[alert.handled_action] || alert.status }}</el-tag><template v-else><el-button text type="primary" @click="handlePsychAlertItem(alert, 'communicated')">已沟通</el-button><el-button text @click="handlePsychAlertItem(alert, 'referred')">已转介</el-button><el-button text @click="handlePsychAlertItem(alert, 'resolved')">已解决</el-button></template></div><el-empty v-if="!psychAlertRows.length" description="暂无本人负责学员的心理预警" /></section>
     </template>
 
-    <template v-else-if="role === 'EMPLOYEE' && section === 'profile'">
+    <!-- v6.11.43：管理层「个人信息」并入员工分支。后端 GET/PUT /employee/profile
+         与 /employee/profile/password 的依赖均为 require_user_type("EMPLOYEE","MANAGER")，管理层可直接复用，无需改后端。 -->
+    <template v-else-if="(role === 'EMPLOYEE' || role === 'MANAGER') && section === 'profile'">
       <section class="surface profile-card"><SectionTitle title="账号资料" /><el-form label-position="top"><div class="form-grid"><el-form-item label="姓名"><el-input :model-value="userStore.userInfo?.real_name || '—'" /></el-form-item><el-form-item label="手机号"><el-input :model-value="userStore.userInfo?.username || '—'" /></el-form-item><el-form-item label="部门"><el-input :model-value="userStore.userInfo?.department || '—'" /></el-form-item><el-form-item label="企业微信"><el-input :model-value="userStore.userInfo?.contact_info || '—'" /></el-form-item></div><el-button type="primary" @click="confirmWrite('确认保存个人信息修改吗？', saveEmployeeProfile)">保存修改</el-button><el-button @click="changePassword">修改密码</el-button></el-form></section>
     </template>
 
@@ -2055,6 +2057,13 @@ function revealPhone(member: any) {
         </template>
         <el-empty v-else description="暂无客户档案信息" :image-size="60" />
       </section>
+    </template>
+
+    <!-- v6.11.43：意向客户「个人信息」（原落到占位页）。账号资料走 PUT /users/me 可自助修改；
+         客户档案来自 GET /customers/me，后端无自助修改接口，故只读展示并指引联系顾问。 -->
+    <template v-else-if="role === 'PROSPECT' && section === 'profile'">
+      <section class="surface profile-card"><SectionTitle title="账号资料" /><el-form label-position="top"><div class="form-grid"><el-form-item label="姓名"><el-input v-model="profileForm.real_name" /></el-form-item><el-form-item label="联系方式"><el-input v-model="profileForm.contact_info" /></el-form-item><el-form-item label="账号"><el-input :model-value="userStore.userInfo?.username || '—'" disabled /></el-form-item><el-form-item label="角色"><el-input :model-value="userStore.userInfo?.user_type || '—'" disabled /></el-form-item></div><el-button type="primary" @click="confirmWrite('确认保存个人信息修改吗？', saveEmployeeProfile)">保存修改</el-button></el-form></section>
+      <section class="surface profile-card" style="margin-top:20px"><SectionTitle title="我的客户档案" desc="由顾问维护，仅供查看；如需变更留学意向请联系你的专属顾问。" /><div v-if="myCustomer" class="form-grid"><el-form-item label="客户状态"><el-input :model-value="customerStatusCN(myCustomer.status)" disabled /></el-form-item><el-form-item label="转化申请"><el-input :model-value="convertStatusCN(myCustomer.convert_status)" disabled /></el-form-item><el-form-item label="留学意向"><el-input :model-value="myCustomer.study_intent || '—'" disabled /></el-form-item><el-form-item label="学历"><el-input :model-value="myCustomer.education || '—'" disabled /></el-form-item></div><el-empty v-else description="暂无客户档案信息" :image-size="60" /></section>
     </template>
 
     <template v-else>
