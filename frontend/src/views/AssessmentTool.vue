@@ -87,6 +87,40 @@ async function runAssess() {
     loading.value = false
   }
 }
+
+// v6.11.20：研判结果显式落库（POST /crm/assessments/save）
+const saving = ref(false)
+async function saveResult() {
+  if (!result.value) { ElMessage.warning('请先执行研判'); return }
+  saving.value = true
+  try {
+    await api.saveAssessment({ record: result.value, source_type: source.value })
+    ElMessage.success('研判记录已保存')
+  } catch (e: any) {
+    ElMessage.error(e?.message || '保存失败')
+  } finally {
+    saving.value = false
+  }
+}
+
+// v6.11.20：批量研判（POST /crm/assessments/batch，按行拆分输入）
+const batchLoading = ref(false)
+const batchResults = ref<any[]>([])
+async function runBatch() {
+  const lines = content.value.split('\n').map((s) => s.trim()).filter(Boolean)
+  if (!lines.length) { ElMessage.warning('请输入客户信息（每行一条）'); return }
+  if (lines.length > 500) { ElMessage.warning('单次最多 500 条'); return }
+  batchLoading.value = true
+  try {
+    const res: any = await api.batchAssess({ records: lines.map((line) => ({ source_type: 'text', content: line })) })
+    batchResults.value = Array.isArray(res) ? res : (res?.items || [])
+    ElMessage.success(`批量研判完成：${batchResults.value.length} 条`)
+  } catch (e: any) {
+    ElMessage.error(e?.message || '批量研判失败')
+  } finally {
+    batchLoading.value = false
+  }
+}
 </script>
 
 <template>
@@ -135,8 +169,19 @@ async function runAssess() {
         <div class="at-actions">
           <el-button type="primary" :icon="loading ? Loading : Search" :loading="loading" @click="runAssess">立即研判</el-button>
           <el-button @click="useSample" :disabled="source === 'file'">填入示例</el-button>
+          <el-button v-if="source === 'text'" :loading="batchLoading" @click="runBatch">批量研判（按行）</el-button>
+          <el-button v-if="result" type="success" :loading="saving" @click="saveResult">保存研判</el-button>
         </div>
         <p class="at-hint">后端 POST /crm/assessments/text，纯规则引擎，秒级返回，不调用 AI。</p>
+        <div v-if="batchResults.length" class="at-batch">
+          <p class="at-hint">批量研判结果（{{ batchResults.length }} 条）：</p>
+          <el-table :data="batchResults.slice(0, 20)" size="small">
+            <el-table-column prop="index" label="#" width="50" />
+            <el-table-column label="状态" width="110"><template #default="{ row }"><el-tag size="small" :type="resultTag(row.status).type">{{ resultTag(row.status).label }}</el-tag></template></el-table-column>
+            <el-table-column label="姓名" width="90"><template #default="{ row }">{{ row.customer?.name || '—' }}</template></el-table-column>
+            <el-table-column label="电话" width="120"><template #default="{ row }">{{ row.customer?.phone || '—' }}</template></el-table-column>
+          </el-table>
+        </div>
       </el-card>
 
       <el-card class="at-result" shadow="never">
