@@ -1459,7 +1459,11 @@ class EmployeeService:
         return "\n".join(lines)
 
     async def _build_agent_real_data(self, user: User) -> str:
-        """实时业务快照（v6.11.26）：注入给 Dify，让助手基于真实数据回答，杜绝编造。"""
+        """实时业务快照（v6.11.26）：注入给 Dify，让助手基于真实数据回答，杜绝编造。
+
+        v6.11.50：MANAGER 追加全域经营摘要行（复用经营看板 dashboard() 聚合，口径一致），
+        使管理层 Agent 可直接回答经营情况；EMPLOYEE 维持本人维度不变。
+        """
         from sqlalchemy import func, select
 
         from app.models.customer import Customer
@@ -1481,7 +1485,41 @@ class EmployeeService:
         pend_cnt = (await self.db.execute(
             select(func.count()).select_from(ApprovalInstance).where(ApprovalInstance.status == "pending")
         )).scalar() or 0
-        return f"今日待办：{todo_txt}｜名下客户数：{cust_cnt}｜待审批申请数：{pend_cnt}"
+        base = f"今日待办：{todo_txt}｜名下客户数：{cust_cnt}｜待审批申请数：{pend_cnt}"
+        if user.user_type != "MANAGER":
+            return base
+        # 管理层：追加全域经营摘要（query 通道为唯一事实源，v6.11.50）
+        try:
+            dash = await self.dashboard()
+        except Exception as dash_exc:
+            logger.warning("agent ops summary failed: user=%s err=%s", user.id, dash_exc)
+            return base
+        cust = dash.get("customers") or {}
+        overview = dash.get("overview") or {}
+        reports = dash.get("reports") or {}
+        approvals = dash.get("approvals") or {}
+        tickets = dash.get("tickets") or {}
+        psych = dash.get("psych_alerts") or {}
+        so = cust.get("status_overview") or {}
+        stage_cn = {
+            "NEW": "新录入", "FOLLOWING": "跟进中", "STRONG": "意向强烈",
+            "SIGNED": "已签约", "ENROLLED": "已入学", "LOST": "已流失",
+        }
+        status_txt = " / ".join(f"{stage_cn[k]}{so.get(k, '—')}" for k in stage_cn)
+        by_source = cust.get("by_source") or []
+        src_txt = "、".join(f"{r.get('source')}{r.get('count')}" for r in by_source[:3]) if by_source else "—"
+        signed = overview.get("signed_amount")
+        signed_txt = f"{signed}（按已定价学费估算）" if signed is not None else "暂无（学费未定价）"
+        ops = (
+            f"经营摘要（全域）：客户总数 {cust.get('total', '—')}；本月新增 {cust.get('new_this_month', '—')}；"
+            f"期末状态分布：{status_txt}；累计转化率 {overview.get('conversion_rate', '—')}%；"
+            f"在办学生 {overview.get('active_students', '—')}；签约金额（估）{signed_txt}；"
+            f"日报：今日已交 {reports.get('today_submitted', '—')}/本月已交 {reports.get('month_submitted', '—')}"
+            f"/本月迟报 {reports.get('late_this_month', '—')}；待审批 {approvals.get('pending_total', '—')}；"
+            f"待处理投诉 {tickets.get('pending', '—')}；未处理心理预警 {psych.get('unhandled', '—')}；"
+            f"来源渠道Top3：{src_txt}"
+        )
+        return base + "｜" + ops
 
     @staticmethod
     def _strip_agent_json(reply: str) -> str:

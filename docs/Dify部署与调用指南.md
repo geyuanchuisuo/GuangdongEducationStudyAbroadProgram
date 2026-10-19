@@ -15,7 +15,7 @@
 | 应用名（含状态标记） | mode | 应用 ID（前 8 位） | 后端 key | 调用方 | 来源 DSL |
 |--------|------|------------------|----------|--------|----------|
 | 留学生智能管家【调用中】 | chat | `03a4dfa6` | DIFY_STUDENT_AGENT_KEY | M4 学生智能助手（/student/agent/chat，v6.11.39 起流式 /student/agent/chat/stream） | 留学生智能管家__agent-chat.yml |
-| 企业员工助手【调用中】 | chat | `012f71a7` | DIFY_EMPLOYEE_AGENT_KEY | M3 企业智能助手（/employee/agent/chat，v6.11.39 起流式 /employee/agent/chat/stream） | 企业员工助手__agent-chat.yml |
+| 企业员工助手【调用中】 | chat | `012f71a7` | DIFY_EMPLOYEE_AGENT_KEY | M3 企业智能助手（/employee/agent/chat，v6.11.39 起流式 /employee/agent/chat/stream）；v6.11.50 部署版 prompt 整体同步仓库 yml 最新版 + 补齐 6 输入变量（POST /model-config 保存即发布），MANAGER 经 query 通道获「经营摘要（全域）」可答经营情况 | 企业员工助手__agent-chat.yml |
 | 粤教客服Agent【调用中】 | advanced-chat | `86a2f351` | DIFY_CUSTOMER_AGENT_KEY（key `app-Ru3T...`） | M2 智能客服（/ai/customer-service/chat + /chat/stream 流式） | 粤教客服__advanced-chat.yml |
 | 智能报告【调用中】 | advanced-chat | `06ce80f9` | DIFY_REPORT_AGENT_KEY | M5 智能报告（报告 AI 文字） | 智能报告__advanced-chat.yml |
 
