@@ -44,7 +44,8 @@ async def assess_file(
     if not text.strip():
         raise HTTPException(status_code=400, detail="文件内容为空或无法提取文字")
     return success_response(
-        data=engine.assess_one(AssessmentRequest(source_type="text", content=text)).model_dump(),
+        # v6.11.32：文件渠道标记为 file_text，使提取器可启用面向简历文档的规则（如姓名独占首行）
+        data=engine.assess_one(AssessmentRequest(source_type="file_text", content=text)).model_dump(),
         message="文件研判完成",
     )
 

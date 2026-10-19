@@ -61,12 +61,33 @@ def _field_value(text: str, labels: tuple[str, ...]) -> str | None:
     return match.group(1).strip() if match else None
 
 
-def _extract_name(text: str) -> str | None:
-    match = re.search(r"(?:客户姓名|姓名|名字)\s*[：:]?\s*([\u4e00-\u9fff]{2,4})(?=[，,；;\s]|$)", text)
+# v6.11.32：简历 PDF 常把「姓名」排版拆行（「姓\n名：许剑鸿」），标签正则需容许标签内空白；
+# 另有些简历姓名独占首行（「黄学勤」）无任何标签，仅对文档渠道启用首行兜底，避免污染文本/对话渠道。
+_NAME_LABEL_RE = re.compile(r"(?:客户姓名|姓\s*名|名\s*字)\s*[：:]?\s*([\u4e00-\u9fff]{2,4})(?=[，,；;\s]|$)")
+_NAME_CALL_RE = re.compile(r"我叫\s*([\u4e00-\u9fff]{2,4})")
+_NAME_LINE_RE = re.compile(r"^[\u4e00-\u9fff]{2,4}$")
+_NAME_LINE_STOPWORDS = {
+    "基本信息", "个人信息", "个人简历", "个人技能", "简历", "求职简历", "求职意向",
+    "教育背景", "教育经历", "工作经历", "项目经历", "实习经历", "联系方式",
+    "自我评价", "技能特长", "技能清单", "客户信息", "工作年限", "出生日期", "现所在地",
+}
+
+
+def _extract_name(text: str, document: bool = False) -> str | None:
+    match = _NAME_LABEL_RE.search(text)
     if match:
         return match.group(1)
-    match = re.search(r"我叫\s*([\u4e00-\u9fff]{2,4})", text)
-    return match.group(1) if match else None
+    match = _NAME_CALL_RE.search(text)
+    if match:
+        return match.group(1)
+    if not document:
+        return None
+    # 文档兜底：取首个「整行恰为 2-4 个汉字且不是栏目名」的行（简历姓名通常独占首行）
+    for line in text.splitlines()[:8]:
+        line = line.strip()
+        if line and _NAME_LINE_RE.match(line) and line not in _NAME_LINE_STOPWORDS:
+            return line
+    return None
 
 
 def _extract_education(text: str) -> str | None:
@@ -84,8 +105,16 @@ def _extract_education(text: str) -> str | None:
     return None
 
 
-def extract_facts(content: str, registration: dict[str, Any] | None = None, dialogue: bool = False) -> CustomerFacts:
-    """提取明确字段；注册渠道完全以结构化字段优先，不对空选填字段推测；对话渠道仅提取客户侧发言。"""
+def extract_facts(
+    content: str,
+    registration: dict[str, Any] | None = None,
+    dialogue: bool = False,
+    document: bool = False,
+) -> CustomerFacts:
+    """提取明确字段；注册渠道完全以结构化字段优先，不对空选填字段推测；对话渠道仅提取客户侧发言。
+
+    document=True 表示内容来自文档（简历等）解析，允许启用「姓名独占首行」兜底规则。
+    """
     text = content.strip()
     if dialogue:
         text = _customer_side_text(text)
@@ -118,13 +147,15 @@ def extract_facts(content: str, registration: dict[str, Any] | None = None, dial
 
     phone_match = PHONE_RE.search(text)
     facts.set("phone", phone_match.group(1) if phone_match else None)
-    facts.set("name", _extract_name(text))
+    facts.set("name", _extract_name(text, document))
     gender_match = re.search(r"(?:性别[：: ]*|\b)(男|女)(?:\b|[，,；;\n])", text)
     facts.set("gender", gender_match.group(1) if gender_match else None)
-    age_match = re.search(r"(?:年龄[：: ]*)?(\d{1,3})\s*(?:岁|周岁)", text)
+    # v6.11.32：简历常写「年龄：25」不带「岁」单位，显式「年龄」标签下也应识别；
+    # 无标签时仍要求「岁/周岁」，避免把学号、年份等数字误判成年龄。
+    age_match = re.search(r"年龄\s*[：:]\s*(\d{1,3})(?!\d)|(\d{1,3})\s*(?:岁|周岁)", text)
     if age_match:
-        facts.age = int(age_match.group(1))
-        facts.age_text = age_match.group(0).strip()
+        facts.age = int(age_match.group(1) or age_match.group(2))
+        facts.age_text = f"{facts.age}岁"
         facts.evidence["age"] = facts.age_text
     facts.set("education", _extract_education(text))
     facts.set("economy", _field_value(text, ("家庭经济状况", "家庭经济", "经济状况")))
