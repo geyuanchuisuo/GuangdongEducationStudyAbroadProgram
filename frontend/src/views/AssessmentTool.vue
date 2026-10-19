@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { ElMessage, type UploadFile } from 'element-plus'
 import { Search, Loading, UploadFilled } from '@element-plus/icons-vue'
 import { platformApi as api } from '../api/platform'
@@ -20,6 +20,42 @@ const samples: Record<SourceType, string> = {
 }
 
 const fileAccept = '.txt,.md,.csv,.docx,.xlsx,.pdf'
+
+// v6.11.32：注册信息渠道改接真实数据——先选已有客户带出其真实注册留资，再允许人工补齐后研判。
+// 原先直接投递写死的「李四/22岁本科」示例，既没读注册数据也无法编辑。
+function emptyRegForm() {
+  return { 姓名: '', 性别: '', 年龄: '', 联系方式: '', 学历: '', 职业需求: '', 德语能力: '' }
+}
+const customerOptions = ref<any[]>([])
+const selectedCustomerId = ref<number | undefined>(undefined)
+const regForm = ref(emptyRegForm())
+
+async function loadCustomerOptions() {
+  try {
+    const page: any = await api.employeeCustomers({ page: 1, page_size: 100 })
+    customerOptions.value = Array.isArray(page) ? page : (page?.items || [])
+  } catch {
+    customerOptions.value = []
+  }
+}
+
+/** 选中客户后把其真实注册留资带入表单（姓名/性别/年龄/联系方式/学历），其余字段由员工补齐 */
+function onPickCustomer(id: number | undefined) {
+  const c = customerOptions.value.find((x: any) => x.id === id)
+  if (!c) return
+  regForm.value = {
+    ...emptyRegForm(),
+    姓名: c.name || '',
+    性别: c.gender || '',
+    年龄: c.age ? String(c.age) : '',
+    联系方式: c.phone || '',
+    学历: c.education || '',
+    职业需求: regForm.value.职业需求 || '',
+    德语能力: regForm.value.德语能力 || '',
+  }
+}
+
+onMounted(loadCustomerOptions)
 
 function onFileChange(uploadFile: UploadFile) {
   selectedFile.value = uploadFile.raw || null
@@ -57,15 +93,32 @@ const customerFieldLabels: Record<string, string> = {
 
 const productLabel: Record<string, string> = { singapore: '新加坡', germany: '中德' }
 
+const regSample = { 姓名: '李四', 性别: '女', 年龄: '22', 联系方式: '13912345678', 学历: '本科毕业（2026年6月毕业）', 职业需求: '希望提升就业竞争力、获得稳定工作', 德语能力: '零基础' }
+
 function useSample() {
   if (source.value === 'file') return
+  if (source.value === 'registration') {
+    selectedCustomerId.value = undefined
+    regForm.value = { ...regSample }
+    return
+  }
   content.value = samples[source.value]
 }
 
 async function runAssess() {
+  // 注册信息渠道：用「客户选择带入 + 人工补齐」后的表单值组装，只提交非空字段
+  let registrationPayload: Record<string, string> | null = null
   if (source.value === 'file') {
     if (!selectedFile.value) { ElMessage.warning('请选择文件'); return }
-  } else if (source.value !== 'registration' && !content.value.trim()) {
+  } else if (source.value === 'registration') {
+    const reg: Record<string, string> = {}
+    Object.entries(regForm.value).forEach(([k, v]) => {
+      const s = String(v ?? '').trim()
+      if (s) reg[k] = s
+    })
+    if (!Object.keys(reg).length) { ElMessage.warning('请先选择客户，或至少填写一项注册信息'); return }
+    registrationPayload = reg
+  } else if (!content.value.trim()) {
     ElMessage.warning('请输入客户信息')
     return
   }
@@ -76,9 +129,7 @@ async function runAssess() {
       result.value = await api.assessFile(selectedFile.value!)
     } else {
       const payload: any = { source_type: source.value, content: content.value }
-      if (source.value === 'registration') {
-        payload.registration = { 姓名: '李四', 性别: '女', 年龄: '22', 联系方式: '13912345678', 学历: '本科毕业（2026年6月毕业）', 职业需求: '希望提升就业竞争力、获得稳定工作', 德语能力: '零基础' }
-      }
+      if (registrationPayload) payload.registration = registrationPayload
       result.value = await api.assessText(payload)
     }
   } catch (e: any) {
@@ -143,9 +194,40 @@ async function runBatch() {
           :rows="8"
           placeholder="粘贴客户信息，如：姓名 张三 性别 男 年龄 19岁 家里很有钱 电话 13800138000"
         />
-        <el-alert v-else-if="source === 'registration'" title="注册信息渠道" type="info" :closable="false" show-icon style="margin-bottom: 12px">
-          <template #default>将使用结构化注册字段示例（李四，22岁本科）进行研判。</template>
-        </el-alert>
+        <div v-else-if="source === 'registration'" class="at-reg">
+          <el-alert title="注册信息渠道" type="info" :closable="false" show-icon style="margin-bottom: 12px">
+            <template #default>选择已有客户可带出其真实注册留资，也可直接手工填写后研判。</template>
+          </el-alert>
+          <el-select
+            v-model="selectedCustomerId"
+            filterable
+            clearable
+            placeholder="选择已有客户（自动带出注册信息）"
+            style="width: 100%; margin-bottom: 12px"
+            @change="onPickCustomer"
+          >
+            <el-option
+              v-for="c in customerOptions"
+              :key="c.id"
+              :label="(c.name || '未命名') + '（' + (c.phone || '无手机号') + '）'"
+              :value="c.id"
+            />
+          </el-select>
+          <el-form label-width="72px" size="small" class="at-reg-form">
+            <el-form-item label="姓名"><el-input v-model="regForm.姓名" placeholder="如：李四" /></el-form-item>
+            <el-form-item label="性别">
+              <el-select v-model="regForm.性别" clearable placeholder="请选择" style="width: 100%">
+                <el-option label="男" value="男" />
+                <el-option label="女" value="女" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="年龄"><el-input v-model="regForm.年龄" placeholder="如：22" /></el-form-item>
+            <el-form-item label="联系方式"><el-input v-model="regForm.联系方式" placeholder="手机号 / 微信" /></el-form-item>
+            <el-form-item label="学历"><el-input v-model="regForm.学历" placeholder="如：本科毕业（2026年6月毕业）" /></el-form-item>
+            <el-form-item label="职业需求"><el-input v-model="regForm.职业需求" placeholder="如：希望提升就业竞争力、获得稳定工作" /></el-form-item>
+            <el-form-item label="德语能力"><el-input v-model="regForm.德语能力" placeholder="如：零基础" /></el-form-item>
+          </el-form>
+        </div>
         <div v-else class="at-file-zone">
           <el-upload
             :auto-upload="false"
@@ -282,6 +364,8 @@ async function runBatch() {
 .at-source { margin-bottom: 14px; }
 .at-actions { margin-top: 14px; display: flex; gap: 10px; }
 .at-hint { color: #909399; font-size: 12px; margin: 10px 0 0; }
+.at-reg-form { background: #f5f7fa; border-radius: 8px; padding: 12px 14px 0; }
+.at-reg-form :deep(.el-form-item) { margin-bottom: 12px; }
 .at-file-zone { border: 1px dashed #dcdfe6; border-radius: 8px; padding: 20px; text-align: center; }
 .at-upload-icon { font-size: 48px; color: #c0c4cc; }
 .at-file-selected { margin-top: 12px; display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; background: #f5f7fa; border-radius: 6px; font-size: 13px; }
