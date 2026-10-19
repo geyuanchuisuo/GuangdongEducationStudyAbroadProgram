@@ -47,6 +47,10 @@ class CrmLeadUpdate(BaseModel):
 class CrmLeadOut(BaseModel):
     id: int
     customer_id: int | None = None
+    # v6.11.35：姓名/手机号/微信存于 customer 表（crm_lead 无此列），list_leads 时 join 带出
+    name: str | None = None
+    phone: str | None = None
+    wechat: str | None = None
     source: str | None = None
     raw_input: str | None = None
     background_info: str | None = None

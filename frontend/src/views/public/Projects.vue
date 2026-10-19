@@ -8,30 +8,30 @@ import { platformApi } from '../../api/platform'
 const router = useRouter()
 const keyword = ref('')
 const category = ref('全部')
+const categories = ['全部', '德国双元制', '新加坡本硕', '国际留学', '国际研学']
 const projects = ref<any[]>([])
-
-// v6.11.33：分类筛选项改为按接口返回的分类动态生成。
-// 原先写死 ['全部','德国双元制','新加坡本硕','国际留学','国际研学']，一旦后端分类口径变化
-// （例如返回"语言培训/学科辅导"），点了筛选必然为空，页面看起来像"没数据"。
-const categories = computed(() => {
-  const firstId = new Map<string, number>()
-  for (const item of projects.value) {
-    if (!item.category) continue
-    const id = Number(item.id ?? 0)
-    firstId.set(item.category, Math.min(firstId.get(item.category) ?? id, id))
-  }
-  return ['全部', ...[...firstId.entries()].sort((a, b) => a[1] - b[1]).map(([name]) => name)]
-})
 
 // v6.10.0：课程列表接真实 GET /cs/courses（platformApi 内映射页面形状、失败回落演示数据）
 onMounted(async () => {
   projects.value = await platformApi.projects()
 })
 
-const filtered = computed(() => projects.value.filter((item) =>
-  (category.value === '全部' || item.category === category.value) &&
-  (!keyword.value || item.title.includes(keyword.value) || item.summary.includes(keyword.value)),
-))
+// v6.11.35：筛选按业务线包含匹配（course_project.category 为四大业务线全称，如"新加坡国际本硕升学"）；空安全防崩溃
+const categoryMatch = (itemCat: unknown, selected: string) => {
+  if (selected === '全部') return true
+  const c = String(itemCat ?? '')
+  if (selected === '德国双元制') return c.includes('德国')
+  if (selected === '新加坡本硕') return c.includes('新加坡')
+  return c.includes(selected)
+}
+const filtered = computed(() => {
+  const kw = keyword.value.trim()
+  return projects.value.filter((item) => {
+    const title = String(item?.title ?? '')
+    const summary = String(item?.summary ?? '')
+    return categoryMatch(item?.category, category.value) && (!kw || title.includes(kw) || summary.includes(kw))
+  })
+})
 </script>
 
 <template>

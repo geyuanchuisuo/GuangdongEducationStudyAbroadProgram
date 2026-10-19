@@ -389,6 +389,7 @@ class OrgMemberItem(BaseModel):
     user_type: str
     employee_role: Optional[str] = None
     department: Optional[str] = None
+    contact_info: Optional[str] = Field(None, description="企业微信/其他联系方式（sys_user 既有字段）")
     phone_masked: Optional[str] = Field(None, description="脱敏电话，如 138****5678")
 
 

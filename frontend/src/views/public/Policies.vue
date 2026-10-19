@@ -21,11 +21,13 @@ const countries = computed(() => {
   return ['全部', ...names]
 })
 const filtered = computed(() => list.value.filter((item) => country.value === '全部' || item.country === country.value))
-const active = ref<any>(null)
-const dialogVisible = computed({
-  get: () => !!active.value,
-  set: (value: boolean) => { if (!value) active.value = null },
-})
+// 查看完整指南：展示 policy.content 全文（GET /cs/policies 已返回 content 字段，此前按钮无事件）
+const detail = ref<any>(null)
+const detailDialog = ref(false)
+function openGuide(item: any) {
+  detail.value = item
+  detailDialog.value = true
+}
 </script>
 
 <template>
@@ -37,12 +39,12 @@ const dialogVisible = computed({
       <article v-for="item in filtered" :key="item.title" class="surface policy">
         <div class="policy-head"><span>{{ item.country }}</span><time>{{ item.date }}</time></div>
         <h2>{{ item.title }}</h2><p>{{ item.summary }}</p>
-        <el-button text type="primary" @click="active = item">查看完整指南</el-button>
+        <el-button text type="primary" @click="openGuide(item)">查看完整指南</el-button>
       </article>
     </div>
-    <el-dialog v-model="dialogVisible" :title="active?.title" width="720px" top="8vh">
-      <div class="policy-dialog-head"><span>{{ active?.country }}</span><time>{{ active?.date }}</time></div>
-      <p class="policy-dialog-body">{{ active?.content || '该政策的完整指南暂未提供，请联系顾问获取官方原文。' }}</p>
+    <el-dialog v-model="detailDialog" :title="detail?.title || '完整指南'" width="min(680px, 94vw)">
+      <div class="policy-head"><span>{{ detail?.country }}</span><time>{{ detail?.date }}</time></div>
+      <p class="policy-full">{{ detail?.content || detail?.summary }}</p>
     </el-dialog>
   </div>
 </template>
@@ -56,9 +58,7 @@ const dialogVisible = computed({
 .policy-head time { color: var(--muted); font-weight: 500; }
 .policy h2 { margin: 26px 0 12px; font-size: 23px; color: var(--ink-deep); }
 .policy p { min-height: 96px; color: var(--muted); line-height: 1.9; }
-.policy-dialog-head { display: flex; justify-content: space-between; margin-bottom: 12px; color: var(--violet); font-weight: 800; }
-.policy-dialog-head time { color: var(--muted); font-weight: 500; }
-.policy-dialog-body { margin: 0; color: var(--ink-deep); line-height: 2; }
+.policy-full { white-space: pre-wrap; line-height: 1.9; color: var(--muted); }
 @media (max-width: 850px) { .policy-grid { grid-template-columns: 1fr; } }
 </style>
 

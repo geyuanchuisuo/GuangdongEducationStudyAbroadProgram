@@ -58,7 +58,18 @@ class CrmService:
         total, items = await self.repo.list_leads(
             page, page_size, owner_employee_id=owner_filter, status=status
         )
-        return {"total": total, "items": [CrmLeadOut.model_validate(i).model_dump() for i in items]}
+        # v6.11.35：crm_lead 无姓名/手机号列，从 customer 表 join 带出（前端姓名/手机号列原恒空）
+        out = []
+        for i in items:
+            row = CrmLeadOut.model_validate(i).model_dump()
+            if i.customer_id:
+                customer = await self.customer_repo.get_by_id(i.customer_id)
+                if customer:
+                    row["name"] = customer.name
+                    row["phone"] = customer.phone
+                    row["wechat"] = customer.wechat
+            out.append(row)
+        return {"total": total, "items": out}
 
     async def create_lead(self, data: CrmLeadCreate, current_user: User | None = None) -> dict:
         if not data.phone or not PHONE_REGEX.match(data.phone):

@@ -4,7 +4,7 @@ from datetime import date, datetime, timedelta
 from app.core.exceptions import BusinessError, ConflictError, ForbiddenError, NotFoundError
 from app.models.customer import Customer
 from app.models.employee import DailyReportAnnotation, EmployeeDailyReport, EmployeeOrg, EmployeeTodo
-from app.models.student import StudentScore
+from app.models.student import StudentPsychAlert, StudentScore
 from app.models.system import ApprovalInstance
 from app.models.user import User
 from app.repositories.employee_repo import (
@@ -1062,6 +1062,36 @@ class EmployeeService:
 
     # ── 心理关怀待办标记 ───────────────────────────────
     VALID_PSYCH_ACTIONS = {"communicated", "referred", "resolved"}
+
+    async def list_psych_alerts(self, current_user: User, status: str | None, page: int, page_size: int):
+        """心理预警列表（v6.11.35）：EMPLOYEE 仅负责学生的预警，MANAGER 全量。"""
+        q = select(StudentPsychAlert, User.real_name).join(User, User.id == StudentPsychAlert.student_id)
+        if status:
+            q = q.where(StudentPsychAlert.status == status)
+        if current_user.user_type != "MANAGER":
+            owned = select(Customer.sys_user_id).where(Customer.owner_employee_id == current_user.id)
+            q = q.where(StudentPsychAlert.student_id.in_(owned))
+        total = (await self.db.execute(select(func.count()).select_from(q.subquery()))).scalar() or 0
+        rows = (
+            await self.db.execute(
+                q.order_by(StudentPsychAlert.create_time.desc()).offset((page - 1) * page_size).limit(page_size)
+            )
+        ).all()
+        items = [
+            {
+                "id": alert.id,
+                "student_id": alert.student_id,
+                "student_name": student_name,
+                "trigger_reason": alert.trigger_reason,
+                "risk_level": alert.risk_level,
+                "status": alert.status,
+                "handled_action": alert.handled_action,
+                "handled_at": alert.handled_at,
+                "create_time": alert.create_time,
+            }
+            for alert, student_name in rows
+        ]
+        return items, total
 
     async def handle_psych_alert(self, employee_id: int, alert_id: int, action: str, note: str | None) -> dict:
         """标记心理预警处理动作，形成关怀记录。"""
