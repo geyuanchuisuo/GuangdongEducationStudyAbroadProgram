@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import { useUserStore } from '../stores/user'
 
 const routes: RouteRecordRaw[] = [
@@ -32,6 +33,22 @@ const routes: RouteRecordRaw[] = [
 const router = createRouter({
   history: createWebHistory(),
   routes,
+})
+
+// v6.11.52：发版后旧页面去动态加载已被删除的 chunk 会失败（Vite 构建会清空 dist 并更换 chunk 文件名），
+// 表现就是「点击左侧导航没有任何反应」。这里统一捕获：先自动重载一次（10s 内不重复，避免死循环），
+// 重载后仍失败则明确提示，避免这种静默失败让人误以为功能没接上。
+const CHUNK_ERROR_RELOAD_KEY = 'chunk-error-reload-at'
+router.onError((error: Error) => {
+  const message = String(error?.message || '')
+  if (!/dynamically imported module|Importing a module script failed|Failed to fetch/i.test(message)) return
+  const lastReloadAt = Number(sessionStorage.getItem(CHUNK_ERROR_RELOAD_KEY) || 0)
+  if (Date.now() - lastReloadAt > 10000) {
+    sessionStorage.setItem(CHUNK_ERROR_RELOAD_KEY, String(Date.now()))
+    window.location.reload()
+    return
+  }
+  ElMessage.error('页面版本已更新，请刷新页面后重试')
 })
 
 router.beforeEach(async (to) => {
