@@ -6,6 +6,16 @@
 
 ## 零、快速定位（打开项目先看这里）
 
+> v6.11.54（2026-10-19，longtrying_test）：**第十九次同步 gitea/master**——并入 v6.11.52 master 线（chunk 加载失败兜底、业务错误 bizCode 标记、代客申请表单修复），2 处文档冲突并集；pytest 170/170 + verify_all 29/29 + build ✓（LOG-107）。
+> v6.11.52（2026-10-19，longtrying_test）：**第十八次同步 gitea/master**——并入 v6.11.50/51（问题清单 55~63 修复、进度阶段口径统一 6 段、铃铛通知中心、请假表单对齐），2 处文档冲突并集；pytest 170/170 + verify_all 29/29 + build ✓（LOG-105）。
+> v6.11.50（2026-10-19，longtrying_test）：**管理层 Agent 经营数据修复**——后端 `_build_agent_real_data` MANAGER 分支注入「经营摘要（全域）」（复用 dashboard() 聚合）+ Dify 部署版员工助手（012f71a7）prompt 同步仓库最新版与 6 输入变量补齐（POST model-config 保存即发布，兜底话术改「数据未注入本次会话」）；MANAGER 3 问真实数字、EMPLOYEE 越权正确拒答；pytest 170/170（LOG-104，Dify 变更经用户批准）。
+> v6.11.43（2026-10-19，longtrying_test）：**第十七次同步 gitea/master**——并入 v6.11.41~49（/customers/me 500 修复、REPORT_DATA_SOURCE 切 production、公开站修复、签约金额、`GET /events/my-registrations` +1 路由 114→115、提示去重、意向客户修复），2 处文档冲突并集；pytest 170/170 + verify_all 29/29 + build ✓（LOG-103）。
+> v6.11.41（2026-10-19，longtrying_test）：**流式输出前端空白气泡修复**——AgentDock.vue 流式消息对象改 `reactive()` 包装（Vue 响应式陷阱致 SSE token 已到但视图不渲染、只显示空白气泡），浏览器实测逐字渲染恢复（LOG-101）。
+> v6.11.40（2026-10-19，longtrying_test）：**清库重注 + 种子数据自动注入**——新增 `scripts/seed_all.py` 编排器（默认空库自动注入 / `--force` 清库重建），接入 docker-compose backend 启动命令与 start-project.bat（重新拉起自动注入，已有数据不动）。详见更新记录 v6.11.40 / LOG-100。
+> v6.11.39（2026-10-19，longtrying_test）：**全角色 Agent 流式输出**——学生/员工/管理层 SSE 增量下发（新增 `POST /student/agent/chat/stream` 和 `POST /employee/agent/chat/stream`，路由 112→114）+ 前端 AgentDock.vue 新增 `streamAgent()` 函数支持逐字渲染（感知延迟=首字时间），流式失败自动回退非流式接口（LOG-099）。
+> v6.11.37 补丁（2026-10-19，longtrying_test）：**流式输出修复**——nginx `location /api/` 未关 `proxy_buffering` 导致 SSE 被攒批一次性下发（前端"整段蹦出"），补 `proxy_buffering off` + 后端 `X-Accel-Buffering: no` 双保险，三层实测逐字到达（LOG-097）。
+> v6.11.37（2026-10-19，longtrying_test）：**客服响应慢根治**——诊断修正（live 应用实为分类器+7 分支=每轮 2~3 次串行 LLM，基线 13.8~36.4s）；draft 图原地换「实时数据+单 LLM」版（key 不变，备份可回滚）→ 12.7/6.6s；SSE 流式（`POST /ai/customer-service/chat/stream`，路由 111→112）+ AgentDock 流式渲染 → 公网首字 2.5s；dify_init.py 加固（端点自愈/同名去重/key POSIX 防御）+ 脚本挂载镜像重建，重拉起幂等配置好。详见更新记录 v6.11.37 / LOG-096。
+> v6.11.36（2026-10-19，longtrying_test）：**正式交付运行（合并后全栈重建）**——`npm run build` + `docker restart edu-backend` + vite/隧道拉起；公网 https://nine-peaches-fetch.loca.lt（访客密码 113.80.207.199）注册/登录/四演示账号验证全通过（API 零变化）。详见更新记录 v6.11.36 / LOG-095。
 > **第十六次同步 gitea/master→longtrying_test（2026-10-19，v6.11.36 合并）**：master 公开站口径修正/政策弹窗/研判文件提取/种子拟真化+政策接入重建/AI 网关重试收紧/管理层 Agent 分权/nginx 上传 20m 全量并入（公共模块经用户批准，前端以 master 为准，seed_projects_v6_11_35.py 删除由 seed_data.py BUSINESS_PROJECTS 统一）；pytest 170/170 + verify_all 29/29 + build ✓。详见更新记录 v6.11.36（master_ZNBG 线条目）/ LOG-094（双线）。
 > v6.11.36（2026-10-19，longtrying_test）：**正式交付重启环境排障**——dify/docker/.env 模型三项回填、app_keys.env 中文名格式手修为 DIFY_* shell 格式（**dify_init.py 输出格式缺陷遗留待修**）、dify_nginx IP 漂移 502 重启修复；公网 thin-kings-feel.loca.lt 全链 200。详见更新记录 v6.11.36 / LOG-094。
 > v6.11.35（2026-10-19，longtrying_test）：**前端批量缺陷修复 11 项（#28~#38）**——客户搜索空安全防崩溃、代客候选过滤已转化、政策完整指南弹窗、客户抽屉/研判注册表单真实化、待办页补消息通知、线索姓名手机来源打通（join customer）、管理层通知种子补齐、心理预警模块补全（新增 GET /employee/psych-alerts，路由 110→111）、项目口径修正为四大业务线（seed_projects 幂等）。详见更新记录 v6.11.35 / LOG-093。
@@ -89,8 +99,8 @@
 5. ✅ ~~ZNBG 分支本地提交未推送~~ **已推送**（v6.9.3 起本分支已同步远端；git 凭据本机已恢复，`git ls-remote` 免交互即通）
 6. ✅ ~~两条 P1（v6.9.3 实测发现，M5，阻断切 production）~~ **v6.9.6 已修复**：a) 缺省周期改用 `default_completed_week(now)`=上一完整自然周 `[上周一00:00, 本周一00:00)`（原为 `week_range(now)` 恒落未来 → 必 40002）b) `normalize_customer_status()` 复用 M1 词表 `STATUS_CN_TO_EN` 做中英归一 + `fetch_customers` 逐行容错（脏行跳过并写入口径说明，不再拖垮 5 类报告）。**仍留 P2（他模块）**：`seed_data.py` ai_report 段秒级 DATETIME 随机碰撞（2 跑 1 败，共用脚本需确认）、前端 `RoleWorkspace.vue` 部分区块仍为静态演示值（管理层看板 183/21.4%/689/3.2%、学生首屏「李同学」与登录账号不符，作者 ge yuan，属 M3 看板区块）
 7. ✅ ~~M5 报告 AI 只用模拟~~ **v6.9.5 已统一到共用网关**：`ReportAIService` 内部走 `model_ai_service`（共用模块名称），失败回落 mock；报告内容新增差异字段 `ai_source`（model/mock/unavailable）并与 `ai_status` 并存，PDF 头部/前端详情按来源标注；契约 §7 已同步。**v6.9.6 补**：三处下钻改为与报告**同源**（`_drilldown_dataset` 按 `data_source_status` 分流），前端「明细下钻」说明同步。**待办**：`DIFY_MODEL_API_KEY` 需在 `backend/.env` 配置后才可验证真实模型链路（当前自动回落 mock，不影响测试）；M3 `employee_service.py` 的 logger 导入为合并期最小修复，待 M3 负责人复审
-**数据库**：35张表（含 M5 ai_report_drill、ticket_ai_analysis 与 v6.11.23 新增 policy 等），110条路由路径（109 API + 1 health；v6.11.23 增 /cs/policies + DELETE follow-ups，v6.11.25 增 /customers/me），MVC分层结构就绪；Docker 数据库、Redis、后端服务按 compose 配置运行；数据库凭据见本机环境配置。
-**测试账号（v6.10.0 起规范）**：核心角色固定 `username=手机号`——`13810000001` PROSPECT / `13810000002` STUDENT / `13810000003` EMPLOYEE / `13810000004` MANAGER，**密码统一 `Test@123456`**；其余 `user000~user115` 同密码（角色按 `i % 8` 确定：0=ADMIN、1=MANAGER、2~4=EMPLOYEE、5~6=STUDENT、7=PROSPECT）。`scripts/seed_data.py` 会 `drop_all+create_all` 重建全库（`random.seed(42)` 可复现），重跑前注意数据留存；Docker E2E 已按此规范更新账号常量
+**数据库**：35张表（含 M5 ai_report_drill、ticket_ai_analysis 与 v6.11.23 新增 policy 等），115条路由路径（114 API + 1 health；v6.11.23 增 /cs/policies + DELETE follow-ups、v6.11.25 增 /customers/me、v6.11.35 增 /employee/psych-alerts、v6.11.37 增 /ai/customer-service/chat/stream、v6.11.39 增 /student/agent/chat/stream + /employee/agent/chat/stream、v6.11.42 增 /events/my-registrations），MVC分层结构就绪；Docker 数据库、Redis、后端服务按 compose 配置运行；数据库凭据见本机环境配置。
+**测试账号（v6.10.0 起规范）**：核心角色固定 `username=手机号`——`13810000001` PROSPECT / `13810000002` STUDENT / `13810000003` EMPLOYEE / `13810000004` MANAGER，**密码统一 `Test@123456`**；其余 `user000~user115` 同密码（角色按 `i % 8` 确定：0=ADMIN、1=MANAGER、2~4=EMPLOYEE、5~6=STUDENT、7=PROSPECT）。种子统一入口 `scripts/seed_all.py`（v6.11.40：空库自动注入已接启动流程，`--force` 清库重建恢复出厂数据；内部编排 seed_data `drop_all+create_all` 全量重建 + FAQ/缺口补充/归属重分配/通知，`random.seed(42)` 可复现），重跑 --force 前注意数据留存；Docker E2E 已按此规范更新账号常量
 **主基线文档**：`promts/lon/提示词整合测试_demo/docs/基础架构方案_五人并行开发.md`（v1.2.0，28项决策）
 
 **接手阅读顺序**：
@@ -98,8 +108,8 @@
 2. `docs/项目需求文档.md` — 完整业务需求
 3. `promts/lon/提示词整合测试_demo/docs/基础架构方案_五人并行开发.md` — **主基线，权重最高**
 4. `docs/开发路线图.md` — 当前进度、下一步任务
-5. `docs/接口契约v1.md` — API接口契约（v2.11.26，110 paths；v2.11.23 政策/删跟进 +2、v2.11.25 /customers/me +1）
-6. `docs/更新记录.md` — 最近变更（v6.11.27 变更归属修复 + v6.11.26 员工Agent真实数据注入 + v6.11.25 客服Agent完整版上线 + v6.11.23 政策建表/B类清零 + v6.11.22 种子归属重分配 + v6.11.21 第十三次同步master）
+5. `docs/接口契约v1.md` — API接口契约（v2.11.51，115 paths）
+6. `docs/更新记录.md` — 最近变更（v6.11.52 第十八次同步 master + v6.11.50 管理层Agent经营数据 + v6.11.43 第十七次同步 master + v6.11.42 文档审计 + v6.11.41 流式空白修复 + v6.11.40 清库重注/种子自动注入 + v6.11.39 全角色Agent流式 + v6.11.38 Dify应用命名规范）
 
 **重要规则**：
 - 主基线文档（基础架构方案）权重 > 其他参考文档（共用基座方案、公共框架等）
@@ -206,7 +216,7 @@ GuangdongEducationStudyAbroadProgram/
 │   ├── AGENTS.md              # 本文件副本（与根目录AGENTS.md保持同步）
 │   ├── 项目需求文档.md
 │   ├── 更新记录.md
-│   ├── 接口契约v1.md          # API接口契约（v2.0）
+│   ├── 接口契约v1.md          # API接口契约（v2.11.51，115 paths）
 │   ├── 开发路线图.md
 │   └── 运行日志.md
 │
@@ -778,6 +788,21 @@ chore: 构建
 | 40901 | 数据冲突（客户重复录入） |
 | 50001 | 服务器错误 |
 
+### 7.5 Dify 应用命名规范（硬性规则，v6.11.38）
+
+**状态标记必须写进 Dify 应用名字，方便一眼分清内容**：
+- **调用中**（后端按 App Key 实际调用）→「原名【调用中】」，如 `粤教客服Agent【调用中】`
+- **废案**（停用/重复副本/旧版留档，不再被调用）→「原名【废案】」，如 `粤教客服Agent【废案】`
+
+**每次修改 Dify 应用之后都要重新写明标记**：导入新应用、换 key、停用旧应用、删除等任何变更后，必须立即核对全部应用名的状态标记并改正。dify-init 每次运行会自动规范化（`normalize_app_names`），但手工在控制台操作后须当场核对，不得遗留无标记/错标记的名字。
+
+**配套机制**（dify/docker/dify_init.py）：
+- `normalize_app_names`：按「是否输出 App Key」自动打【调用中】/【废案】标记，幂等（重跑零改名）
+- `_env_name_for`：名字含「废案/留档」不输出 key（废案应用永远不会被后端误调用）
+- 应用导入幂等判定按基名（剥掉状态标记），改名不会导致重复导入副本
+
+**当前口径**（以 backend/.env 绑定的 App Key 为准）：调用中 = 粤教客服Agent、留学生智能管家、企业员工助手、智能报告 各 1 个；其余全部为废案（5 个，含旧版留档）。
+
 ---
 
 ## 八、常见问题
@@ -830,11 +855,11 @@ chore: 构建
 | **AGENTS.md** | **./AGENTS.md**（根目录） | **项目接手指南（agent自动读取，这是主文件）** |
 | AGENTS.md 副本 | docs/AGENTS.md | 与根目录保持同步的副本 |
 | 项目需求文档 | docs/项目需求文档.md | 完整需求、架构、接口、数据库 |
-| 更新记录 | docs/更新记录.md | 版本变更记录（当前 v6.11.27） |
+| 更新记录 | docs/更新记录.md | 版本变更记录（当前 v6.11.52） |
 | 开发路线图 | docs/开发路线图.md | 分期任务表（Phase 0已完成，M3 收官，M1/M2 v6.8.0 补齐，M4/M5 后端已交付，AI 已接通） |
-| 运行日志 | docs/运行日志.md | 排查记录与教训（当前 LOG-085） |
+| 运行日志 | docs/运行日志.md | 排查记录与教训（当前 LOG-105） |
 | 测试报告 | docs/测试报告_v6.8.2_M3M4端到端.md | v6.8.2 Docker E2E 69/69 检查明细+7项缺陷+7轮迭代留档 |
-| 接口契约v2 | docs/接口契约v1.md | API接口契约（v2.11.26，35张表，110路由路径=109 API+1 health） |
+| 接口契约v2 | docs/接口契约v1.md | API接口契约（v2.11.51，35张表，115路由路径=114 API+1 health） |
 | **基础架构方案** | **promts/lon/提示词整合测试_demo/docs/基础架构方案_五人并行开发.md** | **主基线文档（v1.2.0，28项决策），所有参考文档权重低于此文件** |
 
 > **文档优先级**：基础架构方案_五人并行开发.md > 其他参考文档（共用基座方案、公共框架等）

@@ -7,6 +7,7 @@
 - 进度追踪按 v2.5.0 契约由 M4 统一实现员工端更新+学生端查看。
 """
 import json
+from collections.abc import AsyncIterator
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import func, select
@@ -378,6 +379,56 @@ class StudentService:
                 logger.warning("model fallback failed: student=%s error=%s", student.id, model_exc)
             logger.warning("agent_chat AI 降级: student=%s error=%s", student.id, exc)
             return {"reply": _AGENT_FALLBACK_REPLY, "session_id": session_id or "new", "source": "fallback"}
+
+    async def agent_chat_stream(self, student: User, message: str, session_id: str | None) -> AsyncIterator[dict]:
+        """学生助手流式会话：注入身份+能力+限制预期 context 转发 Dify 流式；AI 不可用降级返回能力清单。
+
+        v6.11.38：SSE 增量下发（感知延迟=首字时间），事件格式与客服流式对齐：
+        {"event":"meta","conversation_id"} / {"event":"token","delta"} / {"event":"done","data"}。
+        限制预期（需求硬性要求）：不承诺退费、不给出医疗级建议，情绪问题引导专业帮助。
+        """
+        from app.services.ai_service import AgentType, ai_service
+
+        context = {
+            "user_type": "STUDENT",
+            "user_id": str(student.id),
+            "real_name": student.real_name or student.username,
+            "capabilities": "、".join(STUDENT_CAPABILITIES),
+            "restrictions": "不承诺退费；不给出医疗级建议；情绪问题引导联系负责老师或专业帮助",
+        }
+        yield {"event": "meta", "conversation_id": session_id or "new"}
+
+        buf = ""
+        dify_session_id = session_id or "new"
+        stream_error: Exception | None = None
+        try:
+            async for token in ai_service.chat_stream(
+                agent=AgentType.STUDENT,
+                message=message,
+                session_id=session_id or "new",
+                user_id=f"student_{student.id}",
+                context=context,
+            ):
+                buf += token
+                yield {"event": "token", "delta": token}
+        except Exception as exc:
+            stream_error = exc
+            logger.warning("student agent chat_stream failed: student=%s error=%s", student.id, exc)
+
+        # 流失败或无输出时走降级链
+        if stream_error is not None or not buf:
+            try:
+                from app.services.model_ai_service import model_ai_service
+                result = await model_ai_service.chat(message, session_id or "new", context)
+                buf = result["reply"]
+                dify_session_id = result.get("session_id", session_id or "new")
+                yield {"event": "token", "delta": buf}
+            except Exception as model_exc:
+                logger.warning("model fallback failed: student=%s error=%s", student.id, model_exc)
+                buf = _AGENT_FALLBACK_REPLY
+                yield {"event": "token", "delta": buf}
+
+        yield {"event": "done", "data": {"reply": buf, "session_id": dify_session_id, "source": "stream"}}
 
     # ── 提醒聚合（v6.8.1，登录拉取即推送，Agent 主动提醒数据源） ──
     async def get_reminders(self, student_id: int) -> dict:

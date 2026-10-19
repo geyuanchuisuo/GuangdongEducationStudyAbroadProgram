@@ -6,37 +6,36 @@
 
 ---
 
-## 零、智能体应用清单与调用关系（2026-10-19 v6.11.23 盘点，控制台已同步备注）
+## 零、智能体应用清单与调用关系（2026-10-19 v6.11.38 核对，命名已带状态标记）
 
-> Dify 实例中现存 **18 个应用**（3 波重复导入产物）。**后端只调用 4 个**——以 `backend/.env` 的 4 个 app key 为唯一判据，key 命中的应用即当前调用。每个应用的控制台「描述」字段已写明归属（【当前调用·勿删】/【历史版本·可删】/【重复导入·可删】）。
+> Dify 实例中现存 **9 个应用**，命名已按 AGENTS.md §7.5 硬性规则标注状态：**【调用中】4 个 / 【废案】5 个**（v6.11.38 起每次修改 Dify 应用后必须重新写明标记，dify-init 每次运行自动核对）。后端只调用 4 个——以 `backend/.env` 的 4 个 app key 为唯一判据，key 命中的应用即当前调用。
 
-### 0.1 当前调用（4 个，勿删）
+### 0.1 当前调用【调用中】（4 个，勿删）
 
-| 应用名 | mode | 应用 ID（前 8 位） | 后端 key | 调用方 | 来源 DSL |
+| 应用名（含状态标记） | mode | 应用 ID（前 8 位） | 后端 key | 调用方 | 来源 DSL |
 |--------|------|------------------|----------|--------|----------|
-| 留学生智能管家 | chat | `03a4dfa6` | DIFY_STUDENT_AGENT_KEY | M4 学生智能助手（/student/agent/chat） | 留学生智能管家__agent-chat.yml |
-| 企业员工助手 | chat | `012f71a7` | DIFY_EMPLOYEE_AGENT_KEY | M3 企业智能助手（/employee/agent/chat） | 企业员工助手__agent-chat.yml |
-| 粤教客服Agent | advanced-chat | `86a2f351` | DIFY_CUSTOMER_AGENT_KEY（**v6.11.25 换 key**，key `app-Ru3T...`） | M2 智能客服（/ai/customer-service/chat） | 粤教客服__advanced-chat.yml（完整版，含 query 注入/FAQ/知识检索） |
-| 智能报告 | advanced-chat | `06ce80f9` | DIFY_REPORT_AGENT_KEY | M5 智能报告（报告 AI 文字） | 智能报告__advanced-chat.yml |
+| 留学生智能管家【调用中】 | chat | `03a4dfa6` | DIFY_STUDENT_AGENT_KEY | M4 学生智能助手（/student/agent/chat，v6.11.39 起流式 /student/agent/chat/stream） | 留学生智能管家__agent-chat.yml |
+| 企业员工助手【调用中】 | chat | `012f71a7` | DIFY_EMPLOYEE_AGENT_KEY | M3 企业智能助手（/employee/agent/chat，v6.11.39 起流式 /employee/agent/chat/stream）；v6.11.50 部署版 prompt 整体同步仓库 yml 最新版 + 补齐 6 输入变量（POST /model-config 保存即发布），MANAGER 经 query 通道获「经营摘要（全域）」可答经营情况 | 企业员工助手__agent-chat.yml |
+| 粤教客服Agent【调用中】 | advanced-chat | `86a2f351` | DIFY_CUSTOMER_AGENT_KEY（key `app-Ru3T...`） | M2 智能客服（/ai/customer-service/chat + /chat/stream 流式） | 粤教客服__advanced-chat.yml |
+| 智能报告【调用中】 | advanced-chat | `06ce80f9` | DIFY_REPORT_AGENT_KEY | M5 智能报告（报告 AI 文字） | 智能报告__advanced-chat.yml |
 
-### 0.2 历史版本（2 个，可删）
+**粤教客服Agent 工作流现状（v6.11.37）**：「实时数据注入（courses/events HTTP 节点 → host.docker.internal:8000）+ 单 LLM」瘦身版——替换旧「问题分类器+7 分支」（每轮 2~3 次串行模型调用，13.8~36.4s），现阻塞 6.6~12.7s、流式首字约 2.5s；旧图备份于 `dify/workflows/_backup_v6.11.37_86a2f351_classifier_graph.json` 可回滚。
 
-| 应用名 | mode | ID（前 8 位） | 说明 |
-|--------|------|--------------|------|
-| 粤教客服Agent | advanced-chat | `12f220f6` | 03:50 首波导入，带孤儿 key `app-jKRij...`（未被后端引用），已被 03:51 波次同名应用取代 |
-| 智能报告（agent-chat旧版留档） | agent-chat | `db696e70` | 03:51 旧版留档，带孤儿 key `app-CjWpQ...`（未被后端引用）；报告链路已走 advanced-chat Chatflow |
+### 0.2 废案（5 个，不再被调用，保留待删）
 
-### 0.3 重复导入产物（12 个，可删）
+| 应用名（含状态标记） | ID（前 8 位） | 说明 |
+|--------|--------------|------|
+| 粤教客服Agent【废案】 | `3bb44bba` | 旧骨架版（无 key），已被 86a2f351 取代 |
+| 留学生智能管家【废案】 | `45360ad2` | 重复导入副本（无 key） |
+| 企业员工助手【废案】 | `a2508c38` | 重复导入副本（无 key） |
+| 智能报告【废案】 | `f4337bd7` | 重复导入副本（无 key） |
+| 智能报告（agent-chat旧版留档）【废案】 | `99c10973` | agent-chat 旧版留档（带孤儿 key `app-x2Sjm...`，未被后端引用）；报告链路已走 advanced-chat Chatflow |
 
-03:51 / 04:10 / 04:11 三波次重复导入产生（均为无 key 副本）：留学生智能管家 ×3（`1181b649`/`fcd5e13a`/`6b8d5191`）、企业员工助手 ×3（`b8053ff7`/`005a3255`/`f685ab2d`）、智能报告 ×1（`6d884f13`）、粤教客服Agent ×2（`5e03fe13`/`e69cb06e`）、agent-chat 留档副本 ×3（`0072251a`/`35563f8c`/`498292d3`）。
+### 0.3 命名规范与防堆积机制（已落地）
 
-### 0.4 重复产生的根因与待办
-
-**根因**：`dify_init.py` 的导入去重以「yml 文件名主干」比对 Dify 内应用名，但 DSL 导入后应用实际名称取自 DSL 内部名（如 `粤教客服Agent` ≠ 主干 `粤教客服__advanced-chat`），**名称永远不相等 → 每次初始化都重新导入一份**，重复随部署次数增长。
-
-**待办（需用户批准后执行）**：
-1. 删除 0.3/0.2 共 14 个可删应用（控制台或脚本批量删，删除前确认 0.1 的 4 个不受影响）；
-2. 修复 `dify_init.py` 去重逻辑（改为「按 DSL 应用名 + 主干前缀」双匹配），杜绝再次堆积。
+- **命名规范（AGENTS.md §7.5 硬性规则）**：调用中 →「原名【调用中】」，废案 →「原名【废案】」；每次修改 Dify 应用（导入/换 key/停用/删除）后必须重新写明标记。
+- **自动核对**：`dify_init.py` 的 `normalize_app_names` 在每次初始化时按「是否输出 App Key」自动规范化命名（幂等，重跑零改名）。
+- **去重防堆积（历史缺陷已修复）**：导入幂等判定按基名（剥【调用中】/【废案】标记）比对，改名/重复不再产生新副本；同名多应用时按「已签发 key / 延续 token」确定性选定，key 不漂移；app key 输出为 POSIX shell 变量名（DIFY_*），废案应用名永不输出 key。
 
 ---
 

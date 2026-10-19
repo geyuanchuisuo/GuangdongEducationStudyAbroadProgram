@@ -1,6 +1,6 @@
 # 粤教留学项目管理平台
 
-> **版本** v6.11.30 | **更新日期** 2026-10-19 | **分支** longtrying_test
+> **版本** v6.11.52 | **更新日期** 2026-10-19 | **分支** longtrying_test
 > 
 > 广东省教育服务有限公司（粤教服务）智能化教育服务管理平台 — 集成 AI 智能体 + 传统业务闭环
 
@@ -97,7 +97,7 @@
 | **M4 学生** | student_admin_service · student_psych_profile · student_psych_alert · student_feedback_ticket · student_academic · student_application_progress |
 | **M5 报告** | ai_report · ai_report_attachment · ai_report_drill · ticket_ai_analysis |
 
-**API 路由**：110 paths（109 API + 1 health），v2.11.30 零变化。
+**API 路由**：115 paths（114 API + 1 health），契约版本 v2.11.51（v6.11.35 +心理预警 / v6.11.37 +客服流式 / v6.11.39 +学生与员工助手流式 / v6.11.42 +活动我的报名 / v6.11.43~52 合并 master 修复批）。
 
 ---
 
@@ -111,7 +111,7 @@
 - ✅ 通用审批引擎（双表设计，支持 leave / convert / late_report / complaint 四种场景）
 - ✅ 事件总线（7 条事件契约：customer.registered / customer.converted_to_student / approval.approved / leave.approved/rejected / psych_alert.created / complaint.resolved / lead.transferred）
 - ✅ 通知中心（站内消息持久化 + 分页查询 + 已读标记）
-- ✅ AI 网关（统一 `AIService.chat()` 入口 + SSE 流式 + 超时重试降级）
+- ✅ AI 网关（统一 `AIService.chat()` 入口 + 全角色 SSE 流式逐字输出 + 失败自动回退 + 超时重试降级）
 - ✅ 文件存储（本地磁盘后端，零外部依赖）
 - ✅ 企业级错误码体系（200 / 40xxx / 50xxx）
 
@@ -123,6 +123,7 @@
 - ✅ 待补全线索（pending_lead：仅微信号无手机号 → 后续补号合并）
 - ✅ 客户转留学生审批（事件总线驱动：approval.approved → customer.converted_to_student）
 - ✅ 本人客户档案查询（GET /customers/me）
+- ✅ 线索字段补全（姓名 / 手机 / 来源）+ 客户搜索防崩溃加固
 
 #### M2 客服 Agent 模块（Phase 1.1 · 100%）
 - ✅ 智能客服 Agent 集成（7 大场景 + 主动信息采集 + 会话历史保留）
@@ -134,20 +135,25 @@
 - ✅ 高意向客户转线索（提手机号 → create_lead → 回填会话 customer_id）
 - ✅ 公开接口（/cs/faq · /cs/sessions/{id}/messages · /cs/courses · /cs/policies · /cs/greeting）
 - ✅ 留学政策资讯建表接库（policy 表 + 18 条种子）
+- ✅ 公开站项目展示按四大业务线口径 + 政策「查看完整指南」弹窗
+- ✅ 客服对话流式输出（POST /ai/customer-service/chat/stream，SSE 逐字渲染，失败自动回退非流式）
+- ✅ 客服提速（Dify 工作流瘦身：每轮 2~3 次串行模型调用 → 1 次，公网流式首字约 2.5s）
 
 #### M3 员工模块（Phase 1.2 · 100%）
 - ✅ CRM 客户录入/查询/跟进（数据隔离：仅看自己名下客户）
 - ✅ 客户状态 6 态流转（PATCH /customers/{id}/status，写操作日志 + 事件）
-- ✅ 代客户申请留学生（需经理审批）
+- ✅ 代客户申请留学生（需经理审批，自动过滤已留学生）
 - ✅ 审批学生流程（请假 / 工单等，自动解析负责员工为审批人）
 - ✅ 成绩录入/查询/修改（0-100 口径 + 唯一约束）
 - ✅ 口述日报（AI 自动整理成结构化格式，可选落库）
 - ✅ 日报草稿 + 补报申请 + 管理层日报批示
-- ✅ 组织架构查询（含同事查询 + 联系电话脱敏 + 二次确认揭示）
+- ✅ 组织架构查询（部门/负责人/同事联系方式真实数据 + 部门树点击过滤 + 电话脱敏二次确认揭示）
 - ✅ 企业智能助手 Agent（权限感知注入 + 真实业务快照 + 禁编造/禁 JSON）
 - ✅ 指令式业务处理（自然语言 → 4 类动作：follow_up / todo / score / report，二次确认执行）
 - ✅ 新人指引（10 章引导式章节 + AI 问答）
 - ✅ 个人信息页面（基本信息 / 密码修改 / 客户统计 / CSV 导出）
+- ✅ 员工心理预警（GET /employee/psych-alerts + 待办页预警处理三动作）
+- ✅ 企业助手流式输出（POST /employee/agent/chat/stream，SSE 逐字渲染，失败自动回退非流式）
 
 #### M4 学生模块（Phase 1.4 · 100%）
 - ✅ 行政服务（请假申请 + 列表 + 审批状态查询 + 防重 40901）
@@ -159,6 +165,7 @@
 - ✅ 更多服务（增值转化：课程升级 / 新项目推荐 / 背景提升机会）
 - ✅ 学生智能助手 Agent（限制预期：不承诺退费 / 不医疗级建议 / 情绪问题引导专业帮助）
 - ✅ 学业 DDL 主动推送提醒（3 日内 DDL + 请假审批结果 + 工单未通知转已通知）
+- ✅ 学生助手流式输出（POST /student/agent/chat/stream，SSE 逐字渲染，失败自动回退非流式）
 
 #### M5 智能报告模块（Phase 1.5 · 骨架完成）
 - ✅ 报告骨架（REPORT_DATA_SOURCE 开关 + 三态数据质量标注）
@@ -183,7 +190,9 @@
 - ✅ 一键启动脚本（start-project.bat：依赖安装 → 后端健康轮询 → 前端构建 → 公网穿透）
 - ✅ 一键内网穿透（localtunnel 免注册，自动探测端口 + 抓取公网 URL + 访客密码）
 - ✅ Dify 一体化打包（dify_init.py 自动完成：创建管理员 → 配模型供应商 → 导入应用 → 绑模型 → 写入共享卷）
+- ✅ dify-init 加固（HTTP 节点旧地址自愈 / 同名应用确定性去重 key 不漂移 / app key POSIX 格式输出 / 模型级凭证兼容）
 - ✅ Docker Compose 全栈（MySQL + Redis + Backend + Dify + Nginx 统一入口）
+- ✅ 种子数据一键重注（scripts/seed_all.py 编排器：空库启动自动注入 / `--force` 清库重建恢复出厂数据）
 - ✅ 种子数据脚本（固定随机种子 42，幂等可重跑）
 
 ---
@@ -292,7 +301,7 @@ approval.approved 事件触发
 | 能力 | 说明 |
 |------|------|
 | 浏览课程/活动/政策 | 公开主页无需登录即可浏览 |
-| 智能客服 Agent | 7 大场景应答 + 主动采集信息 |
+| 智能客服 Agent | 7 大场景应答 + 主动采集信息（SSE 流式逐字输出） |
 | 自行注册 | 手机号为唯一有效性标准，注册即时生效 |
 | 活动报名 | 需登录后可报名，系统自动防重 |
 | 本人客户档案 | 登录后查看自己的客户状态与转化进度 |
@@ -309,7 +318,7 @@ approval.approved 事件触发
 | 进度追踪 | 留学申请 7 段进度 |
 | 生活支持 | 海外生活常见问题 + 紧急联系 |
 | 更多服务 | 增值转化推荐（不使用业务术语） |
-| 学生智能助手 | 行政代办 + 心理疏导 + DDL 提醒 |
+| 学生智能助手 | 行政代办 + 心理疏导 + DDL 提醒（SSE 流式逐字输出） |
 
 ### 🟠 EMPLOYEE 员工
 
@@ -322,9 +331,10 @@ approval.approved 事件触发
 | 审批学生流程 | 请假 / 工单等（自动解析为负责员工） |
 | 成绩录入 | 0-100 口径 + 唯一约束 |
 | 口述日报 | AI 自动整理结构化格式 |
-| 组织架构 | 查询 + 同事联系 + 脱敏揭示 |
-| 企业智能助手 | 客户查询 / 日报整理 / 指令执行 |
+| 组织架构 | 部门/负责人/同事真实数据 + 部门树过滤 + 脱敏揭示 |
+| 企业智能助手 | 客户查询 / 日报整理 / 指令执行（SSE 流式逐字输出） |
 | 指令式业务 | 自然语言 → 四类动作 + 二次确认 |
+| 心理预警处理 | GET /employee/psych-alerts + 待办页预警处理三动作 |
 | 新人指引 | 10 章引导式章节 + AI 问答 |
 
 ### 🔴 MANAGER 管理层
@@ -363,18 +373,39 @@ approval.approved 事件触发
 - Dify 25s 超时 → 走模型降级（model_ai_service ≤35s）
 - 模型也失败 → 走本地话术（固定兜底回复）
 - **任何路径前端必收回复**，会话记录保留可续上
+- 全角色对话流式失败时自动回退非流式接口，同样保证必收回复
 
 ### 6.3 Dify 应用清单
 
+Dify 平台共 **9 个应用**，应用名统一标注状态后缀：**4 个【调用中】** / **5 个【废案】**。命名规范固化于 `AGENTS.md` §7.5，`dify-init` 每次运行自动核对写明（幂等）。
+
 | 应用 | 类型 | 状态 |
 |------|------|------|
-| 粤教客服__advanced-chat | Chatflow | ✅ 在用（完整版） |
-| 企业员工助手__agent-chat | Agent-chat | ✅ 在用 |
-| 留学生智能管家__agent-chat | Agent-chat | ✅ 在用 |
-| 智能报告__advanced-chat | Chatflow | ✅ 在用 |
-| 智能报告__agent-chat | Agent-chat | 📦 留档（历史版） |
+| 粤教客服Agent【调用中】 | Chatflow | ✅ 在用（完整版） |
+| 企业员工助手【调用中】 | Agent-chat | ✅ 在用 |
+| 留学生智能管家【调用中】 | Agent-chat | ✅ 在用 |
+| 智能报告【调用中】 | Chatflow | ✅ 在用 |
+| 其余 5 个应用【废案】 | — | 📦 留档（历史版） |
 
-所有应用由 `dify_init.py` 一键初始化完成：创建管理员 → 配模型供应商 → 导入 DSL → 发布 → 写入 app key 共享卷。
+所有应用由 `dify_init.py` 一键初始化完成：创建管理员 → 配模型供应商 → 导入 DSL → 发布 → 写入 app key 共享卷。dify-init 已加固：HTTP 节点旧地址自愈、同名应用确定性去重（key 不漂移）、app key 输出 POSIX 格式（重拉起配置自动就绪）、模型级凭证兼容。
+
+### 6.4 全角色对话流式输出（v6.11.37 / v6.11.39）
+
+| 角色 | 流式端点 |
+|------|----------|
+| 智能客服 | `POST /ai/customer-service/chat/stream` |
+| 学生智能助手 | `POST /student/agent/chat/stream` |
+| 企业智能助手 | `POST /employee/agent/chat/stream` |
+
+- 客服 / 学生 / 员工 / 管理层 AI 对话全部走 SSE 流式逐字渲染，**感知延迟 = 首字时间**
+- 流式失败自动回退非流式接口，任何路径必收回复
+- nginx 反代关闭 `proxy_buffering`，保证逐字下发
+
+### 6.5 客服 Agent 提速（v6.11.37）
+
+- Dify 客服工作流瘦身：每轮 2~3 次串行模型调用 → **1 次**
+- 阻塞耗时 13.8~36.4s → **6.6~12.7s**；公网流式首字约 **2.5s**
+- 保留 FAQ 秒回 + 三级降级链（Dify → 模型 → 本地话术）
 
 ---
 
@@ -404,12 +435,17 @@ approval.approved 事件触发
 
 ### 7.3 数据重建
 
+由 `scripts/seed_all.py` 编排器统一负责：
+
+- **空库自动注入**：已接入 docker compose backend 启动命令与 `start-project.bat`，空库启动即自动灌数，已有数据不动
+- **手动恢复出厂数据**（清库重建）：
+
 ```powershell
-# 容器内执行（幂等可重跑，会 drop_all + create_all 重建全库）
-docker exec edu-backend /app/.venv/bin/python -m scripts.seed_data
+cd backend
+.venv\Scripts\python.exe -m scripts.seed_all --force
 ```
 
-种子脚本使用 `random.seed(42)`，保证跨重跑数据可复现。
+种子脚本使用固定随机种子 42（`random.seed(42)`），恢复结果可复现、幂等可重跑。
 
 ---
 
@@ -429,7 +465,7 @@ Copy-Item dify\docker\.env.example dify\docker\.env
 #    - DIFY_MODEL_BASE_URL=兼容 OpenAI 的模型端点
 #    - DIFY_MODEL_NAME=模型名称
 
-# 3. 一键启动（自动完成依赖安装 → 后端健康轮询 → 前端构建 → Dify 初始化 → 内网穿透）
+# 3. 一键启动（自动完成依赖安装 → 全栈启动（空库自动注入种子）→ 后端健康轮询 → 前端构建 → Dify 初始化 → 内网穿透）
 .\start-project.bat
 ```
 
@@ -437,8 +473,8 @@ Copy-Item dify\docker\.env.example dify\docker\.env
 
 - 本地前端地址：http://localhost:8080
 - 本地后端地址：http://localhost:8000
-- **公网穿透地址**（localtunnel 自动生成）：https://xxxx-xxxx.loca.lt
-- 访客密码：本机出口 IP
+- **公网穿透地址**：免费隧道（localtunnel）每次重启会变化，以 `start-project.bat` 启动输出为准（最近一次为 https://nine-peaches-fetch.loca.lt）
+- 访客密码：本机出口 IP（如 113.80.207.199），启动输出中一并显示
 
 ### 8.2 手动启动
 
@@ -484,7 +520,7 @@ GuangdongEducationStudyAbroadProgram/
 │   │   ├── main.py              # FastAPI 入口
 │   │   ├── config.py            # 配置管理
 │   │   ├── database.py          # 数据库连接
-│   │   ├── api/v1/              # API 路由层（110 paths）
+│   │   ├── api/v1/              # API 路由层（115 paths）
 │   │   ├── core/                # 安全/异常/中间件
 │   │   ├── models/              # SQLAlchemy 模型（35 张表）
 │   │   ├── schemas/             # Pydantic 请求/响应
@@ -492,7 +528,7 @@ GuangdongEducationStudyAbroadProgram/
 │   │   ├── repositories/        # 数据访问
 │   │   └── utils/               # 工具函数
 │   ├── migrations/              # Alembic 迁移链（001~007）
-│   ├── scripts/                 # 种子数据脚本
+│   ├── scripts/                 # 种子数据脚本（seed_all 一键重注）
 │   ├── tests/                   # pytest 测试
 │   ├── pyproject.toml           # 依赖配置（uv）
 │   └── Dockerfile
@@ -518,7 +554,7 @@ GuangdongEducationStudyAbroadProgram/
     ├── AGENTS.md                # 接手指南副本
     ├── 项目需求文档.md
     ├── 开发路线图.md
-    ├── 接口契约v1.md            # API 契约（v2.11.30）
+    ├── 接口契约v1.md            # API 契约（v2.11.40）
     ├── 更新记录.md
     ├── 运行日志.md
     ├── Dify部署与调用指南.md
@@ -551,7 +587,7 @@ GuangdongEducationStudyAbroadProgram/
 | v6.8.x | M4 学生模块一期全部交付 + Docker E2E 71/71 |
 | v6.9.x | M5 报告模块批次 A~E + 远端访问方案 |
 | v6.10.x | M1 客户模块 + M2 客服 Agent 二期补齐 |
-| v6.11.x | 十五次 master 同步 + 假联通清零 + 三 Agent 真实数据注入 + Dify 一体化部署 + 客服故障修复 |
+| v6.11.x | 十五次 master 同步 + 假联通清零 + 三 Agent 真实数据注入 + Dify 一体化部署 + 客服故障修复 + 全角色 AI 流式输出 + 客服提速 + 员工心理预警 + 种子数据一键重注 |
 
 ### 里程碑
 
@@ -585,7 +621,7 @@ GuangdongEducationStudyAbroadProgram/
 - **类型检查**：后端 SQLAlchemy 2.0 + 前端 TypeScript 5.3 全链路类型安全
 - **数据迁移**：Alembic 7 次迁移链（001~007），支持空库全链新建 / 历史库修复 / 双向升降级
 - **种子数据**：固定随机种子 42，幂等可重跑，跨分支合并后可直接拉取登录测试
-- **API 契约**：v2.11.30，110 paths 零变化，每次同步后完整回归
+- **API 契约**：v2.11.51，115 paths，每次同步后完整回归
 
 ---
 
@@ -604,6 +640,7 @@ GuangdongEducationStudyAbroadProgram/
 - [ ] 登录 13810000003 / Test@123456 → EMPLOYEE 工作台
 - [ ] 登录 13810000004 / Test@123456 → MANAGER 工作台
 - [ ] 客服 Agent 7 大场景问答正常（公司信息 / 业务 / 政策 / 课程 / 活动 / FAQ / 闲聊）
+- [ ] AI 对话 SSE 流式逐字输出正常（客服 / 学生 / 员工助手），失败自动回退非流式
 - [ ] 学生 Agent 请假流程闭环（提交 → 员工审批 → 结果通知）
 - [ ] 管理层经营看板全域数据可见（漏斗 / 待审 / 客户）
 - [ ] 智能报告生成 + 下钻 + PDF 导出
@@ -614,4 +651,4 @@ GuangdongEducationStudyAbroadProgram/
 
 ---
 
-**广东省教育服务有限公司 · 粤教留学项目管理平台 · v6.11.30**
+**广东省教育服务有限公司 · 粤教留学项目管理平台 · v6.11.52**

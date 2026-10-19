@@ -74,7 +74,12 @@ goto :wait_backend
 :backend_ready
 echo        Backend is ready.
 
-echo [5/6] Creating four test accounts...
+echo [5/6] Seeding database (auto-inject when empty)...
+rem v6.11.39: re-pull auto-injects seed data into an empty DB (existing data untouched).
+rem To clear and rebuild: .venv\Scripts\python.exe -m scripts.seed_all --force
+.venv\Scripts\python.exe -m scripts.seed_all
+if errorlevel 1 goto :error
+echo        Creating four test accounts...
 .venv\Scripts\python.exe ..\scripts\create_frontend_test_accounts.py
 if errorlevel 1 goto :error
 

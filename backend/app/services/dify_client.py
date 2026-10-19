@@ -1,3 +1,5 @@
+import json
+
 import httpx
 
 from app.config import settings
@@ -34,3 +36,46 @@ class DifyClient:
             resp = await client.post(url, json=payload, headers=headers)
             resp.raise_for_status()
             return resp.json()
+
+    async def chat_stream(self, query: str, user: str, conversation_id: str | None = None):
+        """流式对话（response_mode=streaming）：逐段产出 {"delta": str}，结束产出 {"conversation_id": str}。
+
+        v6.11.37：供 cs_agent_service.chat_stream 做 SSE 增量下发（感知延迟=首字时间）。
+        读超时 25s 表示「相邻数据块间隔」——生成中持续来块不会误杀；断流/超时抛错由调用方降级兜底。
+        """
+        url = f"{self.base_url}/v1/chat-messages"
+        headers = {
+            "Authorization": f"Bearer {self.agent_key}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "inputs": {},
+            "query": query,
+            "response_mode": "streaming",
+            "user": user,
+        }
+        if conversation_id:
+            payload["conversation_id"] = conversation_id
+        conv_id = conversation_id or ""
+        async with httpx.AsyncClient(timeout=httpx.Timeout(25.0, read=25.0)) as client:
+            async with client.stream("POST", url, json=payload, headers=headers) as resp:
+                resp.raise_for_status()
+                async for line in resp.aiter_lines():
+                    if not line.startswith("data:"):
+                        continue
+                    raw = line[5:].strip()
+                    if not raw or raw == "[DONE]":
+                        continue
+                    try:
+                        data = json.loads(raw)
+                    except json.JSONDecodeError:
+                        continue
+                    event = data.get("event")
+                    if event == "error":
+                        raise httpx.HTTPError(f"Dify stream error: {data}")
+                    if data.get("conversation_id"):
+                        conv_id = data["conversation_id"]
+                    answer = data.get("answer")
+                    if answer:
+                        yield {"delta": answer}
+        yield {"conversation_id": conv_id}

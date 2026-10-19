@@ -74,8 +74,11 @@ services:
       # 与 dify-init 共享 Agent keys；backend 只读加载
       - dify_app_keys:/run/dify-keys:ro
     # --reload-dir app：仅监听 backend/app，避免跑 tests/scripts 写入触发重启，产生约 1 秒的瞬时 500 窗口
+    # seed_all：空库自动注入种子数据（已有数据不动；清库重建手动跑 python -m scripts.seed_all --force），
+    # v6.11.39——「重新拉起即有演示数据」，注入失败不阻断后端启动（打印警告继续）
     command: >-
       sh -c 'set -a && . /run/dify-keys/app_keys.env && set +a &&
+      /app/.venv/bin/python -m scripts.seed_all || echo "[seed-all] 自动注入未成功（详见上方输出），后端继续启动";
       exec /app/.venv/bin/uvicorn app.main:app --reload --reload-dir app --host 0.0.0.0 --port 8000'
 
   # Dify 一键初始化：创建管理员 → 配模型供应商 → 导入应用 → 绑模型 → 写入 app key 共享卷
@@ -96,6 +99,8 @@ services:
     volumes:
       - ./dify/apps:/apps:ro
       - dify_app_keys:/shared
+      # 脚本直接挂载仓库最新版：镜像陈旧也不会跑旧逻辑（LOG-094 中文 key 格式教训，LOG-096）
+      - ./dify/docker/dify_init.py:/app/dify_init.py:ro
     depends_on:
       api:
         condition: service_healthy

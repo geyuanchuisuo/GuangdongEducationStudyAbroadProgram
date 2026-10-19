@@ -1,6 +1,8 @@
+import json
 from datetime import date
 
 from fastapi import APIRouter, Body, Depends, Query, Response
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_user_type
@@ -691,6 +693,35 @@ async def agent_chat(
 ):
     result = await service.agent_chat(current_user, data.message, data.session_id)
     return success_response(data=AgentChatOut(**result))
+
+
+@router.post("/agent/chat/stream", summary="企业助手流式会话（SSE 增量下发，v6.11.38）")
+async def agent_chat_stream(
+    data: AgentChatCreate,
+    current_user: User = Depends(require_user_type("EMPLOYEE", "MANAGER")),
+    service: EmployeeService = Depends(_get_service),
+):
+    """流式企业助手对话（SSE）：event: meta / token / done。
+
+    v6.11.38：感知延迟=首字时间（token 增量下发）；done 事件携带最终数据（reply/session_id/source）。
+    流式失败由服务层降级链兜底，前端必收 done；调用方也可回退非流式接口。
+    """
+    async def event_gen():
+        async for ev in service.agent_chat_stream(current_user, data.message, data.session_id):
+            name = ev.get("event")
+            if name == "token":
+                payload = {"delta": ev["delta"]}
+            elif name == "meta":
+                payload = {"conversation_id": ev["conversation_id"]}
+            else:
+                payload = ev.get("data") or {}
+            yield f"event: {name}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(
+        event_gen(),
+        media_type="text/event-stream",
+        headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"},
+    )
 
 
 # ── 新人指引（知识库 + 引导式流程） ──────────────────────
