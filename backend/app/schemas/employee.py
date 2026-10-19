@@ -276,7 +276,7 @@ class CustomerQueryItem(BaseModel):
     owner_employee_id: Optional[int] = None
     last_follow_at: Optional[datetime] = None
     assessment_score: Optional[int] = None
-    recommended: Optional[dict] = Field(None, description="最新研判的推荐项目与理由（recommended_json）")
+    recommended: Optional[list] = Field(None, description="最新研判的推荐项目与理由（recommended_json，list[dict]）")
     created_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}

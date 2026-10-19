@@ -6,6 +6,8 @@
 
 ## 零、快速定位（打开项目先看这里）
 
+> v6.11.18（2026-10-19，ZNBG 本机线）：**角色工作台三类断链清零（P0~P4 收官 + 测试反馈 Q21）**——①**有接口未接**：待办「处理」按钮（原无 `@click`）、消息中心通知行（原纯 div）、管理层「关键操作日志」（原写死空状态）全部接真实接口（`PUT /employee/todos/{id}`、`PUT /notifications/{id}/read` 与 `/read-all`、新增 `platformApi.operationLogs` → `GET /operation-logs`）；②**无源写死**：STUDENT 心理页 72 分、EMPLOYEE 组织页固定手机号、员工首页「客户跟进提醒」改绑真实接口/显式「暂无」；③**种子缺口**：`seed_data.py` 内建 `USER_PERMISSIONS`、`crm_follow_up.next_date` 改含过去/今天并为核心员工固定补 3 条到期跟进、核心演示账号固定补站内通知；④**兜底显式化**：`platformApi` 静默回落 mock → `fallbackState` + 页面黄条「接口不可用，以下内容为演示数据」，mock 改动态 `import()` 不进主包；⑤接口 500 修复：`CustomerQueryItem.recommended` 注解 `dict`→`list`；⑥`nginx.conf`：`index.html` no-store + `/assets/` immutable（发版不再需手动强刷）。回归 compileall + verify_all 29/29 + pytest 164/164 + 前端 build ✅；详见更新记录 v6.11.18 与 LOG-075（ZNBG）。
+>
 > v6.11.16（2026-10-19，longtrying_test）：**第十二次同步 gitea/master→longtrying_test**——Dify 核心全部以本线为准（v6.11.14 十项契约适配 + v6.11.15 加固）；M0 共享卷机制并入（`dify_app_keys` 卷，backend 启动自动加载 app_keys.env，dify_init.py 适配 APP_KEY_ENV_MAP 输出 shell env 格式）+ 根 `.env.example` 新增 + `dify/docker/.env` 改不入库；M2 意图码归一 + FAQ 缴费口径 + M5 投诉域 import 缺陷修复 + 种子 INTENT_TYPES 9 码归一经批准并入；解 13 冲突；pytest **164/164**；详见更新记录 v6.11.16 merge 条目与 LOG-075。
 >
 > v6.11.17（2026-10-19，ZNBG/M5）：**production 投诉域静默清零缺陷修复**——`report_data_source.py` 漏 import `ComplaintReportInput`（v6.11.0 引入），调用处 NameError 被 v6.9.6 逐行容错当脏行静默吞掉、报告仍 completed → production 任意含工单周期投诉指标恒 0（本库 105 行全跳过；mock 不受影响）；补 import + 防回退用例后实测 orders_total 0→9 / new_count 6 / analyzed_count 8；回归 compileall + pytest 158/158 + Docker E2E 81/81 + production 冒烟 7/7；详见更新记录 v6.11.17 与 LOG-074（ZNBG）。

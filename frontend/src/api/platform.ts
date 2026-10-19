@@ -1,5 +1,5 @@
 import request from '../utils/request'
-import { customers, events, faqs, notifications, policies, projects } from '../data/mock'
+import { reactive } from 'vue'
 
 type AnyRecord = Record<string, any>
 
@@ -8,13 +8,32 @@ async function toData<T>(promise: Promise<any>): Promise<T> {
   return (body?.data ?? body) as T
 }
 
-async function fallback<T>(task: () => Promise<any>, data: T): Promise<T> {
+// 演示数据改为动态引入：仅在真的发生兜底时才下载，避免把 mock 打进主包
+async function demo() { return await import('../data/mock') }
+
+// 兜底状态：接口不可用时按中文模块名登记，页面据此显示「当前为演示数据」提示条；接口恢复后自动移除
+export const fallbackState = reactive<{ keys: string[] }>({ keys: [] })
+
+function markFallback(label: string, error: unknown) {
+  // M5-05.7：静默回落必须显式提示——控制台 + 页面提示条双可见，避免 mock 数据被误当真实接口数据
+  console.warn('[platformApi] 接口不可用，回落演示数据：' + label, error)
+  if (!fallbackState.keys.includes(label)) fallbackState.keys.push(label)
+}
+
+function clearFallback(label: string) {
+  const index = fallbackState.keys.indexOf(label)
+  if (index >= 0) fallbackState.keys.splice(index, 1)
+}
+
+// 演示数据用工厂函数延迟构造，避免模块加载期就静态引用 mock
+async function fallback<T>(task: () => Promise<any>, loadData: () => T | Promise<T>, label: string): Promise<T> {
   try {
-    return await toData<T>(task())
+    const result = await toData<T>(task())
+    clearFallback(label)
+    return result
   } catch (error) {
-    // M5-05.7：静默回落必须显式提示——控制台可追溯，避免 mock 数据被误当真实接口数据
-    console.warn('[platformApi] 接口不可用，回落到本地演示数据：', error)
-    return data
+    markFallback(label, error)
+    return await loadData()
   }
 }
 
@@ -49,9 +68,11 @@ export const platformApi = {
       }
     } catch (error) {
       // M5-05.7：静默回落必须显式提示——控制台可追溯，避免 mock 数据被误当真实接口数据
-      console.warn('[platformApi] 接口不可用，回落到本地演示数据：', error)
+      markFallback('课程列表', error)
+      return (await demo()).projects
     }
-    return projects
+    clearFallback('课程列表')
+    return []
   },
   // v6.9.8 ②-A：活动列表切真实 GET /events（原指向未实装的 /cs/events 恒 404 降级 mock）；
   // 映射页面展示形状并保留真实 id/status（报名与禁用判断依赖）；降级 mock 追加 demo 标记供页面禁用报名
@@ -72,17 +93,23 @@ export const platformApi = {
       }
     } catch (error) {
       // M5-05.7：静默回落必须显式提示——控制台可追溯，避免 mock 数据被误当真实接口数据
-      console.warn('[platformApi] 接口不可用，回落到本地演示数据：', error)
+      markFallback('活动列表', error)
+      return (await demo()).events.map((e: AnyRecord) => ({ ...e, demo: true }))
     }
-    return events.map((e: AnyRecord) => ({ ...e, demo: true }))
+    clearFallback('活动列表')
+    return []
   },
   eventRegister: (id: number) => toData(request.post('/events/' + id + '/register')),
   faqs: async (): Promise<Array<{ q: string; a: string }>> => {
     try {
       const data: any = await toData(request.get('/cs/faq', { params: { page_size: 100 } }))
+      clearFallback('常见问题')
       if (data?.items?.length) return data.items.map((i: AnyRecord) => ({ q: i.question, a: i.answer }))
-    } catch { /* 后端未就绪时降级 mock */ }
-    return faqs
+    } catch (error) {
+      markFallback('常见问题', error)
+      return (await demo()).faqs
+    }
+    return []
   },
   csChat: (data: AnyRecord) => toData(request.post('/ai/customer-service/chat', data)),
   // v6.10.3：客服开场白（AgentDock 打开客服窗时拉取；Dify opening_statement 不经 Service API 返回，由后端统一供文案）
@@ -95,18 +122,20 @@ export const platformApi = {
     fd.append('file', file)
     return toData(request.post('/crm/assessments/file', fd, { headers: { 'Content-Type': 'multipart/form-data' } }))
   },
-  policies: () => Promise.resolve(policies),
-  notifications: (params: AnyRecord = {}) => fallback(() => request.get('/notifications', { params: query(params) }), notifications),
+  policies: async () => (await demo()).policies,
+  notifications: (params: AnyRecord = {}) => fallback(() => request.get('/notifications', { params: query(params) }), async () => (await demo()).notifications, '站内通知'),
   notificationsUnread: () => toData(request.get('/notifications/unread-count')),
   markNotificationRead: (id: number) => toData(request.put('/notifications/' + id + '/read')),
   markAllNotificationsRead: () => toData(request.put('/notifications/read-all')),
-  customers: (params: AnyRecord = {}) => fallback(() => request.get('/customers', { params: query(params) }), { items: customers, total: customers.length, page: 1, page_size: 20 }),
+  // 关键操作日志（MANAGER）：此前页面是写死的「数据源待接入」空状态，接口一直没封装
+  operationLogs: (params: AnyRecord = {}) => toData(request.get('/operation-logs', { params: query(params) })),
+  customers: (params: AnyRecord = {}) => fallback(() => request.get('/customers', { params: query(params) }), async () => { const list = (await demo()).customers; return { items: list, total: list.length, page: 1, page_size: 20 } }, '客户列表'),
   customer: (id: number) => toData(request.get('/customers/' + id)),
   createCustomer: (data: AnyRecord) => toData(request.post('/customers', data)),
   updateCustomer: (id: number, data: AnyRecord) => toData(request.put('/customers/' + id, data)),
-  employeeCustomers: (params: AnyRecord = {}) => fallback(() => request.get('/employee/customers', { params: query(params) }), { items: customers, total: customers.length, page: 1, page_size: 20 }),
-  employeeReminders: () => fallback(() => request.get('/employee/reminders'), { todos_pending: 4, follow_ups_due: 2, admin_services_pending: 1, psych_alerts_pending: 1, approvals_pending: 3 }),
-  employeeProfile: () => fallback(() => request.get('/employee/profile'), { real_name: '陈顾问', department: '新加坡事业部', phone: '138****2266', contact_info: '企业微信：粤教陈顾问' }),
+  employeeCustomers: (params: AnyRecord = {}) => fallback(() => request.get('/employee/customers', { params: query(params) }), async () => { const list = (await demo()).customers; return { items: list, total: list.length, page: 1, page_size: 20 } }, '我的客户'),
+  employeeReminders: () => fallback(() => request.get('/employee/reminders'), () => ({ todos_pending: 4, follow_ups_due: 2, admin_services_pending: 1, psych_alerts_pending: 1, approvals_pending: 3 }), '工作台提醒'),
+  employeeProfile: () => fallback(() => request.get('/employee/profile'), () => ({ real_name: '陈顾问', department: '新加坡事业部', phone: '138****2266', contact_info: '企业微信：粤教陈顾问' }), '员工资料'),
   employee: {
     submitReport: (data: AnyRecord) => toData(request.post('/employee/reports', data)),
     updateDraft: (id: number, data: AnyRecord) => toData(request.put('/employee/reports/' + id, data)),
