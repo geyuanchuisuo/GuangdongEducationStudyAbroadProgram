@@ -15,7 +15,7 @@ from app.repositories.employee_repo import (
 )
 from app.services.approval_engine import ApprovalBizType, ApprovalStatus, approval_engine
 from app.utils.logger import logger  # 合并修复：model 回落分支引用了 logger，此前未导入会 NameError→50001
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -254,6 +254,14 @@ class EmployeeService:
         customer = result.scalar_one_or_none()
         if not customer:
             raise NotFoundError(message="客户不存在")
+
+        # v6.11.32：仅意向客户（NEW/FOLLOWING/STRONG）可发起留学生转化，
+        # 防止绕过前端对已签约/已入学/已流失客户重复提单（口径同 report_calculator.INTENT_STATUSES）
+        if customer.status not in ("NEW", "FOLLOWING", "STRONG"):
+            raise BusinessError(
+                code=40003,
+                message=f"该客户当前状态为「{customer.status}」，仅意向客户可发起留学生转化申请",
+            )
 
         # 审批人必须是 MANAGER
         result = await self.db.execute(select(User).where(User.id == approver_id))
@@ -891,8 +899,13 @@ class EmployeeService:
         page_size: int,
         last_follow_start: date | None = None,
         last_follow_end: date | None = None,
+        keyword: str | None = None,
     ) -> tuple[list, int]:
-        """员工查询自己名下客户，支持筛选排序。MANAGER 传 employee_id=None 查全部（v6.6.0 支持按员工下钻）。"""
+        """员工查询自己名下客户，支持筛选排序。MANAGER 传 employee_id=None 查全部（v6.6.0 支持按员工下钻）。
+
+        v6.11.32：新增 keyword，按姓名/手机号在库内模糊匹配（服务端过滤），
+        解决前端只在已加载分页里做本地关键字过滤导致「搜索命中不到后面页的客户」。
+        """
         from app.models.crm import CrmFollowUp, CustomerAssessment
 
         stmt = select(Customer)
@@ -906,6 +919,12 @@ class EmployeeService:
         if source_channel:
             stmt = stmt.where(Customer.source_channel == source_channel)
             count_stmt = count_stmt.where(Customer.source_channel == source_channel)
+        # v6.11.32：关键字服务端模糊匹配（姓名 / 手机号），避免只过滤前端已加载的一页
+        if keyword:
+            kw = f"%{keyword.strip()}%"
+            cond = or_(Customer.name.like(kw), Customer.phone.like(kw))
+            stmt = stmt.where(cond)
+            count_stmt = count_stmt.where(cond)
 
         # 按匹配度筛选：join 最新 assessment
         if score_min is not None:

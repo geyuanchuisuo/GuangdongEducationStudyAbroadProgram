@@ -430,6 +430,37 @@ async def seed():
             customers.append(c)
         await session.flush()
 
+        # 核心员工账号（13810000003）固定补 4 个「意向客户」（NEW/FOLLOWING/STRONG）：
+        # 随机分配无法保证其名下存在意向状态客户，会导致「代客申请留学生」的
+        # 「选择意向客户」下拉为空（该下拉仅列 NEW/FOLLOWING/STRONG，见 RoleWorkspace.vue）。
+        # 固定文案 + 固定手机号（137 段避开随机客户的 138 段），保证可复现且姓名拟真。
+        core_employee_id = users[2].id
+        core_intent_customers = [
+            # (姓名, 手机号, 性别, 年龄, 学历, 状态, 留学意愿)
+            ("陈思远", "13700001001", "男", 19, "高中", "NEW", "意向德国双元制护理，2027 年秋季入学"),
+            ("周雅琴", "13700001002", "女", 22, "大专", "FOLLOWING", "意向澳洲本科预科，关注升学率与费用"),
+            ("黄志豪", "13700001003", "男", 24, "本科", "STRONG", "意向英国硕士，已考雅思 6.0，材料准备中"),
+            ("林晓萌", "13700001004", "女", 18, "高中", "STRONG", "意向日本语言学校过渡升学，德语零基础"),
+        ]
+        for idx, (name, phone, gender, age, edu, cstatus, intent) in enumerate(core_intent_customers):
+            c = Customer(
+                phone=phone,
+                name=name,
+                gender=gender,
+                age=age,
+                education=edu,
+                study_intent=intent,
+                source_channel=SOURCE_CHANNELS[idx % len(SOURCE_CHANNELS)],
+                owner_employee_id=core_employee_id,
+                status=cstatus,
+                phone_status="normal",
+                # 固定天数偏移（不用随机数），保证同一份代码生成完全一致的数据
+                first_register_at=datetime.now() - timedelta(days=(idx + 1) * 5),
+            )
+            session.add(c)
+            customers.append(c)
+        await session.flush()
+
         customer_ids = [c.id for c in customers]
 
         # ── PendingLead（待补全线索） ──
@@ -882,7 +913,7 @@ async def seed():
     print(f"  其他账号: user000~user115（密码同上）")
     print("-" * 60)
     print(f"  用户: 120 (ADMIN/MANAGER/EMPLOYEE/STUDENT/PROSPECT)")
-    print(f"  客户主表: 120, 待补全线索: 15")
+    print(f"  客户主表: 124（含核心员工 13810000003 名下 4 个意向客户）, 待补全线索: 15")
     print(f"  CRM线索: 110, 研判: 150, 跟进: 123（含 3 条核心员工已到期跟进）")
     print(f"  FAQ: 105, 会话: 110, 消息: 200, 意图: 100, 推荐日志: 150")
     print(f"  活动: 20, 报名: 100, 课程: 15")

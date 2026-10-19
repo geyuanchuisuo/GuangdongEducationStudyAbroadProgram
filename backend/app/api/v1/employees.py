@@ -477,6 +477,7 @@ async def list_my_customers(
     last_follow_start: date | None = Query(None, description="最后跟进时间起（含，仅命中已有跟进的客户）"),
     last_follow_end: date | None = Query(None, description="最后跟进时间止（含当天）"),
     employee_id: int | None = Query(None, description="按员工下钻，仅 MANAGER 生效"),
+    keyword: str | None = Query(None, description="姓名/手机号模糊搜索（v6.11.32 服务端过滤）"),
     sort_by: str = Query("created_at", description="created_at/updated_at/score"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
@@ -487,7 +488,7 @@ async def list_my_customers(
     effective_employee_id = current_user.id if current_user.user_type == "EMPLOYEE" else employee_id
     items, total = await service.list_my_customers(
         effective_employee_id, status, source_channel, score_min, sort_by,
-        page, page_size, last_follow_start, last_follow_end,
+        page, page_size, last_follow_start, last_follow_end, keyword,
     )
     return success_response(
         data={

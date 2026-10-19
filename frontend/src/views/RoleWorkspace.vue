@@ -872,12 +872,19 @@ const pageTitle = computed(() => {
   return map[section.value] || '工作空间'
 })
 
-// 员工/状态筛选交由服务端（GET /employee/customers 支持 status / employee_id 参数），
-// 避免只在前 N 条已加载数据里过滤导致「筛出来永远是空」；此处仅保留关键字本地过滤
+// 员工/状态/关键字筛选均交由服务端（GET /employee/customers 支持 status / employee_id / keyword 参数），
+// 避免只在前 N 条已加载数据里过滤导致「筛出来永远是空」；此处仅保留一层兜底（额外支持按项目名匹配）
 const filteredCustomers = computed(() => customerRows.value.filter((item: any) =>
   (!keyword.value || item.name.includes(keyword.value) || item.phone.includes(keyword.value) || item.project.includes(keyword.value))
   && (customerStatusFilter.value === 'all' || customerStatusKey(item.status) === customerStatusFilter.value),
 ))
+
+// v6.11.32：代客申请只允许选择意向客户（NEW/FOLLOWING/STRONG）。
+// 已签约/已入学/已流失的客户不得再发起留学生转化——口径同 report_calculator.INTENT_STATUSES。
+const INTENT_CUSTOMER_STATUSES = ['NEW', 'FOLLOWING', 'STRONG']
+const intentCustomers = computed(() =>
+  customerRows.value.filter((item: any) => INTENT_CUSTOMER_STATUSES.includes(item.status)),
+)
 
 async function loadCustomers() {
   try {
@@ -886,6 +893,7 @@ async function loadCustomers() {
       page_size: 100,
       status: customerStatusFilter.value === 'all' ? undefined : customerStatusFilter.value,
       employee_id: customerOwnerFilter.value === 'all' ? undefined : customerOwnerFilter.value,
+      keyword: keyword.value.trim() || undefined,
     })
     customerRows.value = itemsOf(page).map(normalizeCustomer)
   } catch {
@@ -894,6 +902,13 @@ async function loadCustomers() {
 }
 
 watch([customerOwnerFilter, customerStatusFilter], () => { loadCustomers() })
+// v6.11.32：关键字改为服务端查询（防抖 300ms）。此前只在已加载的一页里本地过滤，
+// 客户总数超过单页时（MANAGER 120 条 / 默认 20 条）搜索必然命中不到后面的客户。
+let customerKeywordTimer: ReturnType<typeof setTimeout> | undefined
+watch(keyword, () => {
+  clearTimeout(customerKeywordTimer)
+  customerKeywordTimer = setTimeout(() => { loadCustomers() }, 300)
+})
 
 const employeeMenu = computed(() => [
   { label: '客户录入', icon: Plus, action: () => { customerDialog.value = true } },
@@ -1487,7 +1502,7 @@ function revealPhone(member: any) {
     </template>
 
     <template v-else-if="role === 'EMPLOYEE' && section === 'convert'">
-      <div class="two-column"><section class="surface panel"><SectionTitle title="代客申请留学生" desc="一次审批：员工申请，管理层审批。" /><el-form label-position="top"><el-form-item label="选择意向客户"><el-select v-model="convertForm.customerId" style="width:100%"><el-option v-for="item in customerRows" :key="item.id" :label="item.name + '（' + item.project + '）'" :value="item.id" /></el-select></el-form-item><el-form-item label="转化项目"><el-select v-model="convertForm.project" style="width:100%"><el-option v-for="item in publicProjects.slice(0,3)" :key="item.id" :label="item.title" :value="item.title" /></el-select></el-form-item><el-form-item label="转化理由 / 备注"><el-input v-model="convertForm.title" type="textarea" :rows="4" /></el-form-item><el-button type="primary" @click="submitConvertApply">提交审批申请</el-button></el-form></section><section class="surface panel"><SectionTitle title="学生流程审批" /><div v-for="item in approvalRows" :key="item.id || item.title" class="ticket-row"><div><b>{{ item.title || item.t }}</b><small>学生端提交 · {{ item.created_at }}</small></div><el-tag :type="item.status === 'approved' ? 'success' : 'warning'">{{ item.status || item.s }}</el-tag></div><el-empty v-if="!approvalRows.length" description="暂无待审批的学生流程" :image-size="60" /></section></div>
+      <div class="two-column"><section class="surface panel"><SectionTitle title="代客申请留学生" desc="一次审批：员工申请，管理层审批。" /><el-form label-position="top"><el-form-item label="选择意向客户"><el-select v-model="convertForm.customerId" style="width:100%"><el-option v-for="item in intentCustomers" :key="item.id" :label="item.name + '（' + item.project + '）'" :value="item.id" /><el-empty v-if="!intentCustomers.length" description="暂无可转化的意向客户" :image-size="60" /></el-select></el-form-item><el-form-item label="转化项目"><el-select v-model="convertForm.project" style="width:100%"><el-option v-for="item in publicProjects.slice(0,3)" :key="item.id" :label="item.title" :value="item.title" /></el-select></el-form-item><el-form-item label="转化理由 / 备注"><el-input v-model="convertForm.title" type="textarea" :rows="4" /></el-form-item><el-button type="primary" @click="submitConvertApply">提交审批申请</el-button></el-form></section><section class="surface panel"><SectionTitle title="学生流程审批" /><div v-for="item in approvalRows" :key="item.id || item.title" class="ticket-row"><div><b>{{ item.title || item.t }}</b><small>学生端提交 · {{ item.created_at }}</small></div><el-tag :type="item.status === 'approved' ? 'success' : 'warning'">{{ item.status || item.s }}</el-tag></div><el-empty v-if="!approvalRows.length" description="暂无待审批的学生流程" :image-size="60" /></section></div>
     </template>
 
 <template v-else-if="role === 'EMPLOYEE' && section === 'reports'">
