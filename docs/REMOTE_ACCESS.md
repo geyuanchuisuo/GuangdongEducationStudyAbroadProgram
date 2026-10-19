@@ -4,19 +4,23 @@
 
 ---
 
-## 一键穿透（v6.11.19 起，推荐入口）
+## 一键穿透（v6.11.28 起，已并入主启动流程）
 
-项目根目录双击运行：
+**穿透是主流程的一部分**（v6.11.28 起，用户决策：异地访问是访客入口，不再作为可选项）——`start-project.bat` 启动本地服务后自动拉起 localtunnel，启动摘要直接输出：
 
 ```
-start-tunnel.bat
+Public:   https://xxxx-yyyy.loca.lt  (share with remote visitors)
+Tunnel password for visitors: <本机出口IP>
 ```
 
-- 自动探测本地服务：优先 **8080**（Docker nginx 生产模式），否则 **5173**（vite dev 模式）；两者都没有则提示先启动项目
-- 免注册直跑 localtunnel（`npx --yes localtunnel --port <探测到的端口>`），输出 `https://xxxx.loca.lt` 即公网地址
+- 自动探测本地服务：优先 **8080**（Docker nginx 生产模式），否则 **5173**（vite dev 模式）
+- 免注册直跑 localtunnel（`npx --yes localtunnel --port <端口>`，输出写 `logs/tunnel.log`，主脚本最多轮询 60s 抓取 URL）
+- localtunnel 防滥用密码页：访客首次打开需输入密码，密码=启动机器公网出口 IP（脚本自动通过 `https://loca.lt/mytunnelpassword` 获取并展示）
 - 需要固定域名/更稳定线路时，改用方案二 ngrok（`powershell -File scripts\start-ngrok.ps1`，8080）
 
-> 穿透是**可选演示能力**，不并入 `start-project.bat` 主启动流程：依赖第三方服务可用性、产生公网暴露面、免费方案 URL 随机变化，不应阻塞本地一键启动。
+> 单独拉起入口仍保留：项目根目录双击 `start-tunnel.bat`（项目已在运行、只需补开穿透时使用）。
+
+> 历史决策留档：v6.11.19 初版将穿透定为"可选演示能力不并入主流程"，v6.11.28 经用户明确指令（「异地访问是属于主流程，不然访客从哪来」）推翻并并入主流程。
 
 ---
 

@@ -6,6 +6,7 @@
 
 ## 零、快速定位（打开项目先看这里）
 
+> v6.11.28（2026-10-19，longtrying_test）：**内网穿透并入主启动流程**——start-project.bat 新增 [7/7] 自动穿透（探测 8080/5173→localtunnel 后台写 logs/tunnel.log→轮询抓公网 URL→loca.lt 取访客密码一并展示），推翻 v6.11.19"可选演示能力"决策（用户：「异地访问是属于主流程」）；同步修复全量文档审查发现的 5 处不同步（表数 35/路由 110/契约 v2.11.26/需求文档版本号/清单销账标注）。详见更新记录 v6.11.28 / LOG-086。
 > v6.11.27（2026-10-19，longtrying_test）：**管理层"变更归属"缺陷修复**——客户抽屉单客户"变更归属"误调批量接口（会把原员工名下全部客户转走），新增 `reassignOne` 单客户语义（from 取行内归属、customer_ids 单个）；后端实测无辜（3→4→3 闭环），纯前端语义错位（LOG-085）。
 >
 > v6.11.26（2026-10-19，longtrying_test）：**员工/管理层 Agent 修复**——agent_chat 注入真实业务快照（待办 top5/客户数/待审批数）+ 禁编造/禁 JSON 规则 + `_strip_agent_json` 兜底，编造（李女士/澳洲签证）与 JSON 泄漏清零，问待办答真实数据、无数据如实声明（LOG-084）。仅改 employee_service.py，Dify/key 零变动。
@@ -73,7 +74,7 @@
 5. ✅ ~~ZNBG 分支本地提交未推送~~ **已推送**（v6.9.3 起本分支已同步远端；git 凭据本机已恢复，`git ls-remote` 免交互即通）
 6. ✅ ~~两条 P1（v6.9.3 实测发现，M5，阻断切 production）~~ **v6.9.6 已修复**：a) 缺省周期改用 `default_completed_week(now)`=上一完整自然周 `[上周一00:00, 本周一00:00)`（原为 `week_range(now)` 恒落未来 → 必 40002）b) `normalize_customer_status()` 复用 M1 词表 `STATUS_CN_TO_EN` 做中英归一 + `fetch_customers` 逐行容错（脏行跳过并写入口径说明，不再拖垮 5 类报告）。**仍留 P2（他模块）**：`seed_data.py` ai_report 段秒级 DATETIME 随机碰撞（2 跑 1 败，共用脚本需确认）、前端 `RoleWorkspace.vue` 部分区块仍为静态演示值（管理层看板 183/21.4%/689/3.2%、学生首屏「李同学」与登录账号不符，作者 ge yuan，属 M3 看板区块）
 7. ✅ ~~M5 报告 AI 只用模拟~~ **v6.9.5 已统一到共用网关**：`ReportAIService` 内部走 `model_ai_service`（共用模块名称），失败回落 mock；报告内容新增差异字段 `ai_source`（model/mock/unavailable）并与 `ai_status` 并存，PDF 头部/前端详情按来源标注；契约 §7 已同步。**v6.9.6 补**：三处下钻改为与报告**同源**（`_drilldown_dataset` 按 `data_source_status` 分流），前端「明细下钻」说明同步。**待办**：`DIFY_MODEL_API_KEY` 需在 `backend/.env` 配置后才可验证真实模型链路（当前自动回落 mock，不影响测试）；M3 `employee_service.py` 的 logger 导入为合并期最小修复，待 M3 负责人复审
-**数据库**：34张表（含 M5 ai_report_drill、ticket_ai_analysis 等），107条路由路径（106 API + 1 health；含 M1 /crm/assessments/file），MVC分层结构就绪；Docker 数据库、Redis、后端服务按 compose 配置运行；数据库凭据见本机环境配置。
+**数据库**：35张表（含 M5 ai_report_drill、ticket_ai_analysis 与 v6.11.23 新增 policy 等），110条路由路径（109 API + 1 health；v6.11.23 增 /cs/policies + DELETE follow-ups，v6.11.25 增 /customers/me），MVC分层结构就绪；Docker 数据库、Redis、后端服务按 compose 配置运行；数据库凭据见本机环境配置。
 **测试账号（v6.10.0 起规范）**：核心角色固定 `username=手机号`——`13810000001` PROSPECT / `13810000002` STUDENT / `13810000003` EMPLOYEE / `13810000004` MANAGER，**密码统一 `Test@123456`**；其余 `user000~user115` 同密码（角色按 `i % 8` 确定：0=ADMIN、1=MANAGER、2~4=EMPLOYEE、5~6=STUDENT、7=PROSPECT）。`scripts/seed_data.py` 会 `drop_all+create_all` 重建全库（`random.seed(42)` 可复现），重跑前注意数据留存；Docker E2E 已按此规范更新账号常量
 **主基线文档**：`promts/lon/提示词整合测试_demo/docs/基础架构方案_五人并行开发.md`（v1.2.0，28项决策）
 
@@ -82,8 +83,8 @@
 2. `docs/项目需求文档.md` — 完整业务需求
 3. `promts/lon/提示词整合测试_demo/docs/基础架构方案_五人并行开发.md` — **主基线，权重最高**
 4. `docs/开发路线图.md` — 当前进度、下一步任务
-5. `docs/接口契约v1.md` — API接口契约（v2.11.3，M3 成绩三件套 + v2.9.9 注册免审批反转/Dify 配置基线）
-6. `docs/更新记录.md` — 最近变更（v6.11.13 Dify 1.16 环境实跑+dify_init.py 重写 + v6.11.9 全文档配置同步 + v6.11.5~8 Dify 一体化/dify-init + merge master 公共模块 + v6.11.3/v6.11.4）
+5. `docs/接口契约v1.md` — API接口契约（v2.11.26，110 paths；v2.11.23 政策/删跟进 +2、v2.11.25 /customers/me +1）
+6. `docs/更新记录.md` — 最近变更（v6.11.27 变更归属修复 + v6.11.26 员工Agent真实数据注入 + v6.11.25 客服Agent完整版上线 + v6.11.23 政策建表/B类清零 + v6.11.22 种子归属重分配 + v6.11.21 第十三次同步master）
 
 **重要规则**：
 - 主基线文档（基础架构方案）权重 > 其他参考文档（共用基座方案、公共框架等）
@@ -181,7 +182,9 @@ GuangdongEducationStudyAbroadProgram/
 │   └── package.json
 │
 ├── dify/                       # Dify配置
-│   ├── workflows/             # Agent工作流
+│   ├── apps/                  # 业务应用 DSL（5 个：3 Agent + 智能报告 advanced-chat + 留档 agent-chat）
+│   ├── docker/                # Dify 1.16 一体化打包（docker-compose.yaml + dify_init.py 一键初始化 + .env.example）
+│   ├── workflows/             # Agent工作流（历史/备份）
 │   └── knowledge_base/        # 知识库文档
 │
 ├── docs/                       # 项目文档
@@ -812,11 +815,11 @@ chore: 构建
 | **AGENTS.md** | **./AGENTS.md**（根目录） | **项目接手指南（agent自动读取，这是主文件）** |
 | AGENTS.md 副本 | docs/AGENTS.md | 与根目录保持同步的副本 |
 | 项目需求文档 | docs/项目需求文档.md | 完整需求、架构、接口、数据库 |
-| 更新记录 | docs/更新记录.md | 版本变更记录（当前 v6.9.0 anhoa M2 二期 + 主线 v6.8.6/v6.8.7 条目） |
+| 更新记录 | docs/更新记录.md | 版本变更记录（当前 v6.11.27） |
 | 开发路线图 | docs/开发路线图.md | 分期任务表（Phase 0已完成，M3 收官，M1/M2 v6.8.0 补齐，M4/M5 后端已交付，AI 已接通） |
-| 运行日志 | docs/运行日志.md | 排查记录与教训（当前 LOG-025） |
+| 运行日志 | docs/运行日志.md | 排查记录与教训（当前 LOG-085） |
 | 测试报告 | docs/测试报告_v6.8.2_M3M4端到端.md | v6.8.2 Docker E2E 69/69 检查明细+7项缺陷+7轮迭代留档 |
-| 接口契约v2 | docs/接口契约v1.md | API接口契约（v2.11.6，34张表，107路由路径=106 API+1 health） |
+| 接口契约v2 | docs/接口契约v1.md | API接口契约（v2.11.26，35张表，110路由路径=109 API+1 health） |
 | **基础架构方案** | **promts/lon/提示词整合测试_demo/docs/基础架构方案_五人并行开发.md** | **主基线文档（v1.2.0，28项决策），所有参考文档权重低于此文件** |
 
 > **文档优先级**：基础架构方案_五人并行开发.md > 其他参考文档（共用基座方案、公共框架等）
