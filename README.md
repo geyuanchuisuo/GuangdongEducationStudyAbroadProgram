@@ -1,6 +1,6 @@
 # 粤教留学项目管理平台
 
-> **版本** v6.11.40 | **更新日期** 2026-10-19 | **分支** longtrying_test
+> **版本** v6.11.52 | **更新日期** 2026-10-19 | **分支** longtrying_test
 > 
 > 广东省教育服务有限公司（粤教服务）智能化教育服务管理平台 — 集成 AI 智能体 + 传统业务闭环
 
@@ -97,7 +97,7 @@
 | **M4 学生** | student_admin_service · student_psych_profile · student_psych_alert · student_feedback_ticket · student_academic · student_application_progress |
 | **M5 报告** | ai_report · ai_report_attachment · ai_report_drill · ticket_ai_analysis |
 
-**API 路由**：114 paths（113 API + 1 health），契约版本 v2.11.40（v6.11.35 +心理预警 / v6.11.37 +客服流式 / v6.11.39 +学生与员工助手流式）。
+**API 路由**：115 paths（114 API + 1 health），契约版本 v2.11.51（v6.11.35 +心理预警 / v6.11.37 +客服流式 / v6.11.39 +学生与员工助手流式 / v6.11.42 +活动我的报名 / v6.11.43~52 合并 master 修复批）。
 
 ---
 
@@ -520,7 +520,7 @@ GuangdongEducationStudyAbroadProgram/
 │   │   ├── main.py              # FastAPI 入口
 │   │   ├── config.py            # 配置管理
 │   │   ├── database.py          # 数据库连接
-│   │   ├── api/v1/              # API 路由层（114 paths）
+│   │   ├── api/v1/              # API 路由层（115 paths）
 │   │   ├── core/                # 安全/异常/中间件
 │   │   ├── models/              # SQLAlchemy 模型（35 张表）
 │   │   ├── schemas/             # Pydantic 请求/响应
@@ -621,7 +621,7 @@ GuangdongEducationStudyAbroadProgram/
 - **类型检查**：后端 SQLAlchemy 2.0 + 前端 TypeScript 5.3 全链路类型安全
 - **数据迁移**：Alembic 7 次迁移链（001~007），支持空库全链新建 / 历史库修复 / 双向升降级
 - **种子数据**：固定随机种子 42，幂等可重跑，跨分支合并后可直接拉取登录测试
-- **API 契约**：v2.11.40，114 paths，每次同步后完整回归
+- **API 契约**：v2.11.51，115 paths，每次同步后完整回归
 
 ---
 
@@ -651,4 +651,4 @@ GuangdongEducationStudyAbroadProgram/
 
 ---
 
-**广东省教育服务有限公司 · 粤教留学项目管理平台 · v6.11.40**
+**广东省教育服务有限公司 · 粤教留学项目管理平台 · v6.11.52**
