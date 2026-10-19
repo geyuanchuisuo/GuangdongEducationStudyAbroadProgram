@@ -639,6 +639,19 @@ async def seed():
             courses.append(cp)
         await session.flush()
 
+        # ── 政策资讯（policy 表，内容源见 scripts/seed_policies_v6_11_23.py） ──
+        # 全库重建会 drop 掉 policy；若重建流程不写入，公开站「留学政策资讯」页会直接空白，
+        # 且「查看完整指南」无内容可看（政策数据曾因此丢失过一次）。
+        from app.models.course import Policy
+        from scripts.seed_policies_v6_11_23 import POLICIES as POLICY_SEEDS
+        for p_title, p_country, p_category, p_summary, p_content, p_date in POLICY_SEEDS:
+            session.add(Policy(
+                title=p_title, country=p_country, category=p_category,
+                summary=p_summary, content=p_content, publish_date=p_date,
+            ))
+        policy_seed_count = len(POLICY_SEEDS)
+        await session.flush()
+
         # ── CS 推荐日志（客服 Agent 每次课程/活动推荐落库） ──
         for i in range(150):
             s = sessions[i % len(sessions)]
@@ -948,6 +961,7 @@ async def seed():
     print(f"  CRM线索: 110, 研判: 150, 跟进: 123（含 3 条核心员工已到期跟进）")
     print(f"  FAQ: 105, 会话: 110, 消息: 200, 意图: 100, 推荐日志: 150")
     print(f"  活动: 20, 报名: 100, 业务项目: {len(BUSINESS_PROJECTS)}（四条核心业务线）")
+    print(f"  政策资讯: {policy_seed_count}")
     print(f"  组织架构: 10, 日报: 120, 待办: 100, 成绩: 100")
     print(f"  学生服务: 100, 心理画像: 100, 心理预警: 100, 反馈工单: 100, 工单AI分析: ~80")
     print(f"  学业: 100, 申请进度: 100")
