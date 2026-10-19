@@ -6,6 +6,7 @@
 
 ## 零、快速定位（打开项目先看这里）
 
+> v6.11.55（2026-10-19，longtrying_test）：**本线合入 master 推送云端**——云端 master 无差异后按 §7.1 流程 Fast-forward 合入并推送（58e775a..42323c7），master=longtrying_test=gitea/master 三者同指（LOG-108）。
 > v6.11.54（2026-10-19，longtrying_test）：**第十九次同步 gitea/master**——并入 v6.11.52 master 线（chunk 加载失败兜底、业务错误 bizCode 标记、代客申请表单修复），2 处文档冲突并集；pytest 170/170 + verify_all 29/29 + build ✓（LOG-107）。
 > v6.11.52（2026-10-19，longtrying_test）：**第十八次同步 gitea/master**——并入 v6.11.50/51（问题清单 55~63 修复、进度阶段口径统一 6 段、铃铛通知中心、请假表单对齐），2 处文档冲突并集；pytest 170/170 + verify_all 29/29 + build ✓（LOG-105）。
 > v6.11.50（2026-10-19，longtrying_test）：**管理层 Agent 经营数据修复**——后端 `_build_agent_real_data` MANAGER 分支注入「经营摘要（全域）」（复用 dashboard() 聚合）+ Dify 部署版员工助手（012f71a7）prompt 同步仓库最新版与 6 输入变量补齐（POST model-config 保存即发布，兜底话术改「数据未注入本次会话」）；MANAGER 3 问真实数字、EMPLOYEE 越权正确拒答；pytest 170/170（LOG-104，Dify 变更经用户批准）。
