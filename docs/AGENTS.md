@@ -6,7 +6,7 @@
 
 ## 零、快速定位（打开项目先看这里）
 
-> v6.11.19（2026-10-19，longtrying_test）：**前后端全链路核验 + 一键启动增强 + 一键穿透**——运行时拨测 19 端点抓出 `/employee/customers` 50001 真缺陷（`CustomerQueryItem.recommended` dict→list 对齐 `recommended_json` 实际形状，已修复复测 200）；`start-project.bat` 增后端 /health 轮询就绪 + 8000/5173 健康复用 + 就绪后自动开浏览器；新增 `start-tunnel.bat` 一键内网穿透（自动探测 8080/5173，localtunnel 免注册）。详见更新记录 v6.11.19 与 LOG-076。
+> v6.11.19（2026-10-19，longtrying_test）：**前后端全链路核验 + 一键启动增强 + 一键穿透**——运行时拨测 19 端点抓出 `/employee/customers` 50001 真缺陷（`CustomerQueryItem.recommended` dict→list 对齐 `recommended_json` 实际形状，已修复复测 200）；`start-project.bat` 增后端 /health 轮询就绪 + 8000/5173 健康复用 + 就绪后自动开浏览器；新增 `start-tunnel.bat` 一键内网穿透（自动探测 8080/5173，localtunnel 免注册）。**端到端实测通过**（start-project 全流程绿：依赖→8000 复用→4 账号 200→5173→页面 200→代理 API 200；start-tunnel 实测公网 URL 页面/API 双 200），并修复 bat 三连缺陷（UTF-8+LF 编码崩坏→纯 ASCII+CRLF+新增 `.gitattributes` 锁 CRLF、括号块内标签/计数器→顶层 goto、timeout 无 stdin→ping 延时）。详见更新记录 v6.11.19 与 LOG-076、LOG-077。
 >
 > v6.11.16（2026-10-19，longtrying_test）：**第十二次同步 gitea/master→longtrying_test**——Dify 核心全部以本线为准（v6.11.14 十项契约适配 + v6.11.15 加固）；M0 共享卷机制并入（`dify_app_keys` 卷，backend 启动自动加载 app_keys.env，dify_init.py 适配 APP_KEY_ENV_MAP 输出 shell env 格式）+ 根 `.env.example` 新增 + `dify/docker/.env` 改不入库；M2 意图码归一 + FAQ 缴费口径 + M5 投诉域 import 缺陷修复 + 种子 INTENT_TYPES 9 码归一经批准并入；解 13 冲突；pytest **164/164**；详见更新记录 v6.11.16 merge 条目与 LOG-075。
 >
@@ -582,8 +582,8 @@ docker volume inspect guangdongeducationstudyabroadprogram_backend_storage
 
 | 需求 | 命令 | 说明 |
 |------|------|------|
-| 本地一键拉起（mysql+redis+backend+前端 dev） | 双击 `start-project.bat` | 自动装依赖→建 4 测试账号→后端 /health 轮询就绪→自动开 http://localhost:5173；8000/5173 已被健康服务占用时自动复用（与 Docker 一体化栈共存不冲突） |
-| 公网穿透（给他人演示） | 双击 `start-tunnel.bat` | 自动探测 8080（Docker nginx）或 5173（本地 dev），localtunnel 免注册出公网 URL；需固定域名改用 `scripts\start-ngrok.ps1`（8080） |
+| 本地一键拉起（mysql+redis+backend+前端 dev） | 双击 `start-project.bat` | ✅ 端到端实测通过。自动装依赖→建 4 测试账号→后端 /health 轮询就绪→自动开 http://localhost:5173；8000/5173 已被健康服务占用时自动复用（与 Docker 一体化栈共存不冲突）。bat 为纯 ASCII+CRLF（勿改回中文/UTF-8——cmd 按 GBK 解析会崩，`.gitattributes` 已锁 CRLF），等待延时用 ping 勿用 timeout（无 stdin 环境会失败） |
+| 公网穿透（给他人演示） | 双击 `start-tunnel.bat` | ✅ 实测公网可达。自动探测 8080（Docker nginx）或 5173（本地 dev），localtunnel 免注册出公网 URL；需固定域名改用 `scripts\start-ngrok.ps1`（8080） |
 | Docker 一体化全量（含 Dify） | `docker compose up -d` | 需先在 `dify/docker/.env` 配齐模型三项，否则 dify-init 失败阻塞 backend |
 
 > 内网穿透不并入主启动流程的原因：依赖第三方服务（localtunnel/ngrok）、产生公网暴露面、URL 随机变化，属可选演示能力，不应阻塞本地启动。详见 [REMOTE_ACCESS.md](./docs/REMOTE_ACCESS.md)。

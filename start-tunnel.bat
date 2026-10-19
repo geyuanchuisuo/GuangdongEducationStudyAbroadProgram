@@ -3,11 +3,11 @@ setlocal EnableExtensions
 cd /d "%~dp0"
 
 echo ========================================
-echo   粤教留学项目 - 一键内网穿透
+echo   Yuejiao Project - One-Click Tunnel
 echo ========================================
 echo.
 
-rem 1. 探测本地服务端口：优先 8080（Docker 一体化 nginx），其次 5173（本地 dev 前端）
+rem 1. Detect local service port: prefer 8080 (Docker bundled nginx), then 5173 (vite dev)
 set PORT=
 curl.exe -s -o nul --max-time 2 http://localhost:8080/
 if not errorlevel 1 set PORT=8080
@@ -16,21 +16,21 @@ if not defined PORT (
   if not errorlevel 1 set PORT=5173
 )
 if not defined PORT (
-  echo [错误] 未检测到项目服务（8080 Docker 一体化 / 5173 本地 dev 均未监听）。
-  echo        请先启动项目：双击 start-project.bat，或 docker compose up -d
+  echo [ERROR] No project service found ^(neither 8080 Docker nor 5173 dev^).
+  echo        Start the project first: run start-project.bat, or docker compose up -d
   echo.
   pause
   exit /b 1
 )
 
-rem 2. 启动 localtunnel（免注册，npx 直跑；vite 已放行 .loca.lt 子域，nginx 不校验 Host）
-echo 检测到本地服务端口: %PORT%
-echo 使用 localtunnel（免注册）启动穿透...
-echo   首次运行 npx 会自动下载 localtunnel（约几秒）
-echo   看到 "your url is: https://xxx.loca.lt" 即为公网地址，发给任何人即可访问
-echo   按 Ctrl+C 停止穿透
+rem 2. Start localtunnel (no signup, npx; vite allows .loca.lt hosts, nginx does not check Host)
+echo Detected local service port: %PORT%
+echo Starting localtunnel (no signup needed)...
+echo   First run: npx downloads localtunnel automatically (a few seconds)
+echo   When you see "your url is: https://xxx.loca.lt" that is the public URL
+echo   Press Ctrl+C to stop the tunnel
 echo.
-echo   如需固定域名/更稳定链路，可改用 ngrok（需注册）：
-echo     8080 Docker 模式：  powershell -File scripts\start-ngrok.ps1
+echo   For a fixed domain / more stable link, use ngrok ^(signup required^):
+echo     Docker mode 8080:  powershell -File scripts\start-ngrok.ps1
 echo.
 npx --yes localtunnel --port %PORT%
