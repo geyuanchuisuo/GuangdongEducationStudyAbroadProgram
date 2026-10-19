@@ -6,6 +6,8 @@
 
 ## 零、快速定位（打开项目先看这里）
 
+> v6.11.27（2026-10-19，longtrying_test）：**管理层"变更归属"缺陷修复**——客户抽屉单客户"变更归属"误调批量接口（会把原员工名下全部客户转走），新增 `reassignOne` 单客户语义（from 取行内归属、customer_ids 单个）；后端实测无辜（3→4→3 闭环），纯前端语义错位（LOG-085）。
+>
 > v6.11.26（2026-10-19，longtrying_test）：**员工/管理层 Agent 修复**——agent_chat 注入真实业务快照（待办 top5/客户数/待审批数）+ 禁编造/禁 JSON 规则 + `_strip_agent_json` 兜底，编造（李女士/澳洲签证）与 JSON 泄漏清零，问待办答真实数据、无数据如实声明（LOG-084）。仅改 employee_service.py，Dify/key 零变动。
 >
 > v6.11.25（2026-10-19，longtrying_test）：**客服 Agent 修复落地**——第十四次同步 master（anhoa 客服修复本体：完整版 Chatflow yml + FAQ 检索 + 多标记剥离 + GET /customers/me，pytest 170/170）；完整版工作流上线（Dify 1.16 无 draft 更新端点→导入新应用 86a2f351 **换 key**，旧骨架版 d05af668 停用），客服问答验收对题。详见更新记录 v6.11.25 / LOG-083。

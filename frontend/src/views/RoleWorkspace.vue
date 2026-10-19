@@ -949,9 +949,36 @@ async function reassignAll() {
       to_employee_id: Number(to.value.trim()),
     })
     await loadManagerOverview()
+    customerRows.value = itemsOf(await platformApi.employeeCustomers())
     notifySuccess('客户再分配已完成')
   } catch (e) {
     if (e !== 'cancel' && e !== 'close') notifyInfo('再分配失败，请稍后重试')
+  }
+}
+// v6.11.27 修复：单客户「变更归属」——只转移该客户（原实现误调批量转移，会把原员工名下全部客户转走）
+async function reassignOne(customer: any) {
+  const from = Number(customer?.owner_employee_id)
+  if (!Number.isFinite(from) || from <= 0) {
+    notifyInfo('该客户无归属员工，无法变更归属')
+    return
+  }
+  try {
+    const result = await ElMessageBox.prompt(
+      `输入新归属员工 ID（员工管理页可查），当前归属员工 ID：${from}`,
+      '变更归属 · ' + (customer.name || customer.wechat || customer.phone || `#${customer.id}`),
+      { inputValidator: (v: string) => /^\d+$/.test(v.trim()) || '请输入数字 ID' },
+    )
+    const to = Number(result.value.trim())
+    await platformApi.employee.reassignCustomers({
+      from_employee_id: from,
+      to_employee_id: to,
+      customer_ids: [customer.id],
+    })
+    customer.owner_employee_id = to
+    customerRows.value = itemsOf(await platformApi.employeeCustomers())
+    notifySuccess('归属已变更（仅该客户）')
+  } catch (e) {
+    if (e !== 'cancel' && e !== 'close') notifyInfo(errorMessage(e, '变更归属失败，请稍后重试'))
   }
 }
 // MANAGER 权限配置（PUT /employee/users/{id}/permissions 真保存）
@@ -1433,7 +1460,7 @@ async function loadFollowUpBars() {
           <div class="assessment"><div><small>新加坡项目</small><b>{{ activeCustomer.score }}</b><p>画像匹配结果、缺失信息和跟进建议。</p></div><div><small>中德项目</small><b>待确认</b><p>需要核实德语能力、实训接受度和无犯罪记录。</p></div></div>
           <h3>跟进与归属</h3>
           <p class="muted">当前跟进人：{{ activeCustomer.owner }} · 支持管理层变更归属</p>
-          <div class="drawer-actions"><el-button type="primary" @click="addActiveFollowUp">添加跟进</el-button><el-button @click="reassignAll">变更归属</el-button></div>
+          <div class="drawer-actions"><el-button type="primary" @click="addActiveFollowUp">添加跟进</el-button><el-button @click="reassignOne(activeCustomer)">变更归属</el-button></div>
         </template>
       </el-drawer>
     </template>
