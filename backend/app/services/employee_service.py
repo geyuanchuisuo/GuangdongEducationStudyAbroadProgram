@@ -1,3 +1,4 @@
+import json
 from datetime import date, datetime, timedelta
 
 from app.core.exceptions import BusinessError, ConflictError, ForbiddenError, NotFoundError
@@ -1338,23 +1339,82 @@ class EmployeeService:
         "智能报告查询",
     ]
 
-    async def agent_chat(self, user: User, message: str, session_id: str | None) -> dict:
-        """企业助手会话：按角色注入权限感知 context 转发 Dify；AI 不可用降级返回能力清单。
+    async def _factual_snapshot(self, user: User) -> dict:
+        """按角色产出「事实快照」：仅含该角色权限内的真实聚合数据，供 Agent 照实作答。
 
-        权限感知：EMPLOYEE 数据范围=own（仅名下客户），MANAGER=all（全域），
-        能力清单写入 inputs.capabilities 供 Dify Agent prompt 使用。
+        只给聚合口径（计数与分布），不含客户/学生明细，避免越权与请求体积膨胀。
+        """
+        if user.user_type == "MANAGER":
+            # 管理层：全域经营聚合（客户 6 态分布/漏斗/渠道/转化率/日报/审批/投诉/心理）
+            return {"scope": "全域（不受数据隔离限制）", "dashboard": await self.dashboard()}
+
+        # 普通员工：本人待办与到期跟进 + 名下客户状态分布
+        reminders = await self.get_reminders(user)
+        status_rows = (await self.db.execute(
+            select(Customer.status, func.count())
+            .where(Customer.owner_employee_id == user.id)
+            .group_by(Customer.status)
+        )).all()
+        by_status = {(st or "未知"): cnt for st, cnt in status_rows}
+        return {
+            "scope": "仅本人名下",
+            "reminders": reminders,
+            "my_customers_by_status": by_status,
+            "my_customers_total": sum(by_status.values()),
+        }
+
+    @staticmethod
+    def _snapshot_reply(user: User, snapshot: dict) -> str:
+        """AI 不可用时的确定性降级：直接用事实快照拼摘要，不编造、不空谈能力。"""
+        lines = [f"AI 助手暂时不可用（Dify 未连接）。以下为你的真实数据（{snapshot.get('scope')}）："]
+        if user.user_type == "MANAGER":
+            dash = snapshot.get("dashboard") or {}
+            cust = dash.get("customers") or {}
+            overview = dash.get("overview") or {}
+            reports = dash.get("reports") or {}
+            approvals = dash.get("approvals") or {}
+            so = cust.get("status_overview") or {}
+            lines.append(f"- 客户总数：{cust.get('total', '数据不可得')}")
+            lines.append("- 期末状态：" + " / ".join(
+                f"{k} {so.get(k, '—')}" for k in ("NEW", "FOLLOWING", "STRONG", "SIGNED", "ENROLLED", "LOST")
+            ))
+            lines.append(f"- 本月新增：{cust.get('new_this_month', '—')}；转化率：{overview.get('conversion_rate', '—')}%；"
+                         f"在办学生：{overview.get('active_students', '—')}")
+            lines.append(f"- 日报：今日已交 {reports.get('today_submitted', '—')}；本月已交 {reports.get('month_submitted', '—')}；"
+                         f"本月迟报 {reports.get('late_this_month', '—')}")
+            lines.append(f"- 待审批：{approvals.get('pending_total', '—')}")
+            lines.append("- 更多维度请在「经营看板 / 智能汇总 / 日报管理」页面查看。")
+        else:
+            reminders = snapshot.get("reminders") or {}
+            lines.append(f"- 我的客户：{snapshot.get('my_customers_total', 0)} 个")
+            by_status = snapshot.get("my_customers_by_status") or {}
+            if by_status:
+                lines.append("- 状态分布：" + " / ".join(f"{k} {v}" for k, v in by_status.items()))
+            lines.append(f"- 待办 {reminders.get('todos_pending', '—')} 项；"
+                         f"到期跟进 {reminders.get('follow_ups_due', '—')} 项")
+        return "\n".join(lines)
+
+    async def agent_chat(self, user: User, message: str, session_id: str | None) -> dict:
+        """企业助手会话：按角色注入权限感知 context + 真实数据快照后转发 Dify。
+
+        权限感知：EMPLOYEE 数据范围=own（仅名下客户），MANAGER=all（全域）。
+        factual_data 为后端产出的真实聚合快照，prompt 据此作答；无实时接口的维度一律禁止编造。
         """
         from app.services.ai_service import AgentType, ai_service
 
         caps = list(self.EMPLOYEE_CAPABILITIES)
         if user.user_type == "MANAGER":
             caps += self.MANAGER_EXTRA_CAPABILITIES
+        snapshot = await self._factual_snapshot(user)
         context = {
             "user_type": user.user_type,
             "user_id": str(user.id),
             "real_name": user.real_name or user.username,
             "data_scope": "all" if user.user_type == "MANAGER" else "own",
             "capabilities": "、".join(caps),
+            "factual_data": json.dumps(snapshot, ensure_ascii=False),
+            "factual_rule": "只能引用 factual_data 中的数字与分布作答；其中没有的维度禁止编造，"
+                            "改为指引用户到对应页面查看。",
         }
         try:
             resp = await ai_service.chat(
@@ -1372,14 +1432,8 @@ class EmployeeService:
                 return {"reply": result["reply"], "session_id": result.get("session_id", session_id or "new"), "source": "model"}
             except Exception as model_exc:
                 logger.warning("model fallback failed: employee=%s error=%s", user.id, model_exc)
-            reply = (
-                f"AI 助手暂时不可用（Dify 未连接）。当前身份「{user.user_type}」，"
-                f"数据范围：{'全域' if user.user_type == 'MANAGER' else '仅自己名下'}。可用能力：\n"
-                + "\n".join(f"- {c}" for c in caps)
-                + "\n\n提示：录入跟进/待办/成绩/日报等指令可走指令式业务处理接口"
-                  "（POST /employee/commands/parse → commands/execute 二次确认）。"
-            )
-            return {"reply": reply, "session_id": session_id or "new", "source": "fallback"}
+            return {"reply": self._snapshot_reply(user, snapshot),
+                    "session_id": session_id or "new", "source": "fallback"}
 
     # ── 新人指引问答（RAG 优先，本地静态降级） ────────────
     async def guide_ask(self, user: User, question: str, session_id: str | None) -> dict:

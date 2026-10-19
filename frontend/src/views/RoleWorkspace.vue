@@ -710,10 +710,17 @@ function aiSourceText(content: any): string {
   return '可用'
 }
 
-/** 指标值渲染：null 一律显示「数据不可得」，不用 0 冒充（v6.11.0 §2.8） */
+/** 指标值渲染：null 一律显示「数据不可得」，不用 0 冒充（v6.11.0 §2.8）
+ *  数组/嵌套对象递归转为可读摘要，不吐原始 JSON（否则员工日报/周报的 days、departments 会出现整段机器 JSON） */
 function metricValueText(value: any): string {
   if (value === null || value === undefined) return '数据不可得'
-  if (typeof value === 'object') return JSON.stringify(value)
+  if (Array.isArray(value)) {
+    if (value.length === 0) return '—'
+    return value.map((item) => metricValueText(item)).join('；')
+  }
+  if (typeof value === 'object') {
+    return Object.entries(value).map(([k, v]) => `${k}=${metricValueText(v)}`).join(' / ')
+  }
   return String(value)
 }
 
@@ -773,13 +780,16 @@ function historyText(history: any): string {
     .join('；')
 }
 
-/** 展开层 metrics 为可渲染的键值行（一层嵌套展平） */
+/** 展开层 metrics 为可渲染的键值行（一层嵌套展平）
+ *  数组整体成行，不按下标展开 —— 否则 days 会变成「days · 0 … days · 4」这类无意义键 */
 function metricRows(metrics: any): { key: string; value: any }[] {
   if (!metrics || typeof metrics !== 'object') return []
   const rows: { key: string; value: any }[] = []
   for (const [key, value] of Object.entries(metrics)) {
     if (key === 'profiles' || key === 'profile_denominator' || key === 'availability') continue
-    if (value !== null && typeof value === 'object') {
+    if (Array.isArray(value)) {
+      rows.push({ key, value })
+    } else if (value !== null && typeof value === 'object') {
       for (const [k2, v2] of Object.entries(value as any)) rows.push({ key: key + ' · ' + k2, value: v2 })
     } else {
       rows.push({ key, value })

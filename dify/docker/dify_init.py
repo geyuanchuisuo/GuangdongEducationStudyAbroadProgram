@@ -253,27 +253,27 @@ def setup_model_provider(client: httpx.Client, token: str) -> None:
     providers = r.json().get("data", []) or []
     exists = any(p.get("provider") == MODEL_PROVIDER for p in providers)
 
-    if exists:
-        log(f"模型供应商 {MODEL_PROVIDER} 已存在，跳过添加")
-    else:
-        log(f"添加模型供应商 {MODEL_PROVIDER} 凭证 ...")
-        # Dify 1.16：POST .../credentials 保存供应商凭证（服务端会校验凭证有效性）
-        r = client.post(
-            f"{DIFY_API_URL}/console/api/workspaces/current/model-providers/{MODEL_PROVIDER}/credentials",
-            headers=headers,
-            json={
-                "credentials": {
-                    "api_key": DIFY_MODEL_API_KEY,
-                    "base_url": DIFY_MODEL_BASE_URL,
-                    "mode": MODEL_MODE,
-                },
-                "name": "default",
+    # 供应商已存在时也要刷新凭证：早期版本直接跳过，导致 .env 改掉 api_key/base_url 后
+    # Dify 仍沿用旧供应商凭证，Agent 请求继续走旧渠道（历史缺陷：旧渠道免费档 429 拖垮全部 Agent）
+    action = "更新" if exists else "添加"
+    log(f"{action}模型供应商 {MODEL_PROVIDER} 凭证 ...")
+    # Dify 1.16：POST .../credentials 保存供应商凭证（服务端校验凭证有效性；同 provider 同名 `default` 为 upsert）
+    r = client.post(
+        f"{DIFY_API_URL}/console/api/workspaces/current/model-providers/{MODEL_PROVIDER}/credentials",
+        headers=headers,
+        json={
+            "credentials": {
+                "api_key": DIFY_MODEL_API_KEY,
+                "base_url": DIFY_MODEL_BASE_URL,
+                "mode": MODEL_MODE,
             },
-            timeout=60,
-        )
-        if r.status_code not in (200, 201):
-            fail(f"添加模型供应商失败: {r.status_code} {r.text[:300]}")
-        log(f"✅ 模型供应商已添加（base_url={DIFY_MODEL_BASE_URL}）")
+            "name": "default",
+        },
+        timeout=60,
+    )
+    if r.status_code not in (200, 201):
+        fail(f"{action}模型供应商失败: {r.status_code} {r.text[:300]}")
+    log(f"✅ 模型供应商凭证已{action}（base_url={DIFY_MODEL_BASE_URL}）")
 
     # 查询该供应商下的可用模型，确认模型名存在
     r = client.get(
@@ -321,6 +321,15 @@ def list_existing_apps(client: httpx.Client, token: str) -> dict:
     return {a["name"]: a["id"] for a in apps}
 
 
+def _dsl_app_name(dsl_content: str) -> str:
+    """取 DSL 内的 app.name（Dify 侧的应用显示名），解析失败返回空串"""
+    try:
+        data = yaml.safe_load(dsl_content) or {}
+    except yaml.YAMLError:
+        return ""
+    return str((data.get("app") or {}).get("name") or "").strip()
+
+
 def import_apps(client: httpx.Client, token: str) -> dict:
     """导入 yml，返回 {app_name: app_id}（含已存在的）"""
     headers = build_headers(client, token)
@@ -333,13 +342,16 @@ def import_apps(client: httpx.Client, token: str) -> dict:
         return existing
 
     for yml_path in yml_files:
-        name = Path(yml_path).stem  # 文件名（去掉 .yml）
-        if name in existing:
-            log(f"  跳过已存在应用: {name}")
-            continue
-        log(f"  导入应用: {name} ...")
         with open(yml_path, "r", encoding="utf-8") as f:
             dsl_content = f.read()
+        # 幂等判定必须用 DSL 内的 app.name：文件名形如「智能报告__advanced-chat」，
+        # 与 Dify 中的应用显示名「智能报告」并不相同；用文件名比对永远匹配不上，
+        # 每跑一次就重复导入一份副本（历史缺陷：曾累积到 5 个应用 × 3 份副本）
+        name = _dsl_app_name(dsl_content) or Path(yml_path).stem
+        if name in existing:
+            log(f"  跳过已存在应用: {name}（{Path(yml_path).name}）")
+            continue
+        log(f"  导入应用: {name}（{Path(yml_path).name}）...")
         # 模型占位符替换：yml 内统一写 your-model-name / your-model-provider，导入前替换为客户配置值
         # （Chatflow 工作流 LLM 节点的模型取自 DSL 本身，app 级 model-config 改不到它，必须导入时注入）
         dsl_content = dsl_content.replace("your-model-name", DIFY_MODEL_NAME)
@@ -365,32 +377,89 @@ def import_apps(client: httpx.Client, token: str) -> dict:
     return list_existing_apps(client, token)
 
 
-# ── 步骤 5：绑定模型 ──────────────────────────────────────
+# ── 步骤 5：绑定模型（强制对齐到 DIFY_MODEL_NAME）──────────
+def _align_workflow_model(client: httpx.Client, headers: dict, name: str, app_id: str) -> bool:
+    """advanced-chat（Chatflow）：模型写在 workflow 各 LLM 节点里。
+
+    app 级 model-config 不存在（GET 返回 405），DSL 占位符又只在「首次导入」时注入，
+    因此历史遗留副本会一直绑着旧模型，必须改写 draft 图才能真正切换。返回 True 表示是工作流应用。
+    """
+    r = client.get(f"{DIFY_API_URL}/console/api/apps/{app_id}/workflows/draft", headers=headers, timeout=30)
+    if r.status_code != 200:
+        return False
+    draft = r.json()
+    nodes = (draft.get("graph") or {}).get("nodes") or []
+    changed = 0
+    for node in nodes:
+        model = (node.get("data") or {}).get("model") or {}
+        if model.get("name") and model.get("name") != DIFY_MODEL_NAME:
+            model["name"] = DIFY_MODEL_NAME
+            model["provider"] = MODEL_PROVIDER
+            changed += 1
+    if not changed:
+        log(f"    ✅ {name} 节点模型已是 {DIFY_MODEL_NAME}")
+        return True
+    # Dify 乐观锁：不回传 hash 会返回 409 draft_workflow_not_sync
+    r = client.post(
+        f"{DIFY_API_URL}/console/api/apps/{app_id}/workflows/draft",
+        headers=headers,
+        json={
+            "graph": draft.get("graph"),
+            "features": draft.get("features"),
+            "environment_variables": draft.get("environment_variables"),
+            "conversation_variables": draft.get("conversation_variables"),
+            "hash": draft.get("hash"),
+        },
+        timeout=120,
+    )
+    if r.status_code not in (200, 201):
+        log(f"    ⚠️  {name} 工作流模型改写失败: {r.status_code} {r.text[:200]}")
+        return True
+    log(f"    ✅ {name} 已对齐 {changed} 个 LLM 节点（由后续「发布工作流」生效）")
+    return True
+
+
+def _align_app_model(client: httpx.Client, headers: dict, name: str, app_id: str) -> None:
+    """chat / agent-chat：模型存在 app 级 model-config，直接覆盖回写。"""
+    r = client.get(f"{DIFY_API_URL}/console/api/apps/{app_id}", headers=headers, timeout=30)
+    if r.status_code != 200:
+        log(f"    ⚠️  {name} 读取应用详情失败: {r.status_code}")
+        return
+    config = (r.json() or {}).get("model_config") or {}
+    if not config:
+        log(f"    （{name} 无 app 级 model-config，跳过）")
+        return
+    # 审计字段不接受回写
+    for key in ("created_by", "created_at", "updated_by", "updated_at"):
+        config.pop(key, None)
+    current = config.get("model") or {}
+    if current.get("name") == DIFY_MODEL_NAME and current.get("provider") == MODEL_PROVIDER:
+        log(f"    ✅ {name} 应用级模型已是 {DIFY_MODEL_NAME}")
+        return
+    config.setdefault("model", {})
+    config["model"]["provider"] = MODEL_PROVIDER
+    config["model"]["name"] = DIFY_MODEL_NAME
+    config["model"]["mode"] = MODEL_MODE
+    r = client.post(
+        f"{DIFY_API_URL}/console/api/apps/{app_id}/model-config",
+        headers=headers,
+        json=config,
+        timeout=30,
+    )
+    if r.status_code in (200, 201):
+        log(f"    ✅ {name} 已绑定 {DIFY_MODEL_NAME}")
+    else:
+        log(f"    ⚠️  绑定返回 {r.status_code}: {r.text[:200]}")
+
+
 def bind_model_to_apps(client: httpx.Client, token: str, apps: dict) -> None:
+    """把每个应用的模型统一对齐到 DIFY_MODEL_NAME（chat/agent-chat 与 advanced-chat 分别处理）。"""
     headers = build_headers(client, token)
     for name, app_id in apps.items():
-        log(f"  绑定模型到 {name} ...")
-        # 先获取当前 model-config 结构
-        r = client.get(f"{DIFY_API_URL}/console/api/apps/{app_id}/model-config", headers=headers, timeout=30)
-        if r.status_code != 200:
-            # chatflow（advanced-chat）无 app 级 model-config（405/404），其 LLM 节点模型已由 DSL 占位符注入
-            log(f"    （{name} 无 app 级 model-config，节点模型已由 DSL 注入，跳过：{r.status_code}）")
+        log(f"  对齐 {name} 的模型 ...")
+        if _align_workflow_model(client, headers, name, app_id):
             continue
-        current = r.json()
-        # 用新模型覆盖
-        current["model"]["provider"] = MODEL_PROVIDER
-        current["model"]["name"] = DIFY_MODEL_NAME
-        current["model"]["mode"] = MODEL_MODE
-        r = client.post(
-            f"{DIFY_API_URL}/console/api/apps/{app_id}/model-config",
-            headers=headers,
-            json=current,
-            timeout=30,
-        )
-        if r.status_code in (200, 201):
-            log(f"    ✅ {name} 已绑定 {DIFY_MODEL_NAME}")
-        else:
-            log(f"    ⚠️  绑定返回 {r.status_code}: {r.text[:200]}")
+        _align_app_model(client, headers, name, app_id)
 
 
 # ── 步骤 5.5：发布工作流（advanced-chat 导入后未发布，调 API 报 Workflow not published）──

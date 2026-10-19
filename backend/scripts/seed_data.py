@@ -46,6 +46,13 @@ from app.models.student import (
 from app.models.system import ApprovalInstance, ApprovalTask, SysEvent, SysNotification, SysOperationLog
 from app.models.user import User
 from app.core.security import hash_password
+# 报告种子数据复用生产组装链路，保证 seed 出的 report_content 与真实生成结构一致
+# （否则详情页空白、导出 PDF 报「报告无内容」、前端「报告类型」筛选恒空）
+from app.services.report_ai_service import _mock_analysis
+from app.services.report_content import REPORT_TYPE_NAMES, build_report_content
+from app.services.report_mock_data import PERIOD_END as MOCK_PERIOD_END
+from app.services.report_mock_data import PERIOD_START as MOCK_PERIOD_START
+from app.services.report_mock_data import build_mock_dataset
 
 # 固定随机种子，保证同一份代码生成完全相同的数据（可复现、可对比）
 random.seed(42)
@@ -320,11 +327,6 @@ ACADEMIC_TITLES = [
     "德语 B1 阶段测试", "雅思模拟考试（第 3 次）", "护理基础课程作业提交",
     "选课：德语口语强化", "期末成绩公布", "线上课程出勤确认",
     "实践报告提交", "专业词汇测评", "小组作业汇报", "学籍信息核对",
-]
-REPORT_TITLES = [
-    "每日经营情况汇总", "本周客户转化分析", "月度招生数据报告",
-    "学生心理健康周报", "投诉与满意度分析", "线索来源渠道分析",
-    "员工日报汇总", "活动报名与到场分析", "课程报名与续费分析", "意向客户结构分析",
 ]
 APPROVAL_TITLES = [
     "学生请假申请（事假）", "学生请假申请（病假）", "客户转化申请",
@@ -724,17 +726,46 @@ async def seed():
                 status=random.choice(["in_progress", "completed", "waiting"]),
             ))
 
-        # ── M5: Reports（20 条，version 递增确保 uq_ai_report_version 唯一约束不冲突） ──
+        # ── M5: 智能报告 ──────────────────────────────────────
+        # report_type 必须用后端契约值（report_content.REPORT_TYPE_NAMES）：前端「报告类型」
+        # 下拉选项就是这 5 个契约值，用旧的 daily/weekly/monthly/psych/business 会让筛选恒空、
+        # 列表类型列回落显示英文。report_content 直接复用生产组装函数 build_report_content
+        # （叠加本地模拟 AI 文案），使详情页、AI 徽标、PDF 导出与真实生成链路结构完全一致。
+        # 周期固定取 report_mock_data 的参考周期：其样本数据硬编码在 2026-10-12~10-16，
+        # 随机取周期只会得到全空指标（旧实现随机 ±30 天 → 详情页空白、导出 PDF 报「报告无内容」）。
+        report_periods: list[tuple[str, datetime, datetime, int]] = []
+        for day_offset in range(5):  # 周一~周五，各出一条单日「员工日报汇总」
+            day_start = MOCK_PERIOD_START + timedelta(days=day_offset)
+            report_periods.append(("daily_report_summary", day_start, day_start + timedelta(days=1), 1))
+        # 同类型同周期重复生成 → 保留历史版本（演示「历史版本」弹窗）
+        report_periods.append(("daily_report_summary", MOCK_PERIOD_START, MOCK_PERIOD_START + timedelta(days=1), 2))
+        for report_type in ("weekly_report_summary", "customer_analysis", "psych_weekly", "complaint_weekly"):
+            report_periods.append((report_type, MOCK_PERIOD_START, MOCK_PERIOD_END, 1))
+        report_periods.append(("customer_analysis", MOCK_PERIOD_START, MOCK_PERIOD_END, 2))
+        report_periods.append(("customer_analysis", MOCK_PERIOD_START, MOCK_PERIOD_END, 3))
+
         reports = []
-        for i in range(20):
+        for index, (report_type, period_start, period_end, version) in enumerate(report_periods):
+            generated_at = period_end + timedelta(minutes=5 + index)
+            ds = build_mock_dataset(period_start, period_end)
+            content = build_report_content(report_type, ds, period_start, period_end, version, generated_at)
+            try:
+                content.update(_mock_analysis(report_type, content.get("metrics") or {}))
+                content["ai_status"] = "available"
+            except Exception:  # 指标形状变动时不拖垮种子脚本，如实标「AI 不可用」
+                content["ai_status"] = "unavailable"
+            content["ai_source"] = "mock"
             r = AiReport(
-                report_type=random.choice(["daily", "weekly", "monthly", "psych", "business"]),
-                report_title=REPORT_TITLES[i % len(REPORT_TITLES)],
-                status=random.choice(["generating", "completed", "failed"]),
-                generated_by=random.choice(manager_ids),
-                time_range_start=datetime.now() - timedelta(days=random.randint(1, 30)),
-                time_range_end=datetime.now(),
-                version=i + 1,
+                report_type=report_type,
+                report_title=REPORT_TYPE_NAMES[report_type],
+                status="completed",
+                generated_by=manager_ids[index % len(manager_ids)],
+                time_range_start=period_start,
+                time_range_end=period_end,
+                version=version,
+                report_content=content,
+                data_source_status=content["header"]["data_source_status"],
+                created_at=generated_at,
             )
             session.add(r)
             reports.append(r)
