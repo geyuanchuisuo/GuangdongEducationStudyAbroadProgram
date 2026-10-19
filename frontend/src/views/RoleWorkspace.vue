@@ -314,8 +314,40 @@ async function loadOrgTree() {
 }
 async function loadOrgMembers() {
   try {
-    orgMembers.value = itemsOf(await platformApi.employee.orgMembers({ keyword: orgKeyword.value.trim() || undefined, page: 1, page_size: 20 }))
+    orgMembers.value = itemsOf(await platformApi.employee.orgMembers({ keyword: orgKeyword.value.trim() || undefined, page: 1, page_size: 100 }))
   } catch { orgMembers.value = [] }
+}
+// 组织架构搜索：姓名→同事过滤；部门名→树过滤（不命中回落全量树，避免搜人名时树被清空）
+async function searchOrg() {
+  await loadOrgMembers()
+  const kw = orgKeyword.value.trim()
+  try {
+    const rows = itemsOf(await platformApi.employee.org({ keyword: kw || undefined }))
+    orgTree.value = rows.length ? rows : itemsOf(await platformApi.employee.org())
+  } catch {}
+}
+// 部门与负责人清单（树展平，负责人从员工/同事列表反查姓名）
+const orgDeptRows = computed(() => {
+  const rows: any[] = []
+  const walk = (nodes: any[]) => {
+    for (const node of nodes || []) {
+      rows.push({ id: node.id, name: node.name, leader: employeeName(node.leader_id) })
+      if (Array.isArray(node.children) && node.children.length) walk(node.children)
+    }
+  }
+  walk(orgTree.value)
+  return rows
+})
+// 新人指引（GET /employee/guide/onboarding 真实章节，替代原 5 行写死文案 + 死按钮）
+const guideSections = ref<any[]>([])
+const guideDialog = ref(false)
+const guideCurrent = ref<any>(null)
+async function loadGuide() {
+  try { guideSections.value = itemsOf(await platformApi.employee.guideOnboarding()) } catch { guideSections.value = [] }
+}
+function openGuide(sec: any) {
+  guideCurrent.value = sec
+  guideDialog.value = true
 }
 function errorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback
@@ -499,7 +531,8 @@ onMounted(async () => {
   if (role.value === 'MANAGER') await loadManagerOverview()
   if (role.value === 'EMPLOYEE') await loadEmployeeWorkspace()
   if (role.value === 'EMPLOYEE' || role.value === 'MANAGER') await loadOrgTree()
-  if (role.value === 'EMPLOYEE') await loadOrgMembers()
+  if (role.value === 'EMPLOYEE' || role.value === 'MANAGER') await loadOrgMembers()
+  if (role.value === 'EMPLOYEE') await loadGuide()
   if (role.value === 'STUDENT') {
     await loadStudentProfile()
     await loadMyServices()
@@ -1423,7 +1456,7 @@ function revealPhone(member: any) {
 <div v-if="activeReport"> <h2>{{ activeReport.report_date }}</h2> <p>{{ activeReport.content }}</p> </div>
 </template> </el-drawer> </template>
     <template v-else-if="role === 'EMPLOYEE' && section === 'org'">
-      <div class="two-column"><section class="surface panel"><SectionTitle title="组织架构查询" desc="联系方式默认脱敏，查看完整号码需要二次确认。" /><el-tree :data="orgTree" :props="orgTreeProps" default-expand-all /><el-empty v-if="!orgTree.length" description="暂无组织数据" /><SectionTitle title="同事联系方式" desc="按姓名搜索，默认脱敏；查看完整号码需二次确认并记入操作日志。" /><el-input v-model="orgKeyword" :prefix-icon="Search" placeholder="搜索同事姓名" clearable @keyup.enter="loadOrgMembers" @clear="loadOrgMembers" /><el-button type="primary" @click="loadOrgMembers">搜索</el-button><div v-for="member in orgMembers" :key="member.user_id" class="task-row"><b>{{ (member.real_name || '?').slice(0, 1) }}</b><div><strong>{{ member.real_name }}</strong><small>{{ member.department || '—' }} · {{ revealedPhones[member.user_id] || member.phone_masked || '—' }}</small></div><el-button text type="primary" @click="revealPhone(member)">查看完整号码</el-button></div><el-empty v-if="!orgMembers.length" description="暂无同事数据" /></section><section class="surface panel"><SectionTitle title="新人指引" /><div v-for="item in ['办公环境快速导航','IT支持与设备使用','团队协作与沟通','公司文化与价值观','新人成长与资源支持']" :key="item" class="task-row"><b>0{{ item.length % 4 + 1 }}</b><div><strong>{{ item }}</strong><small>知识库 + 引导式流程</small></div><el-button text type="primary">打开</el-button></div></section></div>
+      <div class="two-column"><section class="surface panel"><SectionTitle title="组织架构查询" desc="联系方式默认脱敏，查看完整号码需要二次确认。" /><el-tree :data="orgTree" :props="orgTreeProps" default-expand-all /><el-empty v-if="!orgTree.length" description="暂无组织数据" /><SectionTitle title="同事联系方式" desc="按姓名搜索，默认脱敏；查看完整号码需二次确认并记入操作日志。" /><el-input v-model="orgKeyword" :prefix-icon="Search" placeholder="搜索同事姓名" clearable @keyup.enter="loadOrgMembers" @clear="loadOrgMembers" /><el-button type="primary" @click="loadOrgMembers">搜索</el-button><div v-for="member in orgMembers" :key="member.user_id" class="task-row"><b>{{ (member.real_name || '?').slice(0, 1) }}</b><div><strong>{{ member.real_name }}</strong><small>{{ member.department || '—' }} · {{ revealedPhones[member.user_id] || member.phone_masked || '—' }}</small></div><el-button text type="primary" @click="revealPhone(member)">查看完整号码</el-button></div><el-empty v-if="!orgMembers.length" description="暂无同事数据" /></section><section class="surface panel"><SectionTitle title="新人指引" desc="章节内容来自《公司新人指南》，点击查看问答详情。" /><div v-for="(item, index) in guideSections" :key="item.key" class="task-row"><b>0{{ index + 1 }}</b><div><strong>{{ item.title }}</strong><small>{{ item.summary }}</small></div><el-button text type="primary" @click="openGuide(item)">打开</el-button></div><el-empty v-if="!guideSections.length" description="暂无指引内容" /></section></div>
     </template>
 
     <template v-else-if="role === 'EMPLOYEE' && section === 'todos'">
@@ -1784,8 +1817,20 @@ function revealPhone(member: any) {
     <template v-else-if="role === 'MANAGER' && section === 'org'">
       <SectionTitle title="组织架构查询" desc="查看部门职能、团队层级和同事联系方式；联系方式默认脱敏。" />
       <div class="two-column">
-        <section class="surface panel"><el-input :prefix-icon="Search" placeholder="搜索部门或姓名" /><el-tree :data="orgTree" :props="orgTreeProps" default-expand-all /></section>
-        <section class="surface panel"><SectionTitle title="组织能力" /><div class="life-grid"><article v-for="item in ['部门职能查询','同事联系方式','团队成员筛选','组织变更记录']" :key="item" class="surface life-card"><h3>{{ item }}</h3><p>按部门、经理和员工维度查看组织数据。</p></article></div></section>
+        <section class="surface panel">
+          <SectionTitle title="团队层级" desc="按部门查看层级与负责人；搜索部门名过滤树，搜姓名过滤同事列表。" />
+          <div class="search-row"><el-input v-model="orgKeyword" :prefix-icon="Search" placeholder="搜索部门或姓名" clearable @keyup.enter="searchOrg" @clear="searchOrg" /><el-button type="primary" @click="searchOrg">搜索</el-button></div>
+          <el-tree :data="orgTree" :props="orgTreeProps" default-expand-all />
+          <el-empty v-if="!orgTree.length" description="暂无组织数据" />
+        </section>
+        <section class="surface panel">
+          <SectionTitle title="部门与负责人" />
+          <div v-for="dept in orgDeptRows" :key="dept.id" class="task-row"><b>{{ (dept.name || '?').slice(0, 1) }}</b><div><strong>{{ dept.name }}</strong><small>负责人：{{ dept.leader }}</small></div></div>
+          <el-empty v-if="!orgDeptRows.length" description="暂无部门数据" />
+          <SectionTitle title="同事联系方式" desc="按姓名搜索，默认脱敏；查看完整号码需二次确认并记入操作日志。" />
+          <div v-for="member in orgMembers" :key="member.user_id" class="task-row"><b>{{ (member.real_name || '?').slice(0, 1) }}</b><div><strong>{{ member.real_name }}</strong><small>{{ member.department || '—' }} · {{ revealedPhones[member.user_id] || member.phone_masked || '—' }}</small></div><el-button text type="primary" @click="revealPhone(member)">查看完整号码</el-button></div>
+          <el-empty v-if="!orgMembers.length" description="暂无同事数据" />
+        </section>
       </div>
     </template>
 
@@ -1816,6 +1861,10 @@ function revealPhone(member: any) {
       <section class="surface profile-card"><SectionTitle title="模块详情" /><p class="muted">该页面已按当前角色和模块建立完整结构。后续接入对应接口时，将替换数据来源和操作处理。</p><el-button type="primary" @click="router.push('/app/' + role.toLowerCase() + '/home')">返回工作台</el-button></section>
     </template>
   </div>
+    <el-dialog v-model="guideDialog" :title="guideCurrent?.title || '新人指引'" width="min(620px, 94vw)">
+      <p class="muted">{{ guideCurrent?.summary }}</p>
+      <div v-for="(item, index) in guideCurrent?.items || []" :key="index" class="task-row"><b>Q</b><div><strong>{{ item.q }}</strong><small>{{ item.a }}</small></div></div>
+    </el-dialog>
     <el-dialog v-model="createUserDialog" title="创建员工账号" width="min(520px, 94vw)"><el-form label-position="top"><el-form-item label="真实姓名"><el-input v-model="createUserForm.real_name" placeholder="请输入真实姓名" /></el-form-item><el-form-item label="登录用户名"><el-input v-model="createUserForm.username" placeholder="3-50 位，需唯一" /></el-form-item><el-form-item label="手机号"><el-input v-model="createUserForm.phone" placeholder="选填，需唯一" /></el-form-item><el-form-item label="初始密码"><el-input v-model="createUserForm.password" type="password" show-password placeholder="至少 6 位" /></el-form-item><el-form-item label="账号类型"><el-radio-group v-model="createUserForm.user_type"><el-radio value="EMPLOYEE">普通员工</el-radio><el-radio value="MANAGER">管理层</el-radio></el-radio-group></el-form-item><el-form-item label="部门"><el-input v-model="createUserForm.department" placeholder="选填，如 咨询部" /></el-form-item><el-form-item label="岗位角色"><el-input v-model="createUserForm.employee_role" placeholder="选填，如 留学顾问" /></el-form-item></el-form><template #footer><el-button @click="createUserDialog = false">取消</el-button><el-button type="primary" @click="submitCreateUser">确认创建</el-button></template></el-dialog>
     <el-dialog v-model="customerDialog" title="录入意向客户" width="min(620px, 94vw)">
       <el-form label-position="top">
@@ -1873,6 +1922,7 @@ function revealPhone(member: any) {
 .bars { height: 180px; display: flex; align-items: flex-end; gap: 15px; padding: 20px 10px 0; border-bottom: 2px solid var(--line); }.bar { flex: 1; min-width: 18px; border-radius: 8px 8px 0 0; background: var(--violet); }
 .form-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0 18px; }
 .toolbar { display: flex; gap: 12px; padding: 16px; margin-bottom: 18px; }.toolbar .el-input { max-width: 380px; }
+.search-row { display: flex; gap: 12px; margin-bottom: 14px; }.search-row .el-input { max-width: 380px; }
 .table-card { padding: 8px 18px 18px; overflow: auto; }.drawer-actions { display: flex; gap: 10px; margin-top: 22px; }.customer-head { display: flex; justify-content: space-between; align-items: center; }.customer-head h2 { margin: 0; color: var(--ink-deep); }.customer-head p { color: var(--muted); }.assessment { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }.assessment > div { padding: 16px; background: var(--canvas); border-radius: 13px; }.assessment small { color: var(--muted); }.assessment b { display: block; margin: 8px 0; color: var(--violet); font-size: 22px; }.assessment p { margin: 0; color: var(--muted); line-height: 1.7; font-size: 12px; }.recommend { margin: 0 8px 8px 0; }
 .psych-hero { display: flex; justify-content: space-between; align-items: center; padding: 34px; color: #fff; background: var(--ink); }.psych-hero h2 { margin: 18px 0 8px; font-size: 36px; }.psych-hero p { color: #d6d5ee; }.score-ring { display: grid; place-items: center; align-content: center; width: 180px; height: 180px; border: 15px solid #80b717; border-right-color: #5b5798; border-radius: 50%; }.score-ring strong { font-size: 55px; line-height: 1; }.score-ring span, .score-ring small { color: #d3d2ec; }
 .line-chart { height: 220px; display: flex; gap: 12px; }.chart-y { display: flex; flex-direction: column; justify-content: space-between; color: var(--muted); font-size: 11px; }.chart-area { flex: 1; background: repeating-linear-gradient(to bottom, transparent 0, transparent 48px, var(--line) 49px); }.chart-area svg { width: 100%; height: 100%; }.boundary { padding-left: 20px; color: var(--muted); line-height: 2; }.boundary li::marker { color: var(--lime); }
