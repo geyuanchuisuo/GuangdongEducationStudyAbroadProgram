@@ -6,6 +6,7 @@
 
 ## 零、快速定位（打开项目先看这里）
 
+> v6.11.56（2026-10-19，longtrying_test）：**第二十次同步 gitea/master（三线统一）**——并入 master_ZNBG 线管理层四项修复（登录支持手机号兜底/审批放宽任一 MANAGER+留痕/审批分类 seed 修正/双层标题+个人信息布局，公共模块 user_repo/user_service/approval_engine/seed_data 经用户批准），3 处文档冲突并集；合并后本地 longtrying_test=本地 master=云端 longtrying_test=云端 master 四端同指 bd0fc04（LOG-109）。
 > v6.11.55（2026-10-19，longtrying_test）：**本线合入 master 推送云端**——云端 master 无差异后按 §7.1 流程 Fast-forward 合入并推送（58e775a..42323c7），master=longtrying_test=gitea/master 三者同指（LOG-108）。
 > v6.11.54（2026-10-19，longtrying_test）：**第十九次同步 gitea/master**——并入 v6.11.52 master 线（chunk 加载失败兜底、业务错误 bizCode 标记、代客申请表单修复），2 处文档冲突并集；pytest 170/170 + verify_all 29/29 + build ✓（LOG-107）。
 > v6.11.52（2026-10-19，longtrying_test）：**第十八次同步 gitea/master**——并入 v6.11.50/51（问题清单 55~63 修复、进度阶段口径统一 6 段、铃铛通知中心、请假表单对齐），2 处文档冲突并集；pytest 170/170 + verify_all 29/29 + build ✓（LOG-105）。
@@ -109,8 +110,8 @@
 2. `docs/项目需求文档.md` — 完整业务需求
 3. `promts/lon/提示词整合测试_demo/docs/基础架构方案_五人并行开发.md` — **主基线，权重最高**
 4. `docs/开发路线图.md` — 当前进度、下一步任务
-5. `docs/接口契约v1.md` — API接口契约（v2.11.51，115 paths）
-6. `docs/更新记录.md` — 最近变更（v6.11.52 第十八次同步 master + v6.11.50 管理层Agent经营数据 + v6.11.43 第十七次同步 master + v6.11.42 文档审计 + v6.11.41 流式空白修复 + v6.11.40 清库重注/种子自动注入 + v6.11.39 全角色Agent流式 + v6.11.38 Dify应用命名规范）
+5. `docs/接口契约v1.md` — API接口契约（v2.11.54，115 paths）
+6. `docs/更新记录.md` — 最近变更（v6.11.56 第二十次同步 master 三线统一 + v6.11.55 本线合入 master 推送云端 + v6.11.54 第十九次同步 master + v6.11.52 第十八次同步 master + v6.11.50 管理层Agent经营数据 + v6.11.43 第十七次同步 master + v6.11.42 文档审计 + v6.11.41 流式空白修复 + v6.11.40 清库重注/种子自动注入 + v6.11.39 全角色Agent流式）
 
 **重要规则**：
 - 主基线文档（基础架构方案）权重 > 其他参考文档（共用基座方案、公共框架等）
@@ -217,7 +218,7 @@ GuangdongEducationStudyAbroadProgram/
 │   ├── AGENTS.md              # 本文件副本（与根目录AGENTS.md保持同步）
 │   ├── 项目需求文档.md
 │   ├── 更新记录.md
-│   ├── 接口契约v1.md          # API接口契约（v2.11.51，115 paths）
+│   ├── 接口契约v1.md          # API接口契约（v2.11.54，115 paths）
 │   ├── 开发路线图.md
 │   └── 运行日志.md
 │
@@ -856,11 +857,11 @@ chore: 构建
 | **AGENTS.md** | **./AGENTS.md**（根目录） | **项目接手指南（agent自动读取，这是主文件）** |
 | AGENTS.md 副本 | docs/AGENTS.md | 与根目录保持同步的副本 |
 | 项目需求文档 | docs/项目需求文档.md | 完整需求、架构、接口、数据库 |
-| 更新记录 | docs/更新记录.md | 版本变更记录（当前 v6.11.52） |
+| 更新记录 | docs/更新记录.md | 版本变更记录（当前 v6.11.56） |
 | 开发路线图 | docs/开发路线图.md | 分期任务表（Phase 0已完成，M3 收官，M1/M2 v6.8.0 补齐，M4/M5 后端已交付，AI 已接通） |
-| 运行日志 | docs/运行日志.md | 排查记录与教训（当前 LOG-105） |
+| 运行日志 | docs/运行日志.md | 排查记录与教训（当前 LOG-109） |
 | 测试报告 | docs/测试报告_v6.8.2_M3M4端到端.md | v6.8.2 Docker E2E 69/69 检查明细+7项缺陷+7轮迭代留档 |
-| 接口契约v2 | docs/接口契约v1.md | API接口契约（v2.11.51，35张表，115路由路径=114 API+1 health） |
+| 接口契约v2 | docs/接口契约v1.md | API接口契约（v2.11.54，35张表，115路由路径=114 API+1 health） |
 | **基础架构方案** | **promts/lon/提示词整合测试_demo/docs/基础架构方案_五人并行开发.md** | **主基线文档（v1.2.0，28项决策），所有参考文档权重低于此文件** |
 
 > **文档优先级**：基础架构方案_五人并行开发.md > 其他参考文档（共用基座方案、公共框架等）
