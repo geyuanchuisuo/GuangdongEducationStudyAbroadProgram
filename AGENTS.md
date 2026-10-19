@@ -6,6 +6,7 @@
 
 ## 零、快速定位（打开项目先看这里）
 
+> v6.11.39（2026-10-19，longtrying_test）：**全角色 Agent 流式输出**——学生/员工/管理层 SSE 增量下发（新增 `POST /student/agent/chat/stream` 和 `POST /employee/agent/chat/stream`，路由 112→114）+ 前端 AgentDock.vue 新增 `streamAgent()` 函数支持逐字渲染（感知延迟=首字时间），流式失败自动回退非流式接口（LOG-099）。
 > v6.11.37 补丁（2026-10-19，longtrying_test）：**流式输出修复**——nginx `location /api/` 未关 `proxy_buffering` 导致 SSE 被攒批一次性下发（前端"整段蹦出"），补 `proxy_buffering off` + 后端 `X-Accel-Buffering: no` 双保险，三层实测逐字到达（LOG-097）。
 > v6.11.37（2026-10-19，longtrying_test）：**客服响应慢根治**——诊断修正（live 应用实为分类器+7 分支=每轮 2~3 次串行 LLM，基线 13.8~36.4s）；draft 图原地换「实时数据+单 LLM」版（key 不变，备份可回滚）→ 12.7/6.6s；SSE 流式（`POST /ai/customer-service/chat/stream`，路由 111→112）+ AgentDock 流式渲染 → 公网首字 2.5s；dify_init.py 加固（端点自愈/同名去重/key POSIX 防御）+ 脚本挂载镜像重建，重拉起幂等配置好。详见更新记录 v6.11.37 / LOG-096。
 > v6.11.36（2026-10-19，longtrying_test）：**正式交付运行（合并后全栈重建）**——`npm run build` + `docker restart edu-backend` + vite/隧道拉起；公网 https://nine-peaches-fetch.loca.lt（访客密码 113.80.207.199）注册/登录/四演示账号验证全通过（API 零变化）。详见更新记录 v6.11.36 / LOG-095。

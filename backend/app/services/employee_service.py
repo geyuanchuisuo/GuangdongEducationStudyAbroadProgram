@@ -1,4 +1,5 @@
 import json
+from collections.abc import AsyncIterator
 from datetime import date, datetime, timedelta
 
 from app.core.exceptions import BusinessError, ConflictError, ForbiddenError, NotFoundError
@@ -1551,6 +1552,76 @@ class EmployeeService:
                 logger.warning("model fallback failed: employee=%s error=%s", user.id, model_exc)
             return {"reply": self._snapshot_reply(user, snapshot),
                     "session_id": session_id or "new", "source": "fallback"}
+
+    async def agent_chat_stream(self, user: User, message: str, session_id: str | None) -> AsyncIterator[dict]:
+        """企业助手流式会话：按角色注入权限感知 context 转发 Dify 流式；AI 不可用降级返回能力清单。
+
+        v6.11.38：SSE 增量下发（感知延迟=首字时间），事件格式与客服流式对齐：
+        {"event":"meta","conversation_id"} / {"event":"token","delta"} / {"event":"done","data"}。
+        权限感知：EMPLOYEE 数据范围=own（仅名下客户），MANAGER=all（全域），
+        能力清单写入 inputs.capabilities 供 Dify Agent prompt 使用。
+        """
+        from app.services.ai_service import AgentType, ai_service
+
+        caps = list(self.EMPLOYEE_CAPABILITIES)
+        if user.user_type == "MANAGER":
+            caps += self.MANAGER_EXTRA_CAPABILITIES
+        snapshot = await self._factual_snapshot(user)
+        context = {
+            "user_type": user.user_type,
+            "user_id": str(user.id),
+            "real_name": user.real_name or user.username,
+            "data_scope": "all" if user.user_type == "MANAGER" else "own",
+            "capabilities": "、".join(caps),
+            "factual_data": json.dumps(snapshot, ensure_ascii=False),
+            "factual_rule": "只能引用 factual_data 中的数字与分布作答；其中没有的维度禁止编造，"
+                            "改为指引用户到对应页面查看。",
+        }
+        try:
+            real = await self._build_agent_real_data(user)
+        except Exception as snap_exc:
+            logger.warning("agent real-data snapshot failed: user=%s err=%s", user.id, snap_exc)
+            real = "（实时数据暂不可用，请勿编造具体事项）"
+        prompt_message = (
+            "【系统注入·实时数据】以下是你唯一可引用的事实依据，禁止编造其中没有的人名/单号/事项；"
+            "用户问题超出数据范围时如实说明没有数据：\n"
+            f"{real}\n"
+            "【回复格式】只用自然语言回答，禁止输出 JSON、结构化 action 或代码块。\n"
+            f"【用户提问】{message}"
+        )
+        yield {"event": "meta", "conversation_id": session_id or "new"}
+
+        buf = ""
+        dify_session_id = session_id or "new"
+        stream_error: Exception | None = None
+        try:
+            async for token in ai_service.chat_stream(
+                agent=AgentType.EMPLOYEE,
+                message=prompt_message,
+                session_id=session_id or "new",
+                user_id=f"employee_{user.id}",
+                context=context,
+            ):
+                buf += token
+                yield {"event": "token", "delta": token}
+        except Exception as exc:
+            stream_error = exc
+            logger.warning("employee agent chat_stream failed: user=%s error=%s", user.id, exc)
+
+        # 流失败或无输出时走降级链
+        if stream_error is not None or not buf:
+            try:
+                from app.services.model_ai_service import model_ai_service
+                result = await model_ai_service.chat(prompt_message, session_id or "new", context)
+                buf = self._strip_agent_json(result["reply"])
+                dify_session_id = result.get("session_id", session_id or "new")
+                yield {"event": "token", "delta": buf}
+            except Exception as model_exc:
+                logger.warning("model fallback failed: employee=%s error=%s", user.id, model_exc)
+                buf = self._snapshot_reply(user, snapshot)
+                yield {"event": "token", "delta": buf}
+
+        yield {"event": "done", "data": {"reply": buf, "session_id": dify_session_id, "source": "stream"}}
 
     # ── 新人指引问答（RAG 优先，本地静态降级） ────────────
     async def guide_ask(self, user: User, question: str, session_id: str | None) -> dict:

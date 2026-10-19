@@ -58,16 +58,21 @@ async function send(text = input.value) {
     let recs: AnyRec[] | undefined
     let faq: any = undefined
     let register: any = undefined
+    // v6.11.38：所有角色统一走流式路径（SSE 增量下发，感知延迟=首字时间）
     if (props.type === 'student') {
+      if (await streamAgent(value, '/student/agent/chat/stream')) return
+      // 流式失败回退非流式接口
       const result: any = await platformApi.student.agentChat({ message: value, session_id: sessionId.value })
       sessionId.value = result?.session_id || sessionId.value
       reply = result?.reply || reply
     } else if (props.type === 'employee' || props.type === 'manager') {
+      if (await streamAgent(value, '/employee/agent/chat/stream')) return
+      // 流式失败回退非流式接口
       const result: any = await platformApi.employee.agentChat({ message: value, session_id: sessionId.value })
       sessionId.value = result?.session_id || sessionId.value
       reply = result?.reply || reply
     } else if (await streamCustomer(value)) {
-      // v6.11.37：流式路径已自行渲染（token 增量 + done 结构化数据），无需走统一落屏
+      // v6.11.37：客服流式路径已自行渲染（token 增量 + done 结构化数据），无需走统一落屏
       return
     } else {
       // 流式失败自动回退非流式接口（既有降级体验不变）
@@ -139,6 +144,58 @@ async function streamCustomer(value: string): Promise<boolean> {
           const card: any = payload.card_data
           msg.faq = card?.faq || undefined
           msg.register = card?.register || undefined
+        }
+      }
+    }
+    if (!msg.text) msg.text = '当前助手服务未返回内容，请稍后重试。'
+    return true
+  } catch {
+    if (msg.text) return true // 已有部分内容：保留展示，不再重复请求
+    messages.value.pop()
+    return false
+  }
+}
+
+// v6.11.38：学生/员工/管理层流式对话（SSE，token 增量渲染，感知延迟=首字时间）。
+// 成功（含部分输出后中断）返回 true；完全无输出返回 false 由调用方回退非流式接口。
+async function streamAgent(value: string, endpoint: string): Promise<boolean> {
+  const target = (import.meta.env.VITE_API_BASE_URL || '/api/v1') + endpoint
+  const msg: any = { role: 'agent', text: '' }
+  messages.value.push(msg)
+  try {
+    const resp = await fetch(target, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': userStore.token ? `Bearer ${userStore.token}` : '',
+      },
+      body: JSON.stringify({
+        message: value,
+        session_id: sessionId.value,
+      }),
+    })
+    if (!resp.ok || !resp.body) throw new Error('stream-unavailable')
+    const reader = resp.body.getReader()
+    const decoder = new TextDecoder('utf-8')
+    let buf = ''
+    for (;;) {
+      const { done, value: chunk } = await reader.read()
+      if (done) break
+      buf += decoder.decode(chunk, { stream: true })
+      const parts = buf.split('\n\n')
+      buf = parts.pop() || ''
+      for (const part of parts) {
+        const ev = /^event: (.+)$/m.exec(part)
+        const data = /^data: (.+)$/m.exec(part)
+        if (!ev || !data) continue
+        const payload = JSON.parse(data[1])
+        if (ev[1] === 'token' && payload.delta) {
+          msg.text += payload.delta
+        } else if (ev[1] === 'meta') {
+          sessionId.value = payload.conversation_id || sessionId.value
+        } else if (ev[1] === 'done') {
+          sessionId.value = payload.session_id || payload.conversation_id || sessionId.value
+          if (payload.reply) msg.text = payload.reply
         }
       }
     }
