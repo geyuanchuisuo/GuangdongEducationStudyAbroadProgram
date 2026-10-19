@@ -35,6 +35,7 @@ export const navigation: Record<Role, NavItem[]> = {
     { key: 'scores', label: '成绩录入', icon: 'DataLine', section: 'scores' },
     { key: 'org', label: '组织与指引', icon: 'OfficeBuilding', section: 'org' },
     { key: 'todos', label: '待办与消息', icon: 'Bell', section: 'todos' },
+    { key: 'psych', label: '心理预警', icon: 'Star', section: 'psych-alerts' },
     { key: 'profile', label: '个人信息', icon: 'User', section: 'profile' },
   ],
   MANAGER: [
