@@ -14,7 +14,16 @@ class CustomerRepository:
         return result.scalar_one_or_none()
 
     async def get_by_sys_user_id(self, sys_user_id: int) -> Customer | None:
-        result = await self.db.execute(select(Customer).where(Customer.sys_user_id == sys_user_id))
+        # v6.11.41：一个系统用户只应关联一条客户档案。历史数据里存在同一 sys_user_id
+        # 挂多条档案的情况，此时 scalar_one_or_none() 会抛 MultipleResultsFound 直接把
+        # /customers/me 打成 500，故固定取最新一条，保证接口不再因脏数据整体不可用。
+        stmt = (
+            select(Customer)
+            .where(Customer.sys_user_id == sys_user_id)
+            .order_by(Customer.id.desc())
+            .limit(1)
+        )
+        result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
     async def get_latest_convert_status(self, customer_id: int) -> str | None:

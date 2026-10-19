@@ -17,6 +17,7 @@ import StatCard from '../components/StatCard.vue'
 import SectionTitle from '../components/SectionTitle.vue'
 import { REPORT_TYPES, typeName } from '../config/reports'
 import { platformApi, fallbackState } from '../api/platform'
+import { showMessage } from '../utils/request'
 import { useUserStore } from '../stores/user'
 
 const route = useRoute()
@@ -39,6 +40,8 @@ const customerRows = ref<any[]>([])
 // 访客页与转化申请表单用的公开列表（走 platformApi，含懒加载演示数据兜底）
 const publicProjects = ref<any[]>([])
 const publicEvents = ref<any[]>([])
+// v6.11.49：当前意向客户已报名的活动 id（GET /events/my-registrations），用于把按钮显示为「已报名」
+const myEventIds = ref<number[]>([])
 const selectedCustomerIds = ref<number[]>([])
 const reassignFromId = ref<number | undefined>()
 const reassignToId = ref<number | undefined>()
@@ -117,6 +120,18 @@ function customerStatusKey(status: string) {
 const mgrOverview = computed(() => dashboardData.value?.overview || {})
 const mgrCustomers = computed(() => dashboardData.value?.customers || {})
 const mgrPendingTotal = computed(() => approvalsData.value?.stats?.pending_total ?? '—')
+// v6.11.45：签约金额 = 成交客户数（已签约+已入学）× 已定价项目学费，由后端 overview.signed_amount 计算。
+// 客户侧没有「意向项目」落库字段，无法逐单匹配，故按当前唯一已定价项目的学费估算，卡片注释写明口径。
+const signedAmountLabel = computed(() => {
+  const amount = mgrOverview.value.signed_amount
+  if (amount === null || amount === undefined) return '暂无数据'
+  return (Number(amount) / 10000).toLocaleString('zh-CN', { maximumFractionDigits: 2 }) + ' 万元'
+})
+const signedAmountNote = computed(() => {
+  const unit = mgrOverview.value.signed_amount_unit
+  if (unit === null || unit === undefined) return '暂无已定价项目，无法估算'
+  return '成交 ' + (mgrOverview.value.converted ?? 0) + ' 人 × ' + (Number(unit) / 10000) + ' 万/人（唯一已定价项目）'
+})
 // 审批筛选：按 radio 标签语义映射 biz_type（转化申请=convert、请假=leave、员工流程=日报补报/投诉）
 const approvalFilterBizTypes: Record<string, string[]> = { '转化申请': ['convert'], '请假': ['leave'], '员工流程': ['late_report', 'complaint'] }
 const filteredApprovalItems = computed<any[]>(() => {
@@ -546,6 +561,10 @@ onMounted(async () => {
     // 公开列表（课程/活动）：走平台层，接口不可用时由平台层登记提示条
     platformApi.projects().then((rows) => { publicProjects.value = rows }).catch(() => {})
     platformApi.events().then((rows) => { publicEvents.value = rows }).catch(() => {})
+    // v6.11.49：意向客户额外拉取「我的报名」——活动列表是公开接口，不含当前用户的报名状态
+    if (role.value === 'PROSPECT') {
+      platformApi.myEventRegistrations().then((data: any) => { myEventIds.value = data?.event_ids || [] }).catch(() => {})
+    }
     const requests: Promise<any>[] = [platformApi.notifications()]
     // M5-05.9：员工端不再请求 /reports（该组接口仅 MANAGER/ADMIN，员工调用必 403）
     if (role.value === 'EMPLOYEE' || role.value === 'MANAGER') {
@@ -949,10 +968,11 @@ function metricRows(metrics: any): { key: string; value: any }[] {
   return rows
 }
 function notifySuccess(message: string) {
-  ElMessage['success'](message)
+  // v6.11.47：改走统一提示出口，与 axios 拦截器共用短时去重，避免同一条消息弹两条
+  showMessage('success', message)
 }
 function notifyInfo(message: string) {
-  ElMessage['info'](message)
+  showMessage('info', message)
 }
 
 const pageTitle = computed(() => {
@@ -966,6 +986,17 @@ const pageTitle = computed(() => {
     events: '活动报名', consult: '我的咨询',
   }
   return map[section.value] || '工作空间'
+})
+
+// v6.11.48：意向客户「课程与项目 / 活动报名 / 我的咨询」的内层 SectionTitle 与顶部页面标题
+// 完全同名，页面会显示两层同一个标题。现只保留顶部标题，把原本写在内层的说明文案上提到这里。
+const pageDesc = computed(() => {
+  const map: Record<string, string> = {
+    courses: '登录后可提交报名咨询。',
+    events: '已登录，可直接报名近期活动。',
+    consult: '记录与顾问沟通和报名进度。',
+  }
+  return map[section.value] || '数据按业务模块和接口口径展示。'
 })
 
 // 员工/状态筛选交由服务端（GET /employee/customers 支持 status / employee_id 参数），
@@ -1432,6 +1463,8 @@ async function applyEvent(event: any) {
   confirmWrite('确认报名“' + (event?.title || '该活动') + '”吗？', async () => {
     try {
       await platformApi.eventRegister(event.id)
+      // v6.11.49：报名成功即时置为「已报名」，不必等刷新
+      if (!myEventIds.value.includes(event.id)) myEventIds.value = [...myEventIds.value, event.id]
       notifySuccess('报名成功')
     } catch (error: unknown) {
       notifyInfo(errorMessage(error, '活动报名接口尚未就绪'))
@@ -1463,6 +1496,13 @@ function normalizeCustomer(raw: any) {
     score: raw.assessment_score === null || raw.assessment_score === undefined ? '—' : raw.assessment_score,
     owner: employeeName(raw.owner_employee_id),
     last: raw.last_follow_at ? String(raw.last_follow_at).slice(0, 10) : '—',
+    // v6.11.41：客户列表直接渲染 status 会显示 NEW/SIGNED/ENROLLED 等英文码。
+    // 补一个展示用中文字段（status 本身保留英文码，供筛选、转化候选判定等逻辑使用）。
+    status_text: customerStatusCN(raw.status),
+    // v6.11.43：客户表补「来源」列。后端 source_channel 落库为大写码
+    // （WEBSITE_REGISTER/CS_LEAD/EMPLOYEE_INPUT），直接渲染会显示英文码，故用
+    // sourceLabel 映射为中文（该表已同时覆盖线索侧的小写码）；未知码回退原值。
+    source_text: sourceLabel[raw.source_channel] || raw.source_channel || '未知来源',
   }
 }
 
@@ -1536,7 +1576,7 @@ function revealPhone(member: any) {
 <template>
   <div class="workspace">
     <el-alert v-if="fallbackState.keys.length" class="fallback-banner" type="warning" :closable="false" show-icon :title="'接口不可用，以下内容为演示数据：' + fallbackState.keys.join('、')" />
-    <SectionTitle :eyebrow="role" :title="pageTitle" desc="数据按业务模块和接口口径展示。">
+    <SectionTitle :eyebrow="role" :title="pageTitle" :desc="pageDesc">
     </SectionTitle>
 
     <template v-if="section === 'home' && role === 'STUDENT'">
@@ -1596,7 +1636,7 @@ function revealPhone(member: any) {
     <template v-else-if="role === 'EMPLOYEE' && section === 'customers'">
       <SectionTitle title="我的客户" desc="普通员工只能查看自己名下的客户，管理层可查看全域数据。"><el-button type="primary" :icon="Plus" @click="customerDialog = true">录入客户</el-button></SectionTitle>
       <div class="toolbar surface"><el-input v-model="keyword" :prefix-icon="Search" placeholder="搜索姓名、手机号或项目" clearable /><el-button :icon="Download" @click="exportCsv('客户列表')">导出 CSV</el-button></div>
-      <section class="surface table-card"><el-table :data="filteredCustomers" @row-click="(row:any) => activeCustomer = row"><el-table-column prop="name" label="客户" width="130" /><el-table-column prop="phone" label="手机号" width="130" /><el-table-column prop="project" label="意向项目" /><el-table-column prop="score" label="研判结论" width="110"><template #default="{ row }"><el-tag :type="row.score === '符合' ? 'success' : row.score === '待确认' ? 'warning' : 'info'">{{ row.score }}</el-tag></template></el-table-column><el-table-column prop="status" label="状态" width="110" /><el-table-column prop="owner" label="跟进人" width="100" /><el-table-column prop="last" label="最后跟进" width="100" /><el-table-column label="操作" width="180"><template #default="{ row }"><el-button text type="primary" @click.stop="activeCustomer = row">详情</el-button><el-button text type="danger" :icon="Delete" @click.stop="removeCustomer(row)" /></template></el-table-column></el-table></section>
+      <section class="surface table-card"><el-table :data="filteredCustomers" @row-click="(row:any) => activeCustomer = row"><el-table-column prop="name" label="客户" width="130" /><el-table-column prop="phone" label="手机号" width="130" /><el-table-column prop="project" label="意向项目" /><el-table-column prop="score" label="研判结论" width="110"><template #default="{ row }"><el-tag :type="row.score === '符合' ? 'success' : row.score === '待确认' ? 'warning' : 'info'">{{ row.score }}</el-tag></template></el-table-column><el-table-column prop="status_text" label="状态" width="110" /><el-table-column prop="source_text" label="来源" width="105" /><el-table-column prop="owner" label="跟进人" width="100" /><el-table-column prop="last" label="最后跟进" width="100" /><el-table-column label="操作" width="180"><template #default="{ row }"><el-button text type="primary" @click.stop="activeCustomer = row">详情</el-button><el-button text type="danger" :icon="Delete" @click.stop="removeCustomer(row)" /></template></el-table-column></el-table></section>
       <section class="surface panel" style="margin-top:20px"><SectionTitle title="待补全线索" desc="访客项目咨询记录（pending_lead），补充手机号后可合并为正式客户" /><el-table :data="pendingLeadRows"><el-table-column prop="name" label="姓名" width="120" /><el-table-column prop="wechat" label="微信" width="130" /><el-table-column prop="raw_info" label="原始信息" /><el-table-column prop="status" label="状态" width="100" /><el-table-column label="操作" width="120"><template #default="{ row }"><el-button v-if="row.status !== 'merged' && !row.merged_customer_id" text type="primary" @click="mergePendingLeadRow(row)">合并</el-button><el-tag v-else size="small" type="success">已合并</el-tag></template></el-table-column></el-table><el-empty v-if="!pendingLeadRows.length" description="暂无待补全线索" /></section>
       <section class="surface panel" style="margin-top:20px"><SectionTitle title="线索管理" desc="CRM 线索跟进与状态流转（GET /crm/leads）" /><el-table :data="leadRows"><el-table-column prop="name" label="姓名" width="100"><template #default="{ row }">{{ row.name || '—' }}</template></el-table-column><el-table-column prop="phone" label="手机号" width="125"><template #default="{ row }">{{ row.phone || '—' }}</template></el-table-column><el-table-column prop="wechat" label="微信" width="130"><template #default="{ row }">{{ row.wechat || '—' }}</template></el-table-column><el-table-column prop="source" label="来源" width="100"><template #default="{ row }">{{ sourceLabel[row.source] || row.source || '—' }}</template></el-table-column><el-table-column prop="status" label="状态" width="100"><template #default="{ row }"><el-tag size="small" :type="row.status === 'converted' ? 'success' : row.status === 'invalid' ? 'info' : 'warning'">{{ leadStatusLabel[row.status] || row.status || '—' }}</el-tag></template></el-table-column><el-table-column prop="raw_input" label="原始信息" min-width="200" show-overflow-tooltip><template #default="{ row }">{{ row.raw_input || '—' }}</template></el-table-column><el-table-column prop="background_info" label="背景信息" min-width="180" show-overflow-tooltip><template #default="{ row }">{{ row.background_info || '—' }}</template></el-table-column><el-table-column label="操作" width="190"><template #default="{ row }"><el-button text type="primary" @click="addLeadFollowUp(row)">添加跟进</el-button><el-button text @click="changeLeadStatus(row)">变更状态</el-button></template></el-table-column></el-table><el-empty v-if="!leadRows.length" description="暂无线索" /></section>
       <el-drawer v-model="activeCustomer" title="客户详情" size="min(620px, 94vw)"><template v-if="activeCustomer"><div class="customer-head"><div><h2>{{ activeCustomer.name }}</h2><p>{{ activeCustomer.project }} · {{ activeCustomer.phone }}</p></div><el-tag type="success">{{ activeCustomer.score }}</el-tag></div><h3>研判结果</h3><div class="assessment"><div><small>新加坡项目</small><b>{{ activeCustomer.score ?? '—' }}</b><p>研判结论来自客户研判记录（customer_assessment），如需详细维度可前往客户研判工具重新执行。</p></div><div><small>中德项目</small><b>{{ activeCustomer.score ?? '—' }}</b><p>双产品独立研判结果以研判工具输出为准，本处展示该客户最新研判结论。</p></div></div><h3>推荐项目</h3><el-tag v-for="item in customerRecommendList" :key="item" class="recommend">{{ item }}</el-tag><el-empty v-if="!customerRecommendList.length" description="暂无推荐项目" :image-size="48" /><h3>跟进记录</h3><el-timeline v-if="activeFollowUps.length"><el-timeline-item v-for="fu in activeFollowUps" :key="fu.id">{{ fu.content || fu.note || '跟进记录' }} · {{ String(fu.create_time || fu.created_at || '').slice(0, 10) }}</el-timeline-item></el-timeline><el-empty v-else description="暂无跟进记录" :image-size="48" /><div class="drawer-actions"><el-button type="primary" @click="addActiveFollowUp">添加跟进</el-button><el-button @click="updateActiveStatus">更新状态</el-button></div></template></el-drawer>
@@ -1654,7 +1694,9 @@ function revealPhone(member: any) {
       <section class="surface panel"><SectionTitle title="心理预警处理" desc="本人负责学员的心理预警（情绪低分自动生成），处理后形成关怀记录。仅展示归属本人的在读学员。" /><div v-for="alert in psychAlertRows" :key="alert.id" class="task-row"><b>心</b><div><strong>{{ alert.student_name || ('学生#' + alert.student_id) }}</strong><small>{{ alert.risk_level }} · {{ alert.trigger_reason }} · {{ String(alert.create_time || '').slice(0, 10) }}</small></div><el-tag v-if="alert.status !== '未处理'" type="success" size="small">{{ psychActionCN[alert.handled_action] || alert.status }}</el-tag><template v-else><el-button text type="primary" @click="handlePsychAlertItem(alert, 'communicated')">已沟通</el-button><el-button text @click="handlePsychAlertItem(alert, 'referred')">已转介</el-button><el-button text @click="handlePsychAlertItem(alert, 'resolved')">已解决</el-button></template></div><el-empty v-if="!psychAlertRows.length" description="暂无本人负责学员的心理预警" /></section>
     </template>
 
-    <template v-else-if="role === 'EMPLOYEE' && section === 'profile'">
+    <!-- v6.11.43：管理层「个人信息」并入员工分支。后端 GET/PUT /employee/profile
+         与 /employee/profile/password 的依赖均为 require_user_type("EMPLOYEE","MANAGER")，管理层可直接复用，无需改后端。 -->
+    <template v-else-if="(role === 'EMPLOYEE' || role === 'MANAGER') && section === 'profile'">
       <section class="surface profile-card"><SectionTitle title="账号资料" /><el-form label-position="top"><div class="form-grid"><el-form-item label="姓名"><el-input :model-value="userStore.userInfo?.real_name || '—'" /></el-form-item><el-form-item label="手机号"><el-input :model-value="userStore.userInfo?.username || '—'" /></el-form-item><el-form-item label="部门"><el-input :model-value="userStore.userInfo?.department || '—'" /></el-form-item><el-form-item label="企业微信"><el-input :model-value="userStore.userInfo?.contact_info || '—'" /></el-form-item></div><el-button type="primary" @click="confirmWrite('确认保存个人信息修改吗？', saveEmployeeProfile)">保存修改</el-button><el-button @click="changePassword">修改密码</el-button></el-form></section>
     </template>
 
@@ -1671,7 +1713,7 @@ function revealPhone(member: any) {
       <div class="stat-grid">
         <StatCard label="新增意向数" :value="String(mgrOverview.new_prospects_this_month ?? '—')" :note="'其中仍意向 ' + (mgrOverview.new_outcomes?.intent ?? 0) + ' · 已签约 ' + (mgrOverview.new_outcomes?.signed ?? 0)" tone="purple" />
         <StatCard label="转化率" :value="(mgrOverview.conversion_rate ?? '—') + '%'" :note="'成交 ' + (mgrOverview.converted ?? 0) + ' / 客户 ' + (mgrCustomers.total ?? 0)" tone="lime" />
-        <StatCard label="签约金额" value="暂无数据" note="签约金额数据源待接入" tone="amber" />
+        <StatCard label="签约金额" :value="signedAmountLabel" :note="signedAmountNote" tone="amber" />
         <StatCard label="在办学生数" :value="String(mgrOverview.active_students ?? '—')" note="状态正常的在读学生" tone="coral" />
         <StatCard label="投诉率" :value="(mgrOverview.complaint_rate ?? '—') + '%'" :note="'待处理工单 ' + (dashboardData.tickets?.pending ?? 0)" tone="purple" />
         <StatCard label="待我审批" :value="String(mgrPendingTotal)" note="含转化、请假和员工流程" tone="coral" />
@@ -1708,7 +1750,7 @@ function revealPhone(member: any) {
             <el-table-column prop="name" label="客户" width="110" />
             <el-table-column prop="project" label="意向项目" />
             <el-table-column prop="score" label="研判" width="95" />
-            <el-table-column prop="status" label="状态" width="105" />
+            <el-table-column prop="status_text" label="状态" width="105" />
             <el-table-column prop="owner" label="跟进人" width="90" />
           </el-table>
         </section>
@@ -1933,7 +1975,8 @@ function revealPhone(member: any) {
           <el-table-column prop="phone" label="手机号" width="125" />
           <el-table-column prop="project" label="意向项目" />
           <el-table-column prop="score" label="研判结果" width="110" />
-          <el-table-column prop="status" label="客户状态" width="110" />
+          <el-table-column prop="status_text" label="客户状态" width="110" />
+          <el-table-column prop="source_text" label="来源" width="105" />
           <el-table-column prop="owner" label="跟进人" width="95" />
           <el-table-column prop="last" label="最后跟进" width="100" />
           <el-table-column label="操作" width="150">
@@ -1995,15 +2038,18 @@ function revealPhone(member: any) {
     </template>
 
     <template v-else-if="role === 'PROSPECT' && section === 'courses'">
-      <SectionTitle title="课程与项目" desc="登录后可提交报名咨询。" /><div class="service-grid"><article v-for="item in publicProjects.slice(0,4)" :key="item.id" class="surface service-card"><div class="service-icon">{{ item.category.slice(0,2) }}</div><h3>{{ item.title }}</h3><p>{{ item.summary }}</p><el-button type="primary" round @click="router.push('/projects/' + item.id)">了解并咨询</el-button></article></div>
+      <!-- v6.11.48：去掉与顶部页面标题重复的内层标题，说明文案已上提到 pageDesc -->
+      <div class="service-grid"><article v-for="item in publicProjects.slice(0,4)" :key="item.id" class="surface service-card"><div class="service-icon">{{ item.category.slice(0,2) }}</div><h3>{{ item.title }}</h3><p>{{ item.summary }}</p><el-button type="primary" round @click="router.push('/projects/' + item.id)">了解并咨询</el-button></article></div>
     </template>
 
     <template v-else-if="role === 'PROSPECT' && section === 'events'">
-      <SectionTitle title="活动报名" desc="已登录，可直接报名近期活动。" /><div class="event-list"><div v-for="item in publicEvents.slice(0,3)" :key="item.id" class="surface ticket-row"><div><b>{{ item.title }}</b><small>{{ item.date }} · {{ item.format }}</small></div><el-button type="primary" round @click="applyEvent(item)">报名</el-button></div></div>
+      <!-- v6.11.48：去掉与顶部页面标题重复的内层标题，说明文案已上提到 pageDesc -->
+      <div class="event-list"><div v-for="item in publicEvents.slice(0,3)" :key="item.id" class="surface ticket-row"><div><b>{{ item.title }}</b><small>{{ item.date }} · {{ item.format }}</small></div><el-tag v-if="myEventIds.includes(item.id)" type="success" round>已报名</el-tag><el-button v-else type="primary" round @click="applyEvent(item)">报名</el-button></div></div>
     </template>
 
     <template v-else-if="role === 'PROSPECT' && section === 'consult'">
-      <SectionTitle title="我的咨询" desc="记录与顾问沟通和报名进度。" /><section class="surface panel"><div v-if="consultRows.length"><div v-for="(item, index) in consultRows" :key="index" class="ticket-row"><div><b>{{ item.project }}</b><small>{{ item.time }} · {{ item.name }} {{ item.phone }}</small><small>{{ item.note }}</small></div><el-tag type="success">已提交</el-tag></div></div><el-empty v-else description="暂无进行中的咨询"><el-button type="primary" @click="router.push('/projects')">去看看项目</el-button></el-empty></section>
+      <!-- v6.11.48：去掉与顶部页面标题重复的内层标题，说明文案已上提到 pageDesc -->
+      <section class="surface panel"><div v-if="consultRows.length"><div v-for="(item, index) in consultRows" :key="index" class="ticket-row"><div><b>{{ item.project }}</b><small>{{ item.time }} · {{ item.name }} {{ item.phone }}</small><small>{{ item.note }}</small></div><el-tag type="success">已提交</el-tag></div></div><el-empty v-else description="暂无进行中的咨询"><el-button type="primary" @click="router.push('/projects')">去看看项目</el-button></el-empty></section>
     </template>
 
     <template v-else-if="role === 'MANAGER' && section === 'org'">
@@ -2042,11 +2088,18 @@ function revealPhone(member: any) {
           <el-button type="success" size="small" style="margin-top:8px" @click="reloginAsStudent">退出登录并重新登录</el-button>
         </el-alert>
         <template v-if="myCustomer">
-          <div class="task-row"><b>档</b><div><strong>客户状态</strong><small>{{ customerStatusCN(myCustomer.status) }}</small></div></div>
+          <div class="task-row"><b>档</b><div><strong>状态</strong><small>{{ customerStatusCN(myCustomer.status) }}</small></div></div>
           <div class="task-row"><b>申</b><div><strong>转化申请</strong><small>{{ convertStatusCN(myCustomer.convert_status) }}</small></div></div>
         </template>
         <el-empty v-else description="暂无客户档案信息" :image-size="60" />
       </section>
+    </template>
+
+    <!-- v6.11.43：意向客户「个人信息」（原落到占位页）。账号资料走 PUT /users/me 可自助修改；
+         客户档案来自 GET /customers/me，后端无自助修改接口，故只读展示并指引联系顾问。 -->
+    <template v-else-if="role === 'PROSPECT' && section === 'profile'">
+      <section class="surface profile-card"><SectionTitle title="账号资料" /><el-form label-position="top"><div class="form-grid"><el-form-item label="姓名"><el-input v-model="profileForm.real_name" /></el-form-item><el-form-item label="联系方式"><el-input v-model="profileForm.contact_info" /></el-form-item><el-form-item label="账号"><el-input :model-value="userStore.userInfo?.username || '—'" disabled /></el-form-item><el-form-item label="角色"><el-input :model-value="userStore.userInfo?.user_type || '—'" disabled /></el-form-item></div><el-button type="primary" @click="confirmWrite('确认保存个人信息修改吗？', saveEmployeeProfile)">保存修改</el-button></el-form></section>
+      <section class="surface profile-card" style="margin-top:20px"><SectionTitle title="我的客户档案" desc="由顾问维护，仅供查看；如需变更留学意向请联系你的专属顾问。" /><el-form v-if="myCustomer" label-position="top"><div class="form-grid"><el-form-item label="客户状态"><el-input :model-value="customerStatusCN(myCustomer.status)" disabled /></el-form-item><el-form-item label="转化申请"><el-input :model-value="convertStatusCN(myCustomer.convert_status)" disabled /></el-form-item><el-form-item label="留学意向"><el-input :model-value="myCustomer.study_intent || '—'" disabled /></el-form-item><el-form-item label="学历"><el-input :model-value="myCustomer.education || '—'" disabled /></el-form-item></div></el-form><el-empty v-else description="暂无客户档案信息" :image-size="60" /></section>
     </template>
 
     <template v-else>

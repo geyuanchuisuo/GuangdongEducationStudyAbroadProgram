@@ -52,6 +52,9 @@ services:
       # Dify 已纳入一体化部署，通过 service 名 dify_nginx 访问（Dify 控制台端口 8081）
       # 支持项目根 .env 覆盖；默认值用于同 compose 网络内的一体化部署。
       DIFY_BASE_URL: ${DIFY_BASE_URL:-http://dify_nginx}
+      # M5 智能报告数据来源：mock=模拟数据（演示）/ production=真实业务表取数。
+      # 业务侧确认 M5 字段映射后切 production（投诉周报因 9 字段未落库会按设计拒绝生成）。
+      REPORT_DATA_SOURCE: ${REPORT_DATA_SOURCE:-production}
     ports:
       - "8000:8000"
     depends_on:

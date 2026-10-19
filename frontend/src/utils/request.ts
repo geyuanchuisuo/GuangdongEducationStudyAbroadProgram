@@ -8,6 +8,20 @@ const request = axios.create({
   timeout: 30000,
 })
 
+// v6.11.47：统一提示出口。拦截器与页面 catch 都会报同一条业务错误（如 40901），
+// 此前会弹成两条一模一样的提示；这里按文案做短时窗口去重，相同文案只弹一次。
+let lastMessage = ''
+let lastMessageAt = 0
+const MESSAGE_DEDUPE_WINDOW = 1500
+
+export function showMessage(type: 'success' | 'info' | 'warning' | 'error', message: string) {
+  const now = Date.now()
+  if (message === lastMessage && now - lastMessageAt < MESSAGE_DEDUPE_WINDOW) return
+  lastMessage = message
+  lastMessageAt = now
+  ElMessage[type](message)
+}
+
 request.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     const userStore = useUserStore()
@@ -24,10 +38,10 @@ request.interceptors.response.use(
     if (data.code === 40101 || data.code === 40102) {
       useUserStore().logout()
       router.push('/login')
-      ElMessage.error(data.message || '登录已过期，请重新登录')
+      showMessage('error', data.message || '登录已过期，请重新登录')
       return Promise.reject(new Error(data.message || 'unauthorized'))
     }
-    ElMessage.error(data.message || '请求失败')
+    showMessage('error', data.message || '请求失败')
     return Promise.reject(new Error(data.message || 'request failed'))
   },
   (error) => {

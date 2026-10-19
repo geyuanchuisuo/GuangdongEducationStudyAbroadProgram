@@ -33,14 +33,14 @@ async function login() {
   <div class="auth-shell">
     <aside class="auth-art"><div><small>WELCOME BACK</small><h1>专业服务<br />从一次登录开始</h1><p>登录后继续项目报名、学生服务或企业工作流。</p></div></aside>
     <main class="auth-panel">
-      <div class="auth-card"><span class="badge">粤教留学 · 统一登录</span><h2>欢迎回来</h2><p class="muted">使用手机号和密码登录。</p>
+      <div class="auth-card"><router-link to="/" class="back-home">← 返回官网首页</router-link><span class="badge">粤教留学 · 统一登录</span><h2>欢迎回来</h2><p class="muted">使用手机号和密码登录。</p>
         <el-form label-position="top" @submit.prevent="login">
           <el-form-item label="手机号"><el-input v-model="form.phone" size="large" :prefix-icon="Phone" placeholder="请输入手机号" /></el-form-item>
           <el-form-item label="密码"><el-input v-model="form.password" size="large" :prefix-icon="Lock" type="password" show-password placeholder="请输入密码" /></el-form-item>
 
           <el-button type="primary" size="large" :loading="loading" native-type="submit" style="width:100%">登录</el-button>
         </el-form>
-        <div class="auth-foot"><router-link to="/">← 返回官网首页</router-link><span class="auth-foot-dot">·</span><router-link to="/register">还没有账号？立即注册</router-link></div>
+        <div class="auth-foot"><router-link to="/register">还没有账号？立即注册</router-link></div>
 
       </div>
     </main>
@@ -60,7 +60,9 @@ async function login() {
 .auth-card { width: min(470px, 100%); padding: 38px; background: #fff; border-radius: 24px; box-shadow: var(--shadow); }
 .auth-card h2 { margin: 18px 0 8px; color: var(--ink-deep); font-size: 36px; }
 .auth-foot { margin-top: 18px; display: flex; align-items: center; justify-content: center; gap: 10px; text-align: center; color: var(--violet); }
-.auth-foot-dot { color: #c9c8dd; }
+/* v6.11.42：返回官网首页改为卡片顶部实心胶囊按钮，原页脚小字链接太不显眼 */
+.back-home { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 14px; padding: 9px 20px; font-size: 14px; font-weight: 800; color: #fff; background: var(--violet); border-radius: 999px; box-shadow: 0 8px 20px rgba(108, 103, 193, .35); transition: transform .2s, box-shadow .2s; }
+.back-home:hover { color: #fff; transform: translateY(-1px); box-shadow: 0 12px 26px rgba(108, 103, 193, .45); }
 @media (max-width: 850px) { .auth-shell { grid-template-columns: 1fr; }.auth-art { display: none; } }
 </style>
 

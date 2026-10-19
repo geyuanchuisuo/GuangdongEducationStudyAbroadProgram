@@ -37,6 +37,12 @@ class EventRepository:
         )
         return result.scalar_one_or_none()
 
+    async def list_registrations_by_user(self, user_id: int) -> list[EventRegistration]:
+        result = await self.db.execute(
+            select(EventRegistration).where(EventRegistration.user_id == user_id)
+        )
+        return list(result.scalars().all())
+
     async def create_registration(self, registration: EventRegistration) -> EventRegistration:
         self.db.add(registration)
         await self.db.commit()

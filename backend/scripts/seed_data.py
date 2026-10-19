@@ -14,9 +14,11 @@
   本地:   cd backend && .venv/Scripts/python -m scripts.seed_data
 """
 import asyncio
+import json
 import random
 from datetime import date, datetime, timedelta
 from itertools import product
+from pathlib import Path
 
 from sqlalchemy import select
 
@@ -141,7 +143,7 @@ BUSINESS_PROJECTS = [
         None,  # 按线路确定
     ),
 ]
-LOCATIONS = ["广州总部教室A", "广州总部教室B", "深圳分部教室", "线上直播", "东莞教学点"]
+# v6.11.42：原 LOCATIONS 常量仅服务于旧活动随机排期，活动改为 EVENT_SCHEDULE 固定地点后已无引用，删除。
 
 # v6.10.6：演示意图码统一到后端契约 9 码（原 5 码为 seed 遗留词汇，与契约/Dify 均不一致）
 INTENT_TYPES = ["program_consult", "course_recommend", "policy_qa", "company_info", "event_query", "faq", "chitchat", "lead_capture"]
@@ -242,34 +244,6 @@ FOLLOW_UP_NEXT_ACTIONS = [
     "安排顾问与家长线上面谈",
     "确认签约时间并准备合同",
 ]
-FAQ_QUESTIONS = [
-    "德国双元制护理项目需要什么条件？",
-    "雅思基础班和强化班有什么区别？",
-    "留学申请一般需要准备哪些材料？",
-    "签约后多久可以拿到院校 offer？",
-    "签证被拒签了还能再申请吗？",
-    "课程费用可以分期付款吗？",
-    "可以先去语言班再申请学校吗？",
-    "你们提供境外住宿安排服务吗？",
-    "申请失败的退款政策是怎样的？",
-    "周末有线下说明会可以参加吗？",
-]
-FAQ_ANSWERS = [
-    "一般要求高中及以上学历、德语 B1 或通过入学语言测试，具体以项目要求为准。",
-    "基础班侧重语法与词汇打基础，强化班侧重题型训练与冲刺提分，可按当前水平选择。",
-    "通常需要学历证明、成绩单、语言成绩、护照及资金证明，顾问会提供完整清单。",
-    "材料齐全且院校审理顺利的情况下，一般 4-8 周可收到 offer。",
-    "可以，需根据拒签原因补充材料后重新递交，顾问会协助复盘。",
-    "支持分期付款，具体期数可与顾问沟通确认。",
-    "可以，语言班结束后可衔接正式课程申请。",
-    "提供接机、住宿与落地指导等境外服务，详情咨询顾问。",
-    "未获录取按合同约定退还相应服务费用，具体以签约条款为准。",
-    "每周六下午在广州总部有线下说明会，可在线预约名额。",
-]
-FAQ_KEYWORDS = [
-    "双元制,护理,条件", "雅思,基础班,强化班", "留学,材料,清单", "offer,周期", "拒签,再申请",
-    "费用,分期", "语言班,衔接", "住宿,接机", "退款,政策", "说明会,预约",
-]
 SESSION_TITLES = [
     "咨询德国双元制护理项目", "询问雅思课程与开课时间", "了解澳洲本科预科申请条件",
     "咨询加拿大高中留学费用", "询问留学签证材料", "了解英国硕士申请流程",
@@ -305,6 +279,28 @@ EVENT_DESCRIPTIONS = [
     "邀请在读学长分享香港硕士申请与就读经验。",
     "介绍暑期科研、竞赛与志愿者项目的参与方式。",
     "签证材料准备、行前清单与境外生活指导。",
+]
+# v6.11.42：活动排期表，与 EVENT_NAMES / EVENT_DESCRIPTIONS 一一对应（各 10 条）。
+# 字段顺序：(类型, 地点, 开始距今天数, 持续天数, 容量, 已报名, 状态)
+# 原实现用 range(20) 循环取 10 个名称/描述（各重复一遍），且 start/end/容量/人数/状态各自
+# 独立 random，会出现 end_time 早于 start_time、已报名人数超过容量、状态与日期互相矛盾，
+# 类型也是随机抽的（「XX说明会」可能被标成「沙龙」）。
+# 改为固定排期后：类型与活动名称一致、end_time = start_time + 持续天数（恒晚于开始）、
+# 已报名 ≤ 容量、过去的活动为「已结束」、报名数达容量的为「已满员」、其余为「报名中」。
+# v6.11.46：容量与已报名人数整体下调到 12-44 区间。原因是 event_registration 有
+# (event_id, user_id) 唯一约束、种子报名用户池只有「意向客户 + 留学生」44 人，
+# 原 40-300 的报名数无法生成等量报名行（详见下方报名数据生成处）。
+EVENT_SCHEDULE = [
+    ("说明会", "广州总部教室A", -21, 1, 40, 36, "已结束"),
+    ("公开课", "线上直播", -12, 1, 44, 41, "已结束"),
+    ("讲座", "线上直播", 3, 1, 40, 32, "报名中"),
+    ("分享会", "深圳分部教室", 6, 1, 24, 24, "已满员"),
+    ("工作坊", "广州总部教室B", 9, 1, 30, 21, "报名中"),
+    ("说明会", "广州总部教室A", 13, 1, 36, 26, "报名中"),
+    ("说明会", "东莞教学点", 17, 1, 28, 28, "已满员"),
+    ("分享会", "深圳分部教室", 21, 1, 32, 19, "报名中"),
+    ("沙龙", "广州总部教室B", 26, 1, 20, 12, "报名中"),
+    ("开放日", "东莞教学点", 32, 1, 40, 27, "报名中"),
 ]
 DAILY_REPORT_CONTENTS = [
     "今日回访客户 6 位，新增意向客户 2 位，跟进德国双元制项目 1 单。",
@@ -456,7 +452,10 @@ async def seed():
                 status=random.choice(CUSTOMER_STATUSES),
                 phone_status="normal",
                 first_register_at=datetime.now() - timedelta(days=random.randint(0, 180)),
-                sys_user_id=random.choice(prospect_ids) if i < len(prospect_ids) else None,
+                # v6.11.41：sys_user_id 必须一对一，改由下方「意向客户账号 → 本人客户档案」
+                # 统一分配；此前用 random.choice 会让多个意向客户账号指向同一条客户档案，
+                # 而核心账号 13810000001 可能一条都没有。
+                sys_user_id=None,
             )
             session.add(c)
             customers.append(c)
@@ -493,13 +492,6 @@ async def seed():
             customers.append(c)
         await session.flush()
 
-        # v6.11.38：已签约/已入学客户已转为在读学员，sys_user_id 必须指向真实 STUDENT 用户。
-        # 此前统一指向 PROSPECT 用户，而心理预警的 student_id 取的是 STUDENT 用户，
-        # 两者集合不相交，导致员工端「心理预警」按 Customer.sys_user_id 关联学员时恒为空。
-        converted_customers = [c for c in customers if c.status in ("SIGNED", "ENROLLED")]
-        for idx, c in enumerate(converted_customers[: len(student_ids)]):
-            c.sys_user_id = student_ids[idx]
-
         # 核心员工（13810000003）名下固定补 3 位「在读学员」：状态 ENROLLED 且
         # sys_user_id 指向真实 STUDENT 用户，保证员工端「心理预警」能查到本人负责学员。
         core_students = [
@@ -508,9 +500,23 @@ async def seed():
             ("郑一鸣", "13700002002", "男", 21, "大专"),
             ("何静怡", "13700002003", "女", 19, "高中"),
         ]
+
+        # v6.11.38：已签约/已入学客户已转为在读学员，sys_user_id 必须指向真实 STUDENT 用户。
+        # 此前统一指向 PROSPECT 用户，而心理预警的 student_id 取的是 STUDENT 用户，
+        # 两者集合不相交，导致员工端「心理预警」按 Customer.sys_user_id 关联学员时恒为空。
+        # v6.11.41：sys_user_id 必须一对一（一个系统用户最多关联一条客户档案）。末 N 位
+        # student_id 预留给下方核心学员，其余才分给已签约/已入学客户；此前两处都从
+        # student_ids[0] 起取，导致同一 STUDENT 用户挂两条客户档案，/customers/me 命中
+        # 多行抛 MultipleResultsFound（接口 500）。
+        converted_student_ids = student_ids[: max(0, len(student_ids) - len(core_students))]
+        converted_customers = [c for c in customers if c.status in ("SIGNED", "ENROLLED")]
+        for idx, c in enumerate(converted_customers[: len(converted_student_ids)]):
+            c.sys_user_id = converted_student_ids[idx]
+        reserved_student_ids = student_ids[len(converted_student_ids):]
+
         core_student_user_ids: list[int] = []
         for idx, (sname, sphone, sgender, sage, sedu) in enumerate(core_students):
-            suid = student_ids[idx % len(student_ids)]
+            suid = reserved_student_ids[idx % len(reserved_student_ids)]
             session.add(Customer(
                 phone=sphone,
                 name=sname,
@@ -527,6 +533,14 @@ async def seed():
             ))
             core_student_user_ids.append(suid)
         await session.flush()
+
+        # 意向客户账号 → 本人客户档案（v6.11.41）：从未被占用的客户行里按顺序一对一分配，
+        # 保证每个意向客户账号恰好一条客户档案，/customers/me 不再出现「未关联客户档案」。
+        available_customers = [c for c in customers if c.sys_user_id is None]
+        for idx, pid in enumerate(prospect_ids):
+            if idx >= len(available_customers):
+                break
+            available_customers[idx].sys_user_id = pid
 
         customer_ids = [c.id for c in customers]
 
@@ -592,14 +606,19 @@ async def seed():
                 next_date=datetime.now() - timedelta(days=i),
             ))
 
-        # ── M2: CS ──
-        for i in range(105):
+        # ── M2: CS FAQ（内容源见 scripts/cs_faq_seed.json） ──
+        # v6.11.42：原实现用 10 组问答循环 range(105) 生成，真实问题只有 10 个、各重复约 10 遍，
+        # 公开站「常见问题」页表现为同样 10 个问题重复 10 次（看上去像前端写死的凑数数据）。
+        # 现改为直接落库官方问答对（37 条，与客服 FAQ 召回同源），条数 = 真实条数，零重复。
+        faq_rows = json.loads(Path(__file__).with_name("cs_faq_seed.json").read_text(encoding="utf-8"))
+        for sort_order, faq in enumerate(faq_rows):
             session.add(CsFaq(
-                category=random.choice(["课程", "费用", "留学", "活动", "生活"]),
-                question=FAQ_QUESTIONS[i % len(FAQ_QUESTIONS)],
-                answer=FAQ_ANSWERS[i % len(FAQ_ANSWERS)],
-                keywords=FAQ_KEYWORDS[i % len(FAQ_KEYWORDS)],
-                sort_order=i,
+                category=faq.get("category"),
+                question=faq["question"],
+                answer=faq["answer"],
+                keywords=faq.get("keywords"),
+                sort_order=sort_order,
+                enabled=True,
             ))
 
         sessions = []
@@ -633,31 +652,41 @@ async def seed():
                 converted=random.random() > 0.7,
             ))
 
-        # ── Events ──
+        # ── Events（v6.11.42：10 条，字段自洽；见 EVENT_SCHEDULE 说明）──
         events = []
-        for i in range(20):
+        event_plans = []
+        event_base = datetime.now().replace(minute=0, second=0, microsecond=0)
+        for ev_name, ev_desc, ev_plan in zip(EVENT_NAMES, EVENT_DESCRIPTIONS, EVENT_SCHEDULE):
+            ev_type, ev_loc, start_offset, duration_days, capacity, joined, ev_status = ev_plan
+            start = event_base + timedelta(days=start_offset)
             ev = EventLecture(
-                event_name=EVENT_NAMES[i % len(EVENT_NAMES)],
-                event_type=random.choice(["讲座", "开放日", "说明会", "沙龙"]),
-                start_time=datetime.now() + timedelta(days=random.randint(-30, 60)),
-                end_time=datetime.now() + timedelta(days=random.randint(1, 90)),
-                location=random.choice(LOCATIONS),
-                max_participants=random.choice([30, 50, 100, 200]),
-                current_participants=random.randint(0, 50),
-                description=EVENT_DESCRIPTIONS[i % len(EVENT_DESCRIPTIONS)],
-                status=random.choice(["报名中", "已满员", "已结束"]),
+                event_name=ev_name,
+                event_type=ev_type,
+                start_time=start,
+                end_time=start + timedelta(days=duration_days),
+                location=ev_loc,
+                max_participants=capacity,
+                current_participants=joined,
+                description=ev_desc,
+                status=ev_status,
             )
             session.add(ev)
             events.append(ev)
+            event_plans.append((ev, joined, ev_status))
         await session.flush()
 
+        # 活动报名（v6.11.46）：按每个活动的 current_participants 生成等量报名记录，
+        # 保证「活动报名表行数 == 活动报名人数」。原实现固定 100 行、按 i % len(events)
+        # 轮转分配（每活动恒 10 行），与 current_participants（98/245/260…）完全对不上。
+        # 因 event_registration 有 (event_id, user_id) 唯一约束，同一活动内取不重复用户；
+        # 报名人池 = 意向客户 + 留学生（44 人），故各活动报名人数上限为 44（见 EVENT_SCHEDULE）。
         reg_users = prospect_ids + student_ids
-        for i in range(100):
-            session.add(EventRegistration(
-                event_id=events[i % len(events)].id,
-                user_id=reg_users[i % len(reg_users)],
-                status=random.choice(["已报名", "已签到", "已取消"]),
-            ))
+        for ev, joined, ev_status in event_plans:
+            # 已结束的活动报名状态为「已签到」，其余为「已报名」；不再生成「已取消」，
+            # 否则「行数 == 报名人数」的口径会被取消记录破坏。
+            reg_status = "已签到" if ev_status == "已结束" else "已报名"
+            for user_id in random.sample(reg_users, min(joined, len(reg_users))):
+                session.add(EventRegistration(event_id=ev.id, user_id=user_id, status=reg_status))
 
         # ── 业务项目（四条核心业务线，见《项目需求文档》1.1） ──
         from app.models.course import CourseProject
@@ -732,11 +761,14 @@ async def seed():
                 sort_order=i,
             ))
 
-        # employee_id+report_date 为唯一约束：按员工轮转、天数递增，保证组合唯一
+        # employee_id+report_date 为唯一约束：按员工轮转、天数递增，保证组合唯一。
+        # v6.11.47：日期从「昨天」起算（原从今天起算），故意不给今天留种子日报——
+        # 否则可提交窗口（今天/昨天/前天）全被占满，员工端任何提交都只能收到
+        # 「已提交，请勿重复」的报错，无法验证「日报提交成功」链路。
         for i in range(120):
             session.add(EmployeeDailyReport(
                 employee_id=employee_ids[i % len(employee_ids)],
-                report_date=date.today() - timedelta(days=i // len(employee_ids)),
+                report_date=date.today() - timedelta(days=1 + i // len(employee_ids)),
                 content=DAILY_REPORT_CONTENTS[i % len(DAILY_REPORT_CONTENTS)],
             ))
 
@@ -1013,8 +1045,8 @@ async def seed():
     print(f"  用户: 120 (ADMIN/MANAGER/EMPLOYEE/STUDENT/PROSPECT)")
     print(f"  客户主表: 127（含核心员工 13810000003 名下 4 个意向客户 + 3 位在读学员）, 待补全线索: 15")
     print(f"  CRM线索: 110, 研判: 150, 跟进: 123（含 3 条核心员工已到期跟进）")
-    print(f"  FAQ: 105, 会话: 110, 消息: 200, 意图: 100, 推荐日志: 150")
-    print(f"  活动: 20, 报名: 100, 业务项目: {len(BUSINESS_PROJECTS)}（四条核心业务线）")
+    print(f"  FAQ: 37（官方问答对，零重复）, 会话: 110, 消息: 200, 意图: 100, 推荐日志: 150")
+    print(f"  活动: {len(EVENT_SCHEDULE)}, 报名: {sum(p[5] for p in EVENT_SCHEDULE)}（与各活动报名人数一致）, 业务项目: {len(BUSINESS_PROJECTS)}（四条核心业务线）")
     print(f"  政策资讯: {policy_seed_count}")
     print(f"  组织架构: 10, 日报: 120, 待办: 100, 成绩: 100")
     print(f"  学生服务: 100, 心理画像: 100, 心理预警: 103（含核心员工名下在读学员 3 条）, 反馈工单: 100, 工单AI分析: ~80")

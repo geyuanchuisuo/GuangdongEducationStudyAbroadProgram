@@ -3,6 +3,7 @@ from collections.abc import AsyncIterator
 from datetime import date, datetime, timedelta
 
 from app.core.exceptions import BusinessError, ConflictError, ForbiddenError, NotFoundError
+from app.models.course import CourseProject
 from app.models.customer import Customer
 from app.models.employee import DailyReportAnnotation, EmployeeDailyReport, EmployeeOrg, EmployeeTodo
 from app.models.student import StudentPsychAlert, StudentScore
@@ -1846,6 +1847,18 @@ class EmployeeService:
             "lost": lost,
         }
 
+        # ── 签约金额（v6.11.45） ──
+        # 口径：成交客户数（已签约+已入学）× 项目学费。
+        # 数据现状：course_project 中仅「新加坡国际本硕升学计划」已定价，其余项目学费为空
+        # （免学费/按方案确定），且客户侧没有「意向项目」落库字段（研判 recommended_json /
+        # matched_programs_json 全为空、study_intent 多为空），无法逐单匹配，故按当前唯一
+        # 已定价项目的学费估算；已定价学费不唯一或全部未定价时返回 None（前端显示暂无数据）。
+        priced_fees = set((await self.db.execute(
+            select(CourseProject.tuition_fee).where(CourseProject.tuition_fee.isnot(None))
+        )).scalars().all())
+        unit_price = float(next(iter(priced_fees))) if len(priced_fees) == 1 else None
+        signed_amount = round(converted * unit_price, 2) if unit_price is not None else None
+
         return {
             "overview": {
                 "new_prospects_this_month": new_this_month,
@@ -1857,6 +1870,9 @@ class EmployeeService:
                 "converted": converted,
                 "lost": lost,
                 "new_outcomes": new_outcomes,
+                "signed_amount": signed_amount,
+                "signed_amount_unit": unit_price,
+                "signed_amount_basis": "已签约+已入学客户数 × 已定价项目学费",
             },
             "customers": {
                 "total": total,
