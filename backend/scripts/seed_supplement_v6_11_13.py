@@ -10,6 +10,7 @@
 用法：backend\.venv\Scripts\python.exe backend/scripts/seed_supplement_v6_11_13.py
 """
 import json
+import os
 import random
 from datetime import datetime, timedelta
 
@@ -17,10 +18,22 @@ import pymysql
 
 random.seed(20261019)
 
-conn = pymysql.connect(
-    host="127.0.0.1", port=59000, user="root", password="420821",
-    database="GuangdongEducationStudyAbroadProgram", charset="utf8mb4",
-)
+
+def _mysql_conn():
+    """连接目标：默认宿主机映射 127.0.0.1:59000（本地运行）；
+    容器内/自定义环境用 SEED_MYSQL_* 环境变量覆盖（seed_all 自动注入时按 DATABASE_URL 传入）。
+    """
+    return pymysql.connect(
+        host=os.environ.get("SEED_MYSQL_HOST", "127.0.0.1"),
+        port=int(os.environ.get("SEED_MYSQL_PORT", "59000")),
+        user=os.environ.get("SEED_MYSQL_USER", "root"),
+        password=os.environ.get("SEED_MYSQL_PASSWORD", "420821"),
+        database=os.environ.get("SEED_MYSQL_DB", "GuangdongEducationStudyAbroadProgram"),
+        charset="utf8mb4",
+    )
+
+
+conn = _mysql_conn()
 cur = conn.cursor()
 T0 = datetime(2026, 10, 18, 18, 0, 0)
 
