@@ -6,6 +6,7 @@
 
 ## 零、快速定位（打开项目先看这里）
 
+> v6.11.43（2026-10-19，longtrying_test）：**第十七次同步 gitea/master**——并入 v6.11.41~49（/customers/me 500 修复、REPORT_DATA_SOURCE 切 production、公开站修复、签约金额、`GET /events/my-registrations` +1 路由 114→115、提示去重、意向客户修复），2 处文档冲突并集；pytest 170/170 + verify_all 29/29 + build ✓（LOG-103）。
 > v6.11.41（2026-10-19，longtrying_test）：**流式输出前端空白气泡修复**——AgentDock.vue 流式消息对象改 `reactive()` 包装（Vue 响应式陷阱致 SSE token 已到但视图不渲染、只显示空白气泡），浏览器实测逐字渲染恢复（LOG-101）。
 > v6.11.40（2026-10-19，longtrying_test）：**清库重注 + 种子数据自动注入**——新增 `scripts/seed_all.py` 编排器（默认空库自动注入 / `--force` 清库重建），接入 docker-compose backend 启动命令与 start-project.bat（重新拉起自动注入，已有数据不动）。详见更新记录 v6.11.40 / LOG-100。
 > v6.11.39（2026-10-19，longtrying_test）：**全角色 Agent 流式输出**——学生/员工/管理层 SSE 增量下发（新增 `POST /student/agent/chat/stream` 和 `POST /employee/agent/chat/stream`，路由 112→114）+ 前端 AgentDock.vue 新增 `streamAgent()` 函数支持逐字渲染（感知延迟=首字时间），流式失败自动回退非流式接口（LOG-099）。
