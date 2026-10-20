@@ -1414,6 +1414,8 @@ async function submitTicket() {
     try {
       await platformApi.student.submitTicket({ content: ticketForm.title, detail: ticketForm.detail })
       notifySuccess('工单已提交')
+      // v6.11.58：提交成功后重新拉取「我的工单」，否则新工单要手动刷新页面才可见
+      try { studentTickets.value = itemsOf(await platformApi.student.listTickets({ page: 1, page_size: 20 })) } catch {}
     } catch {
       notifyInfo('反馈接口尚未就绪，当前内容已保留')
     }
@@ -1849,7 +1851,8 @@ function revealPhone(member: any) {
         <StatCard label="转化率" :value="(mgrOverview.conversion_rate ?? '—') + '%'" :note="'成交 ' + (mgrOverview.converted ?? 0) + ' / 客户 ' + (mgrCustomers.total ?? 0)" tone="lime" />
         <StatCard label="签约金额" :value="signedAmountLabel" :note="signedAmountNote" tone="amber" />
         <StatCard label="在办学生数" :value="String(mgrOverview.active_students ?? '—')" note="状态正常的在读学生" tone="coral" />
-        <StatCard label="投诉率" :value="(mgrOverview.complaint_rate ?? '—') + '%'" :note="'待处理工单 ' + (dashboardData.tickets?.pending ?? 0)" tone="purple" />
+        <StatCard label="投诉率" :value="(mgrOverview.complaint_rate ?? '—') + '%'" :note="'投诉学生 ' + (mgrOverview.complaint_students ?? 0) + ' / 在办学生 ' + (mgrOverview.active_students ?? 0)" tone="purple" />
+        <StatCard label="投诉工单总数" :value="String(mgrOverview.complaint_tickets_total ?? '—')" :note="'待处理工单 ' + (dashboardData.tickets?.pending ?? 0)" tone="amber" />
         <StatCard label="待我审批" :value="String(mgrPendingTotal)" note="含转化、请假和员工流程" tone="coral" />
       </div>
 

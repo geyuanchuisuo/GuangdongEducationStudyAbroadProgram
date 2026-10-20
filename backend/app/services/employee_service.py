@@ -17,7 +17,7 @@ from app.repositories.employee_repo import (
 )
 from app.services.approval_engine import ApprovalBizType, ApprovalStatus, approval_engine
 from app.utils.logger import logger  # 合并修复：model 回落分支引用了 logger，此前未导入会 NameError→50001
-from sqlalchemy import func, or_, select
+from sqlalchemy import distinct, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -1851,10 +1851,16 @@ class EmployeeService:
                 User.user_type == "STUDENT", User.status == "正常"
             )
         )).scalar_one()
-        tickets_total = (await self.db.execute(
+        # v6.11.58：投诉率=投诉学生人数(按 student_id 去重)/在办学生数×100%。
+        # 原口径用「投诉工单总数/在办学生数」，同一学员多次工单会把比率推高到 >100%（实测 368.97%），
+        # 作为「率」不成立；工单总数改为单独字段 complaint_tickets_total 单独返回。
+        complaint_students = (await self.db.execute(
+            select(func.count(distinct(StudentFeedbackTicket.student_id)))
+        )).scalar_one()
+        complaint_tickets_total = (await self.db.execute(
             select(func.count()).select_from(StudentFeedbackTicket)
         )).scalar_one()
-        complaint_rate = round(tickets_total / active_students * 100, 2) if active_students else 0.0
+        complaint_rate = round(complaint_students / active_students * 100, 2) if active_students else 0.0
 
         # 新增去向（口径表：本期新增客户按期末状态分为仍意向/已签约/已入学/已流失，合计=新增数）
         new_status_rows = (await self.db.execute(
@@ -1904,6 +1910,8 @@ class EmployeeService:
                 "conversion_rate": conversion_rate,
                 "active_students": active_students,
                 "complaint_rate": complaint_rate,
+                "complaint_students": complaint_students,
+                "complaint_tickets_total": complaint_tickets_total,
                 "intent": intent,
                 "converted": converted,
                 "lost": lost,
