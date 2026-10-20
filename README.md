@@ -97,7 +97,7 @@
 | **M4 学生** | student_admin_service · student_psych_profile · student_psych_alert · student_feedback_ticket · student_academic · student_application_progress |
 | **M5 报告** | ai_report · ai_report_attachment · ai_report_drill · ticket_ai_analysis |
 
-**API 路由**：115 paths（114 API + 1 health），契约版本 v2.11.56（v6.11.35 +心理预警 / v6.11.37 +客服流式 / v6.11.39 +学生与员工助手流式 / v6.11.42 +活动我的报名 / v6.11.43~52 合并 master 修复批 / v6.11.53~56 管理层四项修复+三线统一 / v6.11.57 一键运行流程修复 / v6.11.58 文件上传研判修复，API 零变化）。
+**API 路由**：115 paths（114 API + 1 health），契约版本 v2.11.56（v6.11.35 +心理预警 / v6.11.37 +客服流式 / v6.11.39 +学生与员工助手流式 / v6.11.42 +活动我的报名 / v6.11.43~52 合并 master 修复批 / v6.11.53~56 管理层四项修复+三线统一 / v6.11.57 一键运行流程修复 / v6.11.58 文件上传研判修复 + 全量UI测试四项修复+投诉率口径修正（overview 新增 complaint_students、complaint_tickets_total），API 零变化）。
 
 ---
 

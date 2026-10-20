@@ -12,7 +12,11 @@ const loading = ref(false)
 const form = ref({ phone: '', password: '' })
 
 async function login() {
-  if (!form.value.phone || !form.value.password) return
+  // v6.11.58：空表单不再静默 return，明确提示用户缺哪一项，避免“点了没反应”
+  if (!form.value.phone || !form.value.password) {
+    ElMessage.warning(!form.value.phone ? '请输入手机号' : '请输入密码')
+    return
+  }
   loading.value = true
   try {
     await userStore.login(form.value.phone, form.value.password)
@@ -20,8 +24,10 @@ async function login() {
     sessionStorage.removeItem('redirect-after-login')
     router.push(redirect)
     ElMessage.success('登录成功')
-  } catch {
-    ElMessage.error('登录失败，请检查手机号和密码')
+  } catch (error: any) {
+    // v6.11.58：业务错误（带 bizCode）的提示已由 request 拦截器统一弹出（如「用户名或密码错误」），
+    // 此处只对网络/超时等无 bizCode 的异常补一句兜底提示，避免同一失败弹出两条重复 toast
+    if (!error?.bizCode) ElMessage.error('登录失败，请检查手机号和密码')
   } finally {
     loading.value = false
   }
