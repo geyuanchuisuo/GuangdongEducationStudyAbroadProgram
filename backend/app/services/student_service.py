@@ -91,17 +91,27 @@ class StudentService:
 
     # ── 行政服务 ──
     async def submit_admin_service(self, student_id: int, data: AdminServiceCreate) -> StudentAdminService:
-        """提交行政服务申请（请假等）。请假类型沿用 M3 的同学生防重规则（待审批/已通过即拒，40901）。"""
+        """提交行政服务申请（请假等）。
+
+        请假防重（v6.11.59 对齐注释本意「同学生同时段」）：只拦在途（待审批）申请 +
+        已通过且时段重叠的申请；历史已批准请假不再永久挡住未来请假（原实现只查存在性）。
+        """
         if data.service_type == "请假":
+            from sqlalchemy import and_, or_
+            overlap = and_(
+                StudentAdminService.status == "已通过",
+                StudentAdminService.start_time <= data.end_time,
+                StudentAdminService.end_time >= data.start_time,
+            ) if (data.start_time and data.end_time) else False
             dup_result = await self.db.execute(
                 select(StudentAdminService).where(
                     StudentAdminService.student_id == student_id,
                     StudentAdminService.service_type == "请假",
-                    StudentAdminService.status.in_(["待审批", "已通过"]),
+                    or_(StudentAdminService.status == "待审批", overlap),
                 )
             )
             if dup_result.scalars().first():
-                raise ConflictError(message="你已有一条待审批或已通过的请假记录，请等待审批结果")
+                raise ConflictError(message="你已有一条待审批的请假记录，或同时段已批准过请假，请等待审批结果或调整请假时段")
 
         # 解析审批人：该学生的负责员工（学生已关联客户时）；无负责员工则留空，由员工端兜底认领
         approver_id: int | None = None
@@ -138,6 +148,60 @@ class StudentService:
             .limit(page_size)
         )).scalars().all()
         return {"items": items, "total": total, "page": page, "page_size": page_size}
+
+    # ── 对话内指令式办理（v6.11.59 对话即办理） ──
+    async def _run_agent_actions(self, student_id: int, actions: list) -> str:
+        """对话内直接执行 action：leave.create → 请假单落库（student_admin_service）。
+
+        与行政服务页表单同一落库入口（含同学生请假防重 40901），前端行政服务列表即查即见。
+        """
+        from app.services.agent_actions import parse_dt
+
+        lines: list[str] = []
+        for act in actions:
+            action_type = act.get("action_type") or ""
+            params = act.get("params") or {}
+            summary = act.get("summary") or action_type
+            if action_type != "leave.create":
+                lines.append(f"⚠️ 未执行：{params.get('reason') or '该指令暂不支持对话内办理，请到对应页面操作'}")
+                continue
+            start = parse_dt(params.get("start_time"))
+            end = parse_dt(params.get("end_time"), end_of_day=True)
+            reason = (params.get("reason") or "").strip()
+            if not (start and end and reason):
+                lines.append("⚠️ 未执行：请假需要开始时间、结束时间和事由，请补充完整"
+                             "（例：10月22日到23日请假，家里有事）")
+                continue
+            # 日期合理性防御（v6.11.59）：AI 曾猜错年份，过去日期/倒置区间一律不落库
+            from datetime import date as _date
+            today = _date.today()
+            if start.date() < today:
+                lines.append(f"⚠️ 未执行：开始时间 {start.date()} 早于今天（{today}），"
+                             "请确认年份后重新告诉我")
+                continue
+            if end < start:
+                lines.append("⚠️ 未执行：结束时间早于开始时间，请检查后重新告诉我")
+                continue
+            leave_type = str(params.get("leave_type") or params.get("type") or "").strip()
+            missed = str(params.get("missed") or params.get("missed_classes") or "").strip()
+            text_reason = (f"【{leave_type}】" if leave_type else "") + \
+                (f"预计缺课 {missed} 节；" if missed else "") + reason
+            try:
+                svc = await self.submit_admin_service(student_id, AdminServiceCreate(
+                    service_type="请假",
+                    start_time=start,
+                    end_time=end,
+                    reason=text_reason,
+                ))
+            except Exception as exc:
+                msg = getattr(exc, "message", None) or str(exc)
+                lines.append(f"⚠️ 未执行：{summary}——{msg}")
+                continue
+            lines.append(
+                f"✅ 已提交：{summary or '请假申请'}（申请单 #{svc.id}，状态：{svc.status}），"
+                "可在「行政服务」查看审批进度。"
+            )
+        return "\n".join(lines)
 
     # ── 心理关怀 ──
     @staticmethod
@@ -364,12 +428,18 @@ class StudentService:
         try:
             resp = await ai_service.chat(
                 agent=AgentType.STUDENT,
-                message=message,
+                message=self._agent_prompt_message(message),
                 session_id=session_id or "new",
                 user_id=f"student_{student.id}",
                 context=context,
             )
-            return {"reply": resp.content, "session_id": resp.session_id, "source": "dify"}
+            from app.services.agent_actions import extract_action
+            visible, actions = extract_action(resp.content or "")
+            parts = [visible.strip()] if visible.strip() else []
+            if actions:
+                parts.append(await self._run_agent_actions(student.id, actions))
+            return {"reply": "\n\n".join(parts) or "（回复为空）",
+                    "session_id": resp.session_id, "source": "dify"}
         except Exception as exc:
             try:
                 from app.services.model_ai_service import model_ai_service
@@ -379,6 +449,20 @@ class StudentService:
                 logger.warning("model fallback failed: student=%s error=%s", student.id, model_exc)
             logger.warning("agent_chat AI 降级: student=%s error=%s", student.id, exc)
             return {"reply": _AGENT_FALLBACK_REPLY, "session_id": session_id or "new", "source": "fallback"}
+
+    @staticmethod
+    def _agent_prompt_message(message: str) -> str:
+        """对话消息包装（v6.11.59）：写指令输出 action JSON，其余纯自然语言。"""
+        from datetime import date
+        today = date.today()
+        return (
+            f"今天是 {today.isoformat()}。涉及日期请以此为准输出完整 YYYY-MM-DD，禁止猜年份。\n"
+            "【回复格式】普通问答只用自然语言；识别到写操作指令（请假申请）时，"
+            "按指令式业务协议输出一个 ```json 代码块（系统收到后自动落库并回执），"
+            "其余情况禁止输出 JSON、结构化 action 或代码块。"
+            "严禁口头宣称「已提交/已办理」——只有输出上述 JSON 系统才会真正执行，未输出 JSON 时如实说明尚未提交。\n"
+            f"【用户提问】{message}"
+        )
 
     async def agent_chat_stream(self, student: User, message: str, session_id: str | None) -> AsyncIterator[dict]:
         """学生助手流式会话：注入身份+能力+限制预期 context 转发 Dify 流式；AI 不可用降级返回能力清单。
@@ -398,37 +482,55 @@ class StudentService:
         }
         yield {"event": "meta", "conversation_id": session_id or "new"}
 
-        buf = ""
+        from app.services.agent_actions import ActionStreamExtractor
+
+        ext = ActionStreamExtractor()
+        emitted = ""
+        got_any = False
         dify_session_id = session_id or "new"
         stream_error: Exception | None = None
         try:
             async for token in ai_service.chat_stream(
                 agent=AgentType.STUDENT,
-                message=message,
+                message=self._agent_prompt_message(message),
                 session_id=session_id or "new",
                 user_id=f"student_{student.id}",
                 context=context,
             ):
-                buf += token
-                yield {"event": "token", "delta": token}
+                got_any = True
+                piece = ext.feed(token)
+                if piece:
+                    emitted += piece
+                    yield {"event": "token", "delta": piece}
         except Exception as exc:
             stream_error = exc
             logger.warning("student agent chat_stream failed: student=%s error=%s", student.id, exc)
 
-        # 流失败或无输出时走降级链
-        if stream_error is not None or not buf:
+        # 流失败或无输出时走降级链（判定用 got_any：action JSON 全扣留时 emitted 可能为空）
+        if stream_error is not None or not got_any:
             try:
                 from app.services.model_ai_service import model_ai_service
                 result = await model_ai_service.chat(message, session_id or "new", context)
-                buf = result["reply"]
+                emitted = result["reply"]
                 dify_session_id = result.get("session_id", session_id or "new")
-                yield {"event": "token", "delta": buf}
+                yield {"event": "token", "delta": emitted}
             except Exception as model_exc:
                 logger.warning("model fallback failed: student=%s error=%s", student.id, model_exc)
-                buf = _AGENT_FALLBACK_REPLY
-                yield {"event": "token", "delta": buf}
+                emitted = _AGENT_FALLBACK_REPLY
+                yield {"event": "token", "delta": emitted}
+        else:
+            # 流成功：收尾未闭合围栏 → 执行扣留的 action JSON → 回执下发（JSON 不上屏）
+            tail = ext.flush()
+            if tail:
+                emitted += tail
+                yield {"event": "token", "delta": tail}
+            if ext.actions:
+                receipt = await self._run_agent_actions(student.id, ext.actions)
+                if receipt:
+                    emitted += "\n\n" + receipt
+                    yield {"event": "token", "delta": "\n\n" + receipt}
 
-        yield {"event": "done", "data": {"reply": buf, "session_id": dify_session_id, "source": "stream"}}
+        yield {"event": "done", "data": {"reply": emitted, "session_id": dify_session_id, "source": "stream"}}
 
     # ── 提醒聚合（v6.8.1，登录拉取即推送，Agent 主动提醒数据源） ──
     async def get_reminders(self, student_id: int) -> dict:

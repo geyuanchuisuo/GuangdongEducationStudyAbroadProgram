@@ -7,12 +7,14 @@
 ## 零、快速定位（打开项目先看这里）
 
 > v6.11.60（2026-10-20，master_ZNBG）：Dify 出网 DNS 修复（compose x-shared-dns 锚点固定 9 个出网服务公共 DNS）+ 三大需求缺口修复（客服知识库《企业信息》注入 / 学生端 Agent 登录后主动推送 / 员工与管理层 Agent 组织架构注入）+ Dify 15 个应用收敛为 4 个【调用中】+1 留档+10 个【废案】停用 + `dify_init.py` 修 `export_app_keys` 顺序。详见 LOG-114。
-> v6.11.58（2026-10-20，master_ZNBG）：**前端全量 UI 测试四项缺陷修复 + 投诉率口径修正**——①登录页空表单按缺失项提示（原静默 return）②登录失败不再双 toast（业务错误统一由拦截器提示）③留学生提交工单后自动重拉「我的工单」④`complaint_rate` 改为「投诉学生人数（去重）/在办学生数×100%」并新增 `complaint_students`/`complaint_tickets_total` 字段 + 看板独立卡片「投诉工单总数」（overview 新增 2 字段，115 paths 不变）；pytest 170/170 + build ✓，浏览器实测复核通过（LOG-112）。
+> v6.11.58（2026-10-20，longtrying_test 线）：**文件上传研判修复（三处根因）**——①backend_venv 命名卷历史快照缺 python-docx/openpyxl/pymupdf（pyproject 有声明未同步运行时），.docx/.xlsx/.pdf 研判全挂 50001；容器 uv sync 补装 + compose 启动命令加幂等 uv sync 防「卷陈旧」复发。②前端 assessFile 手动 Content-Type 丢 boundary（axios 1.20 原样发出）删手动头交浏览器自动带。③损坏/伪装文件 BadZipFile 崩 50001→router.py 统一 ValidationError(40002) 友好提示（契约对齐）。全格式实测 200 + 定向 pytest 12/12（LOG-112 longtrying_test 线）。
+> v6.11.58（2026-10-20，master_ZNBG 线）：**前端全量 UI 测试四项缺陷修复 + 投诉率口径修正**——①登录页空表单按缺失项提示（原静默 return）②登录失败不再双 toast（业务错误统一由拦截器提示）③留学生提交工单后自动重拉「我的工单」④`complaint_rate` 改为「投诉学生人数（去重）/在办学生数×100%」并新增 `complaint_students`/`complaint_tickets_total` 字段 + 看板独立卡片「投诉工单总数」（overview 新增 2 字段，115 paths 不变）；pytest 170/170 + build ✓，浏览器实测复核通过（LOG-112 master_ZNBG 线）。
 > v6.11.57（2026-10-20，longtrying_test）：**.env 自动补建 + 一键运行流程修复**——start-project.bat 全栈化重写（根 .env/dify .env 自动补建与模型 key 预检 → compose 全栈含 Dify 13 容器+dify-init → 前端构建 → 健康等待+种子保险 → vite 非阻断 → localtunnel 穿透；npm_config_cache 重定向 logs\npm-cache 固化沙箱边界：Docker=沙箱外 / vite+tunnel=沙箱内）；seed_all 空库判定兼容 1146 表不存在，compose 冷启动自动注入闭环（v6.11.40 遗留时序缺陷）；两轮一键实测全绿（LOG-111）。
 > v6.11.56（2026-10-19，longtrying_test）：**第二十次同步 gitea/master（三线统一）**——并入 master_ZNBG 线管理层四项修复（登录支持手机号兜底/审批放宽任一 MANAGER+留痕/审批分类 seed 修正/双层标题+个人信息布局，公共模块 user_repo/user_service/approval_engine/seed_data 经用户批准），3 处文档冲突并集；合并后本地 longtrying_test=本地 master=云端 longtrying_test=云端 master 四端同指 bd0fc04（LOG-109）。
 > v6.11.55（2026-10-19，longtrying_test）：**本线合入 master 推送云端**——云端 master 无差异后按 §7.1 流程 Fast-forward 合入并推送（58e775a..42323c7），master=longtrying_test=gitea/master 三者同指（LOG-108）。
 > v6.11.54（2026-10-19，longtrying_test）：**第十九次同步 gitea/master**——并入 v6.11.52 master 线（chunk 加载失败兜底、业务错误 bizCode 标记、代客申请表单修复），2 处文档冲突并集；pytest 170/170 + verify_all 29/29 + build ✓（LOG-107）。
 > v6.11.52（2026-10-19，longtrying_test）：**第十八次同步 gitea/master**——并入 v6.11.50/51（问题清单 55~63 修复、进度阶段口径统一 6 段、铃铛通知中心、请假表单对齐），2 处文档冲突并集；pytest 170/170 + verify_all 29/29 + build ✓（LOG-105）。
+> v6.11.59（2026-10-20，longtrying_test）：**Agent 对话即办理**——学生请假/员工写指令（跟进/待办/成绩/日报）对话内真落库（新增 `agent_actions.py` action 提取+流式扣留，Dify 输出 ```json action 块由后端直接执行回执 ✅记录号/⚠️原因，前端列表即查即见）；请假防重对齐「同时段」语义、防幻觉 prompt、日期注入防猜年份；pytest 170/170（LOG-113，Dify 2 应用 prompt 变更经用户批准）。
 > v6.11.50（2026-10-19，longtrying_test）：**管理层 Agent 经营数据修复**——后端 `_build_agent_real_data` MANAGER 分支注入「经营摘要（全域）」（复用 dashboard() 聚合）+ Dify 部署版员工助手（012f71a7）prompt 同步仓库最新版与 6 输入变量补齐（POST model-config 保存即发布，兜底话术改「数据未注入本次会话」）；MANAGER 3 问真实数字、EMPLOYEE 越权正确拒答；pytest 170/170（LOG-104，Dify 变更经用户批准）。
 > v6.11.43（2026-10-19，longtrying_test）：**第十七次同步 gitea/master**——并入 v6.11.41~49（/customers/me 500 修复、REPORT_DATA_SOURCE 切 production、公开站修复、签约金额、`GET /events/my-registrations` +1 路由 114→115、提示去重、意向客户修复），2 处文档冲突并集；pytest 170/170 + verify_all 29/29 + build ✓（LOG-103）。
 > v6.11.41（2026-10-19，longtrying_test）：**流式输出前端空白气泡修复**——AgentDock.vue 流式消息对象改 `reactive()` 包装（Vue 响应式陷阱致 SSE token 已到但视图不渲染、只显示空白气泡），浏览器实测逐字渲染恢复（LOG-101）。
@@ -114,7 +116,7 @@
 3. `promts/lon/提示词整合测试_demo/docs/基础架构方案_五人并行开发.md` — **主基线，权重最高**
 4. `docs/开发路线图.md` — 当前进度、下一步任务
 5. `docs/接口契约v1.md` — API接口契约（v2.11.60，115 paths）
-6. `docs/更新记录.md` — 最近变更（v6.11.58 全量UI测试四项修复+投诉率口径修正 + v6.11.57 一键运行流程修复 + v6.11.56 第二十次同步 master 三线统一 + v6.11.55 本线合入 master 推送云端 + v6.11.54 第十九次同步 master + v6.11.52 第十八次同步 master + v6.11.50 管理层Agent经营数据 + v6.11.43 第十七次同步 master + v6.11.42 文档审计 + v6.11.41 流式空白修复 + v6.11.40 清库重注/种子自动注入 + v6.11.39 全角色Agent流式）
+6. `docs/更新记录.md` — 最近变更（v6.11.59 Agent对话即办理 + v6.11.58 文件上传研判修复/全量UI测试四项修复+投诉率口径修正 + v6.11.57 一键运行流程修复 + v6.11.56 第二十次同步 master 三线统一 + v6.11.55 本线合入 master 推送云端 + v6.11.54 第十九次同步 master + v6.11.52 第十八次同步 master + v6.11.50 管理层Agent经营数据 + v6.11.43 第十七次同步 master + v6.11.42 文档审计 + v6.11.41 流式空白修复 + v6.11.40 清库重注/种子自动注入 + v6.11.39 全角色Agent流式）
 
 **重要规则**：
 - 主基线文档（基础架构方案）权重 > 其他参考文档（共用基座方案、公共框架等）

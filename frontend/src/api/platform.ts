@@ -138,10 +138,12 @@ export const platformApi = {
   saveAssessment: (data: AnyRecord) => toData(request.post('/crm/assessments/save', data)),
   batchAssess: (data: AnyRecord) => toData(request.post('/crm/assessments/batch', data)),
   // 客户研判工具页：文件研判（PDF/Excel/Word 等，后端 extract_text → assess_text）
+  // v6.11.58：移除手动 Content-Type——显式 multipart/form-data 不带 boundary，
+  // 浏览器 XHR 会原样发出导致后端无法解析（422），FormData 交给浏览器自动带 boundary
   assessFile: (file: File) => {
     const fd = new FormData()
     fd.append('file', file)
-    return toData(request.post('/crm/assessments/file', fd, { headers: { 'Content-Type': 'multipart/form-data' } }))
+    return toData(request.post('/crm/assessments/file', fd))
   },
   // v6.11.23：政策资讯接库（GET /cs/policies 公开，publish_date 映射为 date；接口不可用回落演示数据并显式标记）
   policies: async (params: AnyRecord = {}): Promise<Array<AnyRecord>> => {

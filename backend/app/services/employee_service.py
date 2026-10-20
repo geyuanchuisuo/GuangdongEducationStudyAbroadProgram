@@ -333,14 +333,21 @@ class EmployeeService:
         if action not in ("approve", "reject"):
             raise BusinessError(code=40002, message="action 必须是 approve 或 reject")
 
-        # 请假去重：同学生同时段已有待审批/已通过的请假记录
+        # 请假去重（v6.11.59 对齐「同学生同时段」语义）：拦其他在途（待审批）申请 +
+        # 已通过且与本单时段重叠的申请；历史已批准请假不再永久拦未来请假
         if action == "approve" and svc.service_type == "请假":
+            from sqlalchemy import and_, or_
+            overlap = and_(
+                StudentAdminService.status == "已通过",
+                StudentAdminService.start_time <= svc.end_time,
+                StudentAdminService.end_time >= svc.start_time,
+            ) if (svc.start_time and svc.end_time) else False
             dup_result = await self.db.execute(
                 select(StudentAdminService).where(
                     StudentAdminService.student_id == svc.student_id,
                     StudentAdminService.service_type == "请假",
                     StudentAdminService.id != svc.id,
-                    StudentAdminService.status.in_(["待审批", "已通过"]),
+                    or_(StudentAdminService.status == "待审批", overlap),
                 )
             )
             dup = dup_result.scalars().first()
@@ -795,6 +802,39 @@ class EmployeeService:
             "expires_in": 600,
         }
 
+    async def execute_action(self, employee_id: int, action_type: str, params: dict) -> dict:
+        """动作分发落库（v6.11.59 从 execute_command 抽取，token 确认与对话内直接执行共用）。
+
+        返回 {"<表名>_id": id} 形态的执行结果；参数非法/冲突由底层业务服务抛错。
+        """
+        from app.services.agent_actions import parse_dt
+
+        params = dict(params or {})
+        if action_type == "follow_up.create":
+            follow = await self.create_follow_up(employee_id, params)
+            return {"follow_up_id": follow.id}
+        if action_type == "todo.create":
+            # todo_type 为 NOT NULL，AI/local 解析常缺省，补默认值防 IntegrityError
+            params.setdefault("todo_type", "AI待办")
+            if params.get("due_time") and isinstance(params["due_time"], str):
+                dt = parse_dt(params["due_time"])
+                if dt is not None:
+                    params["due_time"] = dt
+            todo = await self.create_todo(employee_id, params)
+            return {"todo_id": todo.id}
+        if action_type == "score.record":
+            score = await self.record_score(params)
+            return {"score_id": score.id}
+        if action_type == "report.submit":
+            from datetime import date as _date
+            rd = params.get("report_date")
+            if isinstance(rd, str):
+                dt = parse_dt(rd)
+                rd = dt.date() if dt else None
+            report = await self.submit_report(employee_id, rd or _date.today(), params.get("content") or "")
+            return {"report_id": report.id}
+        raise BusinessError(code=40002, message=f"暂不支持的动作类型：{action_type}")
+
     async def execute_command(self, employee_id: int, token: str, confirm: bool) -> dict:
         """二次确认后执行动作。"""
         import time
@@ -810,29 +850,7 @@ class EmployeeService:
         if not confirm:
             return {"executed": False, "result": None, "message": "已取消"}
 
-        action_type = pending["action_type"]
-        params = pending["params"]
-        result: dict = {}
-
-        if action_type == "follow_up.create":
-            follow = await self.create_follow_up(employee_id, params)
-            result = {"follow_up_id": follow.id}
-        elif action_type == "todo.create":
-            todo = await self.create_todo(employee_id, params)
-            result = {"todo_id": todo.id}
-        elif action_type == "score.record":
-            score = await self.record_score(params)
-            result = {"score_id": score.id}
-        elif action_type == "report.submit":
-            from datetime import date as _date, datetime as _dt
-            rd = params.get("report_date")
-            if isinstance(rd, str):
-                rd = _dt.strptime(rd, "%Y-%m-%d").date()
-            report = await self.submit_report(employee_id, rd or _date.today(), params["content"])
-            result = {"report_id": report.id}
-        else:
-            raise BusinessError(code=40002, message=f"暂不支持的动作类型：{action_type}")
-
+        result = await self.execute_action(employee_id, pending["action_type"], pending["params"])
         return {"executed": True, "result": result, "message": "已执行"}
 
     # ── 客户状态机（6 态流转） ──────────────────────────
@@ -1587,10 +1605,42 @@ class EmployeeService:
             try:
                 import json as _json
                 _json.loads(out)
-                return "已收到您的指令。为避免误操作，指令式业务请走二次确认流程（我已识别到结构化动作），或直接用自然语言描述需求。"
+                return "已识别到结构化指令，但内容格式无法解析，未能执行。请用自然语言重新描述需求（如：新增待办：明天回访客户）。"
             except Exception:
                 pass
         return out or "（回复为空）"
+
+    # 对话内直接执行的回执查看入口（v6.11.59 对话即办理）
+    _ACTION_VIEW_HINT = {
+        "follow_up.create": "客户经营",
+        "todo.create": "工作台·待办",
+        "score.record": "成绩管理",
+        "report.submit": "日报管理",
+    }
+
+    async def _run_agent_actions(self, employee_id: int, actions: list) -> str:
+        """对话内直接执行 action 列表并生成回执（v6.11.59 对话即办理）。
+
+        成功：✅ 已执行 + 记录号 + 查看入口；失败（参数不全/防重/校验）：⚠️ 未执行 + 原因。
+        """
+        lines: list[str] = []
+        for act in actions:
+            action_type = act.get("action_type") or ""
+            params = act.get("params") or {}
+            summary = act.get("summary") or action_type
+            if action_type == "unknown":
+                lines.append(f"⚠️ 未执行：{params.get('reason', '无法识别该指令')}")
+                continue
+            try:
+                result = await self.execute_action(employee_id, action_type, params)
+            except Exception as exc:
+                msg = getattr(exc, "message", None) or str(exc)
+                lines.append(f"⚠️ 未执行：{summary}——{msg}")
+                continue
+            rid = next(iter(result.values()), None)
+            hint = self._ACTION_VIEW_HINT.get(action_type, "对应页面")
+            lines.append(f"✅ 已执行：{summary}（记录 #{rid}），可在「{hint}」查看。")
+        return "\n".join(lines)
 
     async def agent_chat(self, user: User, message: str, session_id: str | None) -> dict:
         """企业助手会话：按角色注入权限感知 context 转发 Dify；AI 不可用降级返回能力清单。
@@ -1623,10 +1673,14 @@ class EmployeeService:
             logger.warning("agent real-data snapshot failed: user=%s err=%s", user.id, snap_exc)
             real = "（实时数据暂不可用，请勿编造具体事项）"
         prompt_message = (
+            f"今天是 {date.today().isoformat()}。涉及日期请以此为准输出完整 YYYY-MM-DD，禁止猜年份。\n"
             "【系统注入·实时数据】以下是你唯一可引用的事实依据，禁止编造其中没有的人名/单号/事项；"
             "用户问题超出数据范围时如实说明没有数据：\n"
             f"{real}\n"
-            "【回复格式】只用自然语言回答，禁止输出 JSON、结构化 action 或代码块。\n"
+            "【回复格式】普通问答只用自然语言；识别到写操作指令（跟进/待办/成绩/日报）时，"
+            "按指令式业务协议输出一个 ```json 代码块（系统收到后自动落库并回执），"
+            "其余情况禁止输出 JSON、结构化 action 或代码块。"
+            "严禁口头宣称「已提交/已办理」——只有输出上述 JSON 系统才会真正执行，未输出 JSON 时如实说明尚未提交。\n"
             f"【用户提问】{message}"
         )
         try:
@@ -1637,7 +1691,14 @@ class EmployeeService:
                 user_id=f"employee_{user.id}",
                 context=context,
             )
-            return {"reply": self._strip_agent_json(resp.content), "session_id": resp.session_id, "source": "dify"}
+            from app.services.agent_actions import extract_action
+            visible, actions = extract_action(resp.content or "")
+            text = self._strip_agent_json(visible) if visible else ""
+            parts = [text] if text else []
+            if actions:
+                parts.append(await self._run_agent_actions(user.id, actions))
+            return {"reply": "\n\n".join(parts) or "（回复为空）",
+                    "session_id": resp.session_id, "source": "dify"}
         except Exception:
             try:
                 from app.services.model_ai_service import model_ai_service
@@ -1678,15 +1739,23 @@ class EmployeeService:
             logger.warning("agent real-data snapshot failed: user=%s err=%s", user.id, snap_exc)
             real = "（实时数据暂不可用，请勿编造具体事项）"
         prompt_message = (
+            f"今天是 {date.today().isoformat()}。涉及日期请以此为准输出完整 YYYY-MM-DD，禁止猜年份。\n"
             "【系统注入·实时数据】以下是你唯一可引用的事实依据，禁止编造其中没有的人名/单号/事项；"
             "用户问题超出数据范围时如实说明没有数据：\n"
             f"{real}\n"
-            "【回复格式】只用自然语言回答，禁止输出 JSON、结构化 action 或代码块。\n"
+            "【回复格式】普通问答只用自然语言；识别到写操作指令（跟进/待办/成绩/日报）时，"
+            "按指令式业务协议输出一个 ```json 代码块（系统收到后自动落库并回执），"
+            "其余情况禁止输出 JSON、结构化 action 或代码块。"
+            "严禁口头宣称「已提交/已办理」——只有输出上述 JSON 系统才会真正执行，未输出 JSON 时如实说明尚未提交。\n"
             f"【用户提问】{message}"
         )
         yield {"event": "meta", "conversation_id": session_id or "new"}
 
-        buf = ""
+        from app.services.agent_actions import ActionStreamExtractor
+
+        ext = ActionStreamExtractor()
+        emitted = ""
+        got_any = False
         dify_session_id = session_id or "new"
         stream_error: Exception | None = None
         try:
@@ -1697,26 +1766,44 @@ class EmployeeService:
                 user_id=f"employee_{user.id}",
                 context=context,
             ):
-                buf += token
-                yield {"event": "token", "delta": token}
+                got_any = True
+                piece = ext.feed(token)
+                if piece:
+                    emitted += piece
+                    yield {"event": "token", "delta": piece}
         except Exception as exc:
             stream_error = exc
             logger.warning("employee agent chat_stream failed: user=%s error=%s", user.id, exc)
 
-        # 流失败或无输出时走降级链
-        if stream_error is not None or not buf:
+        # 流失败或无输出时走降级链（判定用 got_any：action JSON 全扣留时 emitted 可能为空）
+        if stream_error is not None or not got_any:
             try:
                 from app.services.model_ai_service import model_ai_service
                 result = await model_ai_service.chat(prompt_message, session_id or "new", context)
-                buf = self._strip_agent_json(result["reply"])
+                from app.services.agent_actions import extract_action
+                visible, actions = extract_action(result["reply"] or "")
+                emitted = self._strip_agent_json(visible) if visible else ""
+                if actions:
+                    emitted = (emitted + "\n\n" + await self._run_agent_actions(user.id, actions)).strip()
                 dify_session_id = result.get("session_id", session_id or "new")
-                yield {"event": "token", "delta": buf}
+                yield {"event": "token", "delta": emitted}
             except Exception as model_exc:
                 logger.warning("model fallback failed: employee=%s error=%s", user.id, model_exc)
-                buf = self._snapshot_reply(user, snapshot)
-                yield {"event": "token", "delta": buf}
+                emitted = self._snapshot_reply(user, snapshot)
+                yield {"event": "token", "delta": emitted}
+        else:
+            # 流成功：收尾未闭合围栏 → 执行扣留的 action JSON → 回执下发（JSON 不上屏）
+            tail = ext.flush()
+            if tail:
+                emitted += tail
+                yield {"event": "token", "delta": tail}
+            if ext.actions:
+                receipt = await self._run_agent_actions(user.id, ext.actions)
+                if receipt:
+                    emitted += "\n\n" + receipt
+                    yield {"event": "token", "delta": "\n\n" + receipt}
 
-        yield {"event": "done", "data": {"reply": buf, "session_id": dify_session_id, "source": "stream"}}
+        yield {"event": "done", "data": {"reply": emitted, "session_id": dify_session_id, "source": "stream"}}
 
     # ── 新人指引问答（RAG 优先，本地静态降级） ────────────
     async def guide_ask(self, user: User, question: str, session_id: str | None) -> dict:

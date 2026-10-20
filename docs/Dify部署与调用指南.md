@@ -6,7 +6,7 @@
 
 ---
 
-## 零、智能体应用清单与调用关系（2026-10-19 v6.11.38 核对，命名已带状态标记）
+## 零、智能体应用清单与调用关系（2026-10-20 v6.11.59 核对，命名已带状态标记）
 
 > Dify 实例中现存 **9 个应用**，命名已按 AGENTS.md §7.5 硬性规则标注状态：**【调用中】4 个 / 【废案】5 个**（v6.11.38 起每次修改 Dify 应用后必须重新写明标记，dify-init 每次运行自动核对）。后端只调用 4 个——以 `backend/.env` 的 4 个 app key 为唯一判据，key 命中的应用即当前调用。
 
@@ -14,8 +14,8 @@
 
 | 应用名（含状态标记） | mode | 应用 ID（前 8 位） | 后端 key | 调用方 | 来源 DSL |
 |--------|------|------------------|----------|--------|----------|
-| 留学生智能管家【调用中】 | chat | `03a4dfa6` | DIFY_STUDENT_AGENT_KEY | M4 学生智能助手（/student/agent/chat，v6.11.39 起流式 /student/agent/chat/stream） | 留学生智能管家__agent-chat.yml |
-| 企业员工助手【调用中】 | chat | `012f71a7` | DIFY_EMPLOYEE_AGENT_KEY | M3 企业智能助手（/employee/agent/chat，v6.11.39 起流式 /employee/agent/chat/stream）；v6.11.50 部署版 prompt 整体同步仓库 yml 最新版 + 补齐 6 输入变量（POST /model-config 保存即发布），MANAGER 经 query 通道获「经营摘要（全域）」可答经营情况 | 企业员工助手__agent-chat.yml |
+| 留学生智能管家【调用中】 | chat | `03a4dfa6` | DIFY_STUDENT_AGENT_KEY | M4 学生智能助手（/student/agent/chat，v6.11.39 起流式 /student/agent/chat/stream）；v6.11.59 prompt 新增 leave.create 指令式协议（对话即办理：请假真落库）+ 防幻觉约束（严禁口头宣称已提交），部署版已同步 | 留学生智能管家__agent-chat.yml |
+| 企业员工助手【调用中】 | chat | `012f71a7` | DIFY_EMPLOYEE_AGENT_KEY | M3 企业智能助手（/employee/agent/chat，v6.11.39 起流式 /employee/agent/chat/stream）；v6.11.50 部署版 prompt 整体同步仓库 yml 最新版 + 补齐 6 输入变量（POST /model-config 保存即发布），MANAGER 经 query 通道获「经营摘要（全域）」可答经营情况；v6.11.59 指令式协议改「对话即办理」（4 类动作直接落库回执）+ 防幻觉约束 | 企业员工助手__agent-chat.yml |
 | 粤教客服Agent【调用中】 | advanced-chat | `86a2f351` | DIFY_CUSTOMER_AGENT_KEY（key `app-Ru3T...`） | M2 智能客服（/ai/customer-service/chat + /chat/stream 流式） | 粤教客服__advanced-chat.yml |
 | 智能报告【调用中】 | advanced-chat | `06ce80f9` | DIFY_REPORT_AGENT_KEY | M5 智能报告（报告 AI 文字） | 智能报告__advanced-chat.yml |
 
