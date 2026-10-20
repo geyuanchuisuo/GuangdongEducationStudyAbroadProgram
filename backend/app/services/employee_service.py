@@ -1403,14 +1403,60 @@ class EmployeeService:
         "智能报告查询",
     ]
 
+    async def _org_snapshot(self) -> dict:
+        """组织架构快照（v6.11.60）：部门树 + 各部门在职人数。
+
+        组织架构属公司内部公开信息，不受「仅本人名下客户」的数据隔离限制，
+        员工与管理层均可查询（与 /employee/org 页面级权限口径一致）。
+        """
+        rows = await self.get_org_tree()
+        head_rows = (await self.db.execute(
+            select(User.department, func.count())
+            .where(User.user_type.in_(["EMPLOYEE", "MANAGER", "ADMIN"]))
+            .group_by(User.department)
+        )).all()
+        headcount = {(dept or "未分配"): cnt for dept, cnt in head_rows}
+        children: dict[int | None, list[EmployeeOrg]] = {}
+        for r in rows:
+            children.setdefault(r.parent_id, []).append(r)
+
+        def build(parent_id: int | None) -> list[dict]:
+            return [
+                {"name": n.name, "children": build(n.id)}
+                for n in sorted(children.get(parent_id, []), key=lambda x: (x.sort_order, x.id))
+            ]
+
+        return {"departments": build(None), "headcount": headcount, "total_staff": sum(headcount.values())}
+
+    @staticmethod
+    def _org_text(org: dict) -> str:
+        """把组织架构压成一行文本，供 Agent 实时数据注入（部门树 + 各部门在职人数）。"""
+        def fmt(nodes: list[dict]) -> list[str]:
+            out: list[str] = []
+            for n in nodes:
+                subs = fmt(n.get("children") or [])
+                out.append(f"{n['name']}（下辖 {'、'.join(subs)}）" if subs else str(n["name"]))
+            return out
+
+        tree_txt = "、".join(fmt(org.get("departments") or [])) or "无"
+        headcount = org.get("headcount") or {}
+        head_txt = "、".join(f"{k} {v} 人" for k, v in headcount.items()) or "无"
+        return f"部门树：{tree_txt}；各部门在职人数：{head_txt}"
+
     async def _factual_snapshot(self, user: User) -> dict:
         """按角色产出「事实快照」：仅含该角色权限内的真实聚合数据，供 Agent 照实作答。
 
         只给聚合口径（计数与分布），不含客户/学生明细，避免越权与请求体积膨胀。
+        v6.11.60：追加组织架构（两种角色都注入，组织架构不受客户数据隔离限制）。
         """
+        try:
+            org = await self._org_snapshot()
+        except Exception as org_exc:  # 组织架构查询失败降级为空，不影响其余快照
+            logger.warning("org snapshot failed: user=%s err=%s", user.id, org_exc)
+            org = {}
         if user.user_type == "MANAGER":
             # 管理层：全域经营聚合（客户 6 态分布/漏斗/渠道/转化率/日报/审批/投诉/心理）
-            return {"scope": "全域（不受数据隔离限制）", "dashboard": await self.dashboard()}
+            return {"scope": "全域（不受数据隔离限制）", "dashboard": await self.dashboard(), "org": org}
 
         # 普通员工：本人待办与到期跟进 + 名下客户状态分布
         reminders = await self.get_reminders(user)
@@ -1425,6 +1471,7 @@ class EmployeeService:
             "reminders": reminders,
             "my_customers_by_status": by_status,
             "my_customers_total": sum(by_status.values()),
+            "org": org,
         }
 
     @staticmethod
@@ -1463,6 +1510,8 @@ class EmployeeService:
 
         v6.11.50：MANAGER 追加全域经营摘要行（复用经营看板 dashboard() 聚合，口径一致），
         使管理层 Agent 可直接回答经营情况；EMPLOYEE 维持本人维度不变。
+        v6.11.60：两种角色都追加组织架构行（部门树 + 各部门在职人数），
+        修复「组织架构查询」能力无数据源、Agent 只能答「暂无数据」的问题。
         """
         from sqlalchemy import func, select
 
@@ -1486,14 +1535,21 @@ class EmployeeService:
             select(func.count()).select_from(ApprovalInstance).where(ApprovalInstance.status == "pending")
         )).scalar() or 0
         base = f"今日待办：{todo_txt}｜名下客户数：{cust_cnt}｜待审批申请数：{pend_cnt}"
+        # v6.11.60：追加组织架构（员工/管理层都注入，否则「组织架构查询」是空承诺）
+        try:
+            org_txt = "组织架构：" + self._org_text(await self._org_snapshot())
+        except Exception as org_exc:
+            logger.warning("agent org snapshot failed: user=%s err=%s", user.id, org_exc)
+            org_txt = ""
+        org_part = "｜" + org_txt if org_txt else ""
         if user.user_type != "MANAGER":
-            return base
+            return base + org_part
         # 管理层：追加全域经营摘要（query 通道为唯一事实源，v6.11.50）
         try:
             dash = await self.dashboard()
         except Exception as dash_exc:
             logger.warning("agent ops summary failed: user=%s err=%s", user.id, dash_exc)
-            return base
+            return base + org_part
         cust = dash.get("customers") or {}
         overview = dash.get("overview") or {}
         reports = dash.get("reports") or {}
@@ -1519,7 +1575,7 @@ class EmployeeService:
             f"待处理投诉 {tickets.get('pending', '—')}；未处理心理预警 {psych.get('unhandled', '—')}；"
             f"来源渠道Top3：{src_txt}"
         )
-        return base + "｜" + ops
+        return base + "｜" + ops + org_part
 
     @staticmethod
     def _strip_agent_json(reply: str) -> str:

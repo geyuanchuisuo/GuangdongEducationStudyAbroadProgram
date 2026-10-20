@@ -89,6 +89,11 @@ NAMES = [
 ]
 
 DEPARTMENTS = ["咨询部", "教务部", "学生管理部", "市场部", "行政部"]
+# 组织架构（employee_org 表）：员工端「组织架构」页与 Agent 组织架构查询的数据源。
+# v6.11.60：子部门改为拟真命名（原 `X_子部门` 是占位式命名，页面上读起来像演示数据），
+# 且各自归属到对应上级部门（原先 5 个子部门全挂在「咨询部」下，组织结构不成立）。
+ORG_ROOTS = [*DEPARTMENTS, "总裁办"]
+ORG_SUB_DEPARTMENTS = ["留学咨询组", "教学教务组", "学生事务组", "市场推广组", "综合行政组"]
 # 课程名称：仅用于学生成绩与学业记录（student_score.course_name / student_academic.course_name），
 # 不再作为公开站「业务项目」页的数据源（业务项目见 BUSINESS_PROJECTS）
 COURSE_NAMES = [
@@ -766,12 +771,20 @@ async def seed():
                 ))
 
         # ── M3: Employee ──
-        for i in range(10):
+        # 根部门先插（同事务内自增 id 为 1..N），子部门再按 parent_id=i+1 挂到对应上级部门
+        for i, name in enumerate(ORG_ROOTS):
             session.add(EmployeeOrg(
-                name=f"{DEPARTMENTS[i % len(DEPARTMENTS)]}{'_子部门' if i >= 5 else ''}",
-                parent_id=None if i < 5 else 1,
+                name=name,
+                parent_id=None,
                 org_type="department",
                 sort_order=i,
+            ))
+        for i, sub in enumerate(ORG_SUB_DEPARTMENTS):
+            session.add(EmployeeOrg(
+                name=sub,
+                parent_id=i + 1,
+                org_type="department",
+                sort_order=10 + i,
             ))
 
         # employee_id+report_date 为唯一约束：按员工轮转、天数递增，保证组合唯一。

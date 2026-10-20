@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ChatDotRound, Close, Promotion } from '@element-plus/icons-vue'
 import { platformApi } from '../api/platform'
@@ -25,6 +25,72 @@ watch(open, async (value) => {
     if (data?.greeting) messages.value.push({ role: 'agent', text: data.greeting })
   } catch { /* 后端未就绪时静默降级，不阻塞正常聊天 */ }
 })
+// v6.11.60：学生端登录后 Agent 主动推送（待办/DDL/审批结果，需求 §4.3 / §12.1）
+// 复用已有 GET /student/reminders 提醒聚合（后端语义即「登录拉取即推送」），无提醒时不打扰
+const pushCount = ref(0)   // 未读推送条数（悬浮按钮红点），打开面板后清零
+const pushed = ref(false)  // 本次登录仅推送一次
+const progressLabel: Record<string, string> = { waiting: '待处理', pending: '待处理', in_progress: '进行中', doing: '进行中', completed: '已完成', done: '已完成' }
+
+function fmtDay(value: any) {
+  return String(value || '').slice(0, 10) || '—'
+}
+
+// 组装主动推送文案：四类提醒逐条列明细（每类最多 3 条，超出以合计收尾）
+function buildReminderText(data: any): string {
+  const counts: any = data?.counts || {}
+  const ddl: any[] = Array.isArray(data?.academic_ddl) ? data.academic_ddl : []
+  const leaves: any[] = Array.isArray(data?.leave_results) ? data.leave_results : []
+  const tickets: any[] = Array.isArray(data?.ticket_updates) ? data.ticket_updates : []
+  const progresses: any[] = Array.isArray(data?.progress_updates) ? data.progress_updates : []
+  const total = ddl.length + leaves.length + tickets.length + progresses.length
+  if (!total) return ''
+  const lines: string[] = ['你好，我是粤伴。登录后我先把今天要留意的事情同步给你：']
+  if (ddl.length) {
+    lines.push(`【学业 DDL · ${counts.academic_ddl ?? ddl.length} 项】`)
+    ddl.slice(0, 3).forEach((i) => lines.push(`· ${i.title}${i.course_name ? '（' + i.course_name + '）' : ''} —— ${fmtDay(i.due_time)} 截止，还剩 ${i.days_left} 天`))
+    if (ddl.length > 3) lines.push(`· 等共 ${counts.academic_ddl ?? ddl.length} 项`)
+  }
+  if (leaves.length) {
+    lines.push(`【请假/审批结果 · ${counts.leave_results ?? leaves.length} 项】`)
+    leaves.slice(0, 3).forEach((i) => lines.push(`· ${i.service_type}：${i.status}（${fmtDay(i.update_time)}）`))
+    if (leaves.length > 3) lines.push(`· 等共 ${counts.leave_results ?? leaves.length} 项`)
+  }
+  if (tickets.length) {
+    lines.push(`【工单处理结果 · ${counts.ticket_updates ?? tickets.length} 项】`)
+    tickets.slice(0, 3).forEach((i) => lines.push(`· ${i.content} → ${i.solution || i.status}`))
+    if (tickets.length > 3) lines.push(`· 等共 ${counts.ticket_updates ?? tickets.length} 项`)
+  }
+  if (progresses.length) {
+    lines.push(`【申请进度更新 · ${counts.progress_updates ?? progresses.length} 项】`)
+    progresses.slice(0, 3).forEach((i) => lines.push(`· ${i.stage}：${progressLabel[i.status] || i.status}${i.notes ? '（' + i.notes + '）' : ''}`))
+    if (progresses.length > 3) lines.push(`· 等共 ${counts.progress_updates ?? progresses.length} 项`)
+  }
+  lines.push('需要我帮你做什么，直接说就行。')
+  return lines.join('\n')
+}
+
+async function pushReminders() {
+  if (pushed.value || messages.value.length > 0) return
+  pushed.value = true
+  try {
+    const data: any = await platformApi.student.reminders()
+    const text = buildReminderText(data)
+    if (!text) return  // 无待办/DDL/审批结果时不打扰
+    messages.value.push({ role: 'agent', text })
+    pushCount.value = totalReminders(data)
+    if (!open.value) window.setTimeout(() => { open.value = true }, 450)
+  } catch { /* 后端未就绪时静默降级，不阻塞正常聊天 */ }
+}
+
+function totalReminders(data: any): number {
+  const c: any = data?.counts || {}
+  return (c.academic_ddl ?? 0) + (c.leave_results ?? 0) + (c.ticket_updates ?? 0) + (c.progress_updates ?? 0)
+}
+
+onMounted(() => { if (props.type === 'student') pushReminders() })
+// 面板打开即视为已读，清空红点
+watch(open, (value) => { if (value) pushCount.value = 0 })
+
 const messageList = ref<HTMLElement | null>(null)
 watch(messages, async () => {
   await nextTick()
@@ -244,7 +310,7 @@ async function loadHistory() {
           <el-button text :icon="Close" @click="open = false" />
         </header>
         <div ref="messageList" class="messages">
-          <div v-for="(item, index) in messages" :key="index" class="message" :class="[item.role, { latest: index === messages.length - 1 }]">
+          <div v-for="(item, index) in messages" :key="index" class="message" :class="[item.role, { latest: index === messages.length - 1 }]" :style="item.text.includes('\n') ? { whiteSpace: 'pre-line' } : undefined">
             {{ item.text }}
             <div v-if="item.recs?.length" class="rec-cards">
               <button v-for="(rec, ri) in item.recs" :key="ri" class="rec-card" @click="goRec(rec)">
@@ -277,12 +343,15 @@ async function loadHistory() {
         </div>
       </section>
     </transition>
-    <el-button class="agent-trigger" type="primary" :icon="ChatDotRound" circle size="large" @click="open = !open" />
+    <el-badge :value="pushCount" :hidden="pushCount === 0" class="agent-badge">
+      <el-button class="agent-trigger" type="primary" :icon="ChatDotRound" circle size="large" @click="open = !open" />
+    </el-badge>
   </div>
 </template>
 
 <style scoped>
 .agent-dock { position: fixed; right: 24px; bottom: 24px; z-index: 1000; }
+.agent-badge { display: block; line-height: 0; }
 .agent-trigger { width: 58px; height: 58px; box-shadow: 0 12px 30px rgba(45,43,115,.28); }
 .agent-panel {
   position: absolute;

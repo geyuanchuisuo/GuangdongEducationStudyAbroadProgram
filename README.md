@@ -1,6 +1,6 @@
 # 粤教留学项目管理平台
 
-> **版本** v6.11.57 | **更新日期** 2026-10-20 | **分支** longtrying_test
+> **版本** v6.11.60 | **更新日期** 2026-10-20 | **分支** longtrying_test
 > 
 > 广东省教育服务有限公司（粤教服务）智能化教育服务管理平台 — 集成 AI 智能体 + 传统业务闭环
 
@@ -97,7 +97,7 @@
 | **M4 学生** | student_admin_service · student_psych_profile · student_psych_alert · student_feedback_ticket · student_academic · student_application_progress |
 | **M5 报告** | ai_report · ai_report_attachment · ai_report_drill · ticket_ai_analysis |
 
-**API 路由**：115 paths（114 API + 1 health），契约版本 v2.11.56（v6.11.35 +心理预警 / v6.11.37 +客服流式 / v6.11.39 +学生与员工助手流式 / v6.11.42 +活动我的报名 / v6.11.43~52 合并 master 修复批 / v6.11.53~56 管理层四项修复+三线统一 / v6.11.57 一键运行流程修复 / v6.11.58 全量UI测试四项修复+投诉率口径修正（overview 新增 complaint_students、complaint_tickets_total），API 零变化）。
+**API 路由**：115 paths（114 API + 1 health），契约版本 v2.11.60（v6.11.35 +心理预警 / v6.11.37 +客服流式 / v6.11.39 +学生与员工助手流式 / v6.11.42 +活动我的报名 / v6.11.43~52 合并 master 修复批 / v6.11.53~56 管理层四项修复+三线统一 / v6.11.57 一键运行流程修复 / v6.11.58 全量UI测试四项修复+投诉率口径修正（overview 新增 complaint_students、complaint_tickets_total）/ v6.11.60 Dify 出网 DNS 修复+三大需求缺口修复+15 副本停用整理（组织架构注入/学生端主动推送，API 零变化），API 零变化）。
 
 ---
 
@@ -553,7 +553,7 @@ GuangdongEducationStudyAbroadProgram/
     ├── AGENTS.md                # 接手指南副本
     ├── 项目需求文档.md
     ├── 开发路线图.md
-    ├── 接口契约v1.md            # API 契约（v2.11.55）
+    ├── 接口契约v1.md            # API 契约（v2.11.60）
     ├── 更新记录.md
     ├── 运行日志.md
     ├── Dify部署与调用指南.md
@@ -620,7 +620,7 @@ GuangdongEducationStudyAbroadProgram/
 - **类型检查**：后端 SQLAlchemy 2.0 + 前端 TypeScript 5.3 全链路类型安全
 - **数据迁移**：Alembic 7 次迁移链（001~007），支持空库全链新建 / 历史库修复 / 双向升降级
 - **种子数据**：固定随机种子 42，幂等可重跑，跨分支合并后可直接拉取登录测试
-- **API 契约**：v2.11.55，115 paths，每次同步后完整回归
+- **API 契约**：v2.11.60，115 paths，每次同步后完整回归
 
 ---
 
@@ -650,4 +650,4 @@ GuangdongEducationStudyAbroadProgram/
 
 ---
 
-**广东省教育服务有限公司 · 粤教留学项目管理平台 · v6.11.57**
+**广东省教育服务有限公司 · 粤教留学项目管理平台 · v6.11.60**

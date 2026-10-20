@@ -649,6 +649,12 @@ def export_app_keys(client: httpx.Client, token: str, apps: dict) -> None:
         "",
     ]
     for name, app_id in apps.items():
+        # 先判 env 名再取/建 key（v6.11.60 修复）：原先顺序会让留档版/【废案】副本应用
+        # 被重新签出一把 API key（不导出但等于撤销被回滚），每次初始化都把停用副本「复活」一半。
+        env_name = _env_name_for(name)
+        if not env_name:
+            log(f"    （{name} 为留档版或未登记环境变量名，跳过 key 输出，且不为其签发 key）")
+            continue
         r = client.get(f"{DIFY_API_URL}/console/api/apps/{app_id}/api-keys", headers=headers, timeout=30)
         key = ""
         if r.status_code == 200:
@@ -665,10 +671,6 @@ def export_app_keys(client: httpx.Client, token: str, apps: dict) -> None:
             )
             if r.status_code in (200, 201):
                 key = r.json().get("token", "")
-        env_name = _env_name_for(name)
-        if not env_name:
-            log(f"    （{name} 为留档版或未登记环境变量名，跳过 key 输出）")
-            continue
         # 防御（LOG-094）：键名必须是合法 POSIX shell 变量名，中文名会使 backend 的 sh source 崩溃
         if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", env_name):
             fail(f"app key 环境变量名非法（必须为 POSIX shell 变量名）: {env_name!r}（应用: {name}）")

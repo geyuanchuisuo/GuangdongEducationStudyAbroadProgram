@@ -4,8 +4,17 @@
 # or docker-compose-template.yaml and regenerate this file.
 # ==================================================================
 
+# 稳定外部 DNS（v6.11.59）：Docker 内置解析器对该域名 CNAME 链
+# （api.xiaomimimo.com → mimo-pri-prod.alb.xiaomi.com）间歇解析失败（Errno -5），
+# 导致 Dify 模型调用返回 400；固定公共 DNS 规避
+x-shared-dns: &shared-dns
+  dns:
+    - 223.5.5.5
+    - 114.114.114.114
+
 # Shared configuration using YAML anchors and env_file
 x-shared-api-worker-config: &shared-api-worker-config
+  <<: *shared-dns
   env_file:
     - path: ./envs/core-services/shared.env
       required: false
@@ -72,6 +81,7 @@ x-shared-api-worker-config: &shared-api-worker-config
   restart: always
 
 x-shared-worker-config: &shared-worker-config
+  <<: *shared-dns
   env_file:
     - path: ./envs/core-services/shared.env
       required: false
@@ -138,6 +148,7 @@ x-shared-worker-config: &shared-worker-config
   restart: always
 
 x-shared-worker-beat-config: &shared-worker-beat-config
+  <<: *shared-dns
   env_file:
     - path: ./envs/core-services/shared.env
       required: false
@@ -532,6 +543,7 @@ services:
   sandbox:
     image: langgenius/dify-sandbox:0.2.15
     restart: always
+    <<: *shared-dns
     env_file:
       - path: ./envs/core-services/sandbox.env
         required: false
@@ -565,6 +577,7 @@ services:
   local_sandbox:
     image: langgenius/dify-agent-local-sandbox:1.16.0-rc1
     restart: always
+    <<: *shared-dns
     environment:
       SHELLCTL_AUTH_TOKEN: ${DIFY_AGENT_SHELLCTL_AUTH_TOKEN:-}
     healthcheck:
@@ -580,6 +593,7 @@ services:
   plugin_daemon:
     image: langgenius/dify-plugin-daemon:0.6.3-local
     restart: always
+    <<: *shared-dns
     env_file:
       - path: ./envs/core-services/shared.env
         required: false
@@ -667,6 +681,7 @@ services:
   agent_backend:
     image: langgenius/dify-agent-backend:1.16.0-rc1
     restart: always
+    <<: *shared-dns
     env_file:
       - path: ./envs/core-services/dify-agent.env
         required: false
@@ -707,6 +722,7 @@ services:
   ssrf_proxy:
     image: ubuntu/squid:latest
     restart: always
+    <<: *shared-dns
     volumes:
       - ./ssrf_proxy/squid.conf.template:/etc/squid/squid.conf.template
       - ./ssrf_proxy/docker-entrypoint.sh:/docker-entrypoint-mount.sh
