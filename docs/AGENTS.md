@@ -13,6 +13,7 @@
 > v6.11.55（2026-10-19，longtrying_test）：**本线合入 master 推送云端**——云端 master 无差异后按 §7.1 流程 Fast-forward 合入并推送（58e775a..42323c7），master=longtrying_test=gitea/master 三者同指（LOG-108）。
 > v6.11.54（2026-10-19，longtrying_test）：**第十九次同步 gitea/master**——并入 v6.11.52 master 线（chunk 加载失败兜底、业务错误 bizCode 标记、代客申请表单修复），2 处文档冲突并集；pytest 170/170 + verify_all 29/29 + build ✓（LOG-107）。
 > v6.11.52（2026-10-19，longtrying_test）：**第十八次同步 gitea/master**——并入 v6.11.50/51（问题清单 55~63 修复、进度阶段口径统一 6 段、铃铛通知中心、请假表单对齐），2 处文档冲突并集；pytest 170/170 + verify_all 29/29 + build ✓（LOG-105）。
+> v6.11.59（2026-10-20，longtrying_test）：**Agent 对话即办理**——学生请假/员工写指令（跟进/待办/成绩/日报）对话内真落库（新增 `agent_actions.py` action 提取+流式扣留，Dify 输出 ```json action 块由后端直接执行回执 ✅记录号/⚠️原因，前端列表即查即见）；请假防重对齐「同时段」语义、防幻觉 prompt、日期注入防猜年份；pytest 170/170（LOG-113，Dify 2 应用 prompt 变更经用户批准）。
 > v6.11.50（2026-10-19，longtrying_test）：**管理层 Agent 经营数据修复**——后端 `_build_agent_real_data` MANAGER 分支注入「经营摘要（全域）」（复用 dashboard() 聚合）+ Dify 部署版员工助手（012f71a7）prompt 同步仓库最新版与 6 输入变量补齐（POST model-config 保存即发布，兜底话术改「数据未注入本次会话」）；MANAGER 3 问真实数字、EMPLOYEE 越权正确拒答；pytest 170/170（LOG-104，Dify 变更经用户批准）。
 > v6.11.43（2026-10-19，longtrying_test）：**第十七次同步 gitea/master**——并入 v6.11.41~49（/customers/me 500 修复、REPORT_DATA_SOURCE 切 production、公开站修复、签约金额、`GET /events/my-registrations` +1 路由 114→115、提示去重、意向客户修复），2 处文档冲突并集；pytest 170/170 + verify_all 29/29 + build ✓（LOG-103）。
 > v6.11.41（2026-10-19，longtrying_test）：**流式输出前端空白气泡修复**——AgentDock.vue 流式消息对象改 `reactive()` 包装（Vue 响应式陷阱致 SSE token 已到但视图不渲染、只显示空白气泡），浏览器实测逐字渲染恢复（LOG-101）。
