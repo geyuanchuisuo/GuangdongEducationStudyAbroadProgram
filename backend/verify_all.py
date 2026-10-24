@@ -222,6 +222,14 @@ test(f'/api/v1/reports router↔OpenAPI 一致（动态 {len(_openapi_report_pat
      lambda: None if _router_report_paths == _openapi_report_paths and _openapi_report_paths else
      (_ for _ in ()).throw(Exception(f'router={sorted(_router_report_paths)} openapi={sorted(_openapi_report_paths)}')))
 
+# ── 知识检索路由（独立 /knowledge，Milvus 混合检索，2026-10-24 一期） ─────────
+expected_knowledge_paths = [
+    '/api/v1/knowledge/search',
+]
+test(f'/api/v1/knowledge (1 path, 知识库混合检索)',
+     lambda: None if all(p in routes for p in expected_knowledge_paths) else
+     (_ for _ in ()).throw(Exception('missing')))
+
 # 总路由数动态校验：除 /health 外全部为 /api 前缀（不写死总数，路由增减自动跟随）
 _non_api = set(routes) - set(api_routes)
 test(f'total paths (dynamic {len(routes)}, 98 API + 1 health)',

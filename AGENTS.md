@@ -6,6 +6,7 @@
 
 ## 零、快速定位（打开项目先看这里）
 
+> v6.12.0（2026-10-24，add）：**知识库混合检索一期交付**——教育服务三类资料（《公司信息》《公司业务》《留学政策》）切片入 Milvus（复用 `vector/` 已 Docker 化的 v2.6.24 standalone），Ollama bge-m3 稠密 + Milvus 内置 BM25（jieba 分词）稀疏双路 RRF 混合检索；新增公开接口 `POST /api/v1/knowledge/search`（独立 /knowledge 前缀，115→116 paths）+ 幂等导入脚本 `backend/scripts/ingest_knowledge.py`（110 条切片实测入库，5 类典型查询全命中）；方案与 8 项决策记录见 `docs/知识库混合检索方案.md`；pytest 183/183；Dify 客服 Chatflow 对接与 RAG 生成层为二期（另行审批）。详见 LOG-115。
 > v6.11.60（2026-10-20，master_ZNBG）：Dify 出网 DNS 修复（compose x-shared-dns 锚点固定 9 个出网服务公共 DNS）+ 三大需求缺口修复（客服知识库《企业信息》注入 / 学生端 Agent 登录后主动推送 / 员工与管理层 Agent 组织架构注入）+ Dify 15 个应用收敛为 4 个【调用中】+1 留档+10 个【废案】停用 + `dify_init.py` 修 `export_app_keys` 顺序。详见 LOG-114。
 > v6.11.58（2026-10-20，longtrying_test 线）：**文件上传研判修复（三处根因）**——①backend_venv 命名卷历史快照缺 python-docx/openpyxl/pymupdf（pyproject 有声明未同步运行时），.docx/.xlsx/.pdf 研判全挂 50001；容器 uv sync 补装 + compose 启动命令加幂等 uv sync 防「卷陈旧」复发。②前端 assessFile 手动 Content-Type 丢 boundary（axios 1.20 原样发出）删手动头交浏览器自动带。③损坏/伪装文件 BadZipFile 崩 50001→router.py 统一 ValidationError(40002) 友好提示（契约对齐）。全格式实测 200 + 定向 pytest 12/12（LOG-112 longtrying_test 线）。
 > v6.11.58（2026-10-20，master_ZNBG 线）：**前端全量 UI 测试四项缺陷修复 + 投诉率口径修正**——①登录页空表单按缺失项提示（原静默 return）②登录失败不再双 toast（业务错误统一由拦截器提示）③留学生提交工单后自动重拉「我的工单」④`complaint_rate` 改为「投诉学生人数（去重）/在办学生数×100%」并新增 `complaint_students`/`complaint_tickets_total` 字段 + 看板独立卡片「投诉工单总数」（overview 新增 2 字段，115 paths 不变）；pytest 170/170 + build ✓，浏览器实测复核通过（LOG-112 master_ZNBG 线）。
@@ -106,7 +107,7 @@
 5. ✅ ~~ZNBG 分支本地提交未推送~~ **已推送**（v6.9.3 起本分支已同步远端；git 凭据本机已恢复，`git ls-remote` 免交互即通）
 6. ✅ ~~两条 P1（v6.9.3 实测发现，M5，阻断切 production）~~ **v6.9.6 已修复**：a) 缺省周期改用 `default_completed_week(now)`=上一完整自然周 `[上周一00:00, 本周一00:00)`（原为 `week_range(now)` 恒落未来 → 必 40002）b) `normalize_customer_status()` 复用 M1 词表 `STATUS_CN_TO_EN` 做中英归一 + `fetch_customers` 逐行容错（脏行跳过并写入口径说明，不再拖垮 5 类报告）。**仍留 P2（他模块）**：`seed_data.py` ai_report 段秒级 DATETIME 随机碰撞（2 跑 1 败，共用脚本需确认）、前端 `RoleWorkspace.vue` 部分区块仍为静态演示值（管理层看板 183/21.4%/689/3.2%、学生首屏「李同学」与登录账号不符，作者 ge yuan，属 M3 看板区块）
 7. ✅ ~~M5 报告 AI 只用模拟~~ **v6.9.5 已统一到共用网关**：`ReportAIService` 内部走 `model_ai_service`（共用模块名称），失败回落 mock；报告内容新增差异字段 `ai_source`（model/mock/unavailable）并与 `ai_status` 并存，PDF 头部/前端详情按来源标注；契约 §7 已同步。**v6.9.6 补**：三处下钻改为与报告**同源**（`_drilldown_dataset` 按 `data_source_status` 分流），前端「明细下钻」说明同步。**待办**：`DIFY_MODEL_API_KEY` 需在 `backend/.env` 配置后才可验证真实模型链路（当前自动回落 mock，不影响测试）；M3 `employee_service.py` 的 logger 导入为合并期最小修复，待 M3 负责人复审
-**数据库**：35张表（含 M5 ai_report_drill、ticket_ai_analysis 与 v6.11.23 新增 policy 等），115条路由路径（114 API + 1 health；v6.11.23 增 /cs/policies + DELETE follow-ups、v6.11.25 增 /customers/me、v6.11.35 增 /employee/psych-alerts、v6.11.37 增 /ai/customer-service/chat/stream、v6.11.39 增 /student/agent/chat/stream + /employee/agent/chat/stream、v6.11.42 增 /events/my-registrations），MVC分层结构就绪；Docker 数据库、Redis、后端服务按 compose 配置运行；数据库凭据见本机环境配置。
+**数据库**：35张表（含 M5 ai_report_drill、ticket_ai_analysis 与 v6.11.23 新增 policy 等），116条路由路径（115 API + 1 health；v6.11.23 增 /cs/policies + DELETE follow-ups、v6.11.25 增 /customers/me、v6.11.35 增 /employee/psych-alerts、v6.11.37 增 /ai/customer-service/chat/stream、v6.11.39 增 /student/agent/chat/stream + /employee/agent/chat/stream、v6.11.42 增 /events/my-registrations、v6.12.0 增 /knowledge/search 知识检索公开接口），MVC分层结构就绪；Docker 数据库、Redis、后端服务按 compose 配置运行；数据库凭据见本机环境配置。
 **测试账号（v6.10.0 起规范）**：核心角色固定 `username=手机号`——`13810000001` PROSPECT / `13810000002` STUDENT / `13810000003` EMPLOYEE / `13810000004` MANAGER，**密码统一 `Test@123456`**；其余 `user000~user115` 同密码（角色按 `i % 8` 确定：0=ADMIN、1=MANAGER、2~4=EMPLOYEE、5~6=STUDENT、7=PROSPECT）。种子统一入口 `scripts/seed_all.py`（v6.11.40：空库自动注入已接启动流程，`--force` 清库重建恢复出厂数据；内部编排 seed_data `drop_all+create_all` 全量重建 + FAQ/缺口补充/归属重分配/通知，`random.seed(42)` 可复现），重跑 --force 前注意数据留存；Docker E2E 已按此规范更新账号常量
 **主基线文档**：`promts/lon/提示词整合测试_demo/docs/基础架构方案_五人并行开发.md`（v1.2.0，28项决策）
 
@@ -115,8 +116,8 @@
 2. `docs/项目需求文档.md` — 完整业务需求
 3. `promts/lon/提示词整合测试_demo/docs/基础架构方案_五人并行开发.md` — **主基线，权重最高**
 4. `docs/开发路线图.md` — 当前进度、下一步任务
-5. `docs/接口契约v1.md` — API接口契约（v2.11.60，115 paths）
-6. `docs/更新记录.md` — 最近变更（v6.11.59 Agent对话即办理 + v6.11.58 文件上传研判修复/全量UI测试四项修复+投诉率口径修正 + v6.11.57 一键运行流程修复 + v6.11.56 第二十次同步 master 三线统一 + v6.11.55 本线合入 master 推送云端 + v6.11.54 第十九次同步 master + v6.11.52 第十八次同步 master + v6.11.50 管理层Agent经营数据 + v6.11.43 第十七次同步 master + v6.11.42 文档审计 + v6.11.41 流式空白修复 + v6.11.40 清库重注/种子自动注入 + v6.11.39 全角色Agent流式）
+5. `docs/接口契约v1.md` — API接口契约（v2.12.0，116 paths）
+6. `docs/更新记录.md` — 最近变更（v6.12.0 知识库混合检索一期 + v6.11.59 Agent对话即办理 + v6.11.58 文件上传研判修复/全量UI测试四项修复+投诉率口径修正 + v6.11.57 一键运行流程修复 + v6.11.56 第二十次同步 master 三线统一 + v6.11.55 本线合入 master 推送云端 + v6.11.54 第十九次同步 master + v6.11.52 第十八次同步 master + v6.11.50 管理层Agent经营数据 + v6.11.43 第十七次同步 master + v6.11.42 文档审计 + v6.11.41 流式空白修复 + v6.11.40 清库重注/种子自动注入 + v6.11.39 全角色Agent流式）
 
 **重要规则**：
 - 主基线文档（基础架构方案）权重 > 其他参考文档（共用基座方案、公共框架等）

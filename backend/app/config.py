@@ -40,6 +40,16 @@ class Settings(BaseSettings):
     MINIO_SECRET_KEY: str = "password"
     MINIO_BUCKET: str = "education"
 
+    # ── 知识库混合检索（独立 /knowledge 接口，2026-10-24 新增；仅追加键，未改任何已有配置） ──
+    # Milvus 与 Ollama 均部署在宿主机：本地开发直连 localhost；
+    # backend 在 Docker 容器内运行时，.env 改为 http://host.docker.internal:19530 / :11434
+    MILVUS_URI: str = "http://localhost:19530"
+    MILVUS_COLLECTION: str = "yuejiao_knowledge"
+    OLLAMA_BASE_URL: str = "http://localhost:11434"
+    EMBED_MODEL: str = "bge-m3"
+    EMBED_DIM: int = 1024
+    KNOWLEDGE_DOCS_DIR: str = "../docs/教育服务"
+
     CORS_ORIGINS: list[str] = [
         "http://localhost:5173",
         "http://localhost:3000",

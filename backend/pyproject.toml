@@ -25,6 +25,9 @@ dependencies = [
     "openpyxl>=3.1.0",
     "python-docx>=1.1.0",
     "pymupdf>=1.24.0",
+    "ollama>=0.6.3",
+    # 知识库混合检索（/knowledge）：Milvus 客户端，钉 2.6 线与 vector/ 的 Milvus v2.6.24 服务端对齐
+    "pymilvus>=2.6.0,<3.0.0",
 ]
 
 [project.optional-dependencies]
