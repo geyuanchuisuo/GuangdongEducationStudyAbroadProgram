@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ArrowRight, Calendar, DataAnalysis, Document, School, TrendCharts } from '@element-plus/icons-vue'
+import { ArrowRight, Calendar, ChatDotRound, DataAnalysis, Document, School, TrendCharts } from '@element-plus/icons-vue'
 import SectionTitle from '../../components/SectionTitle.vue'
 import { events as mockEvents, projects as mockProjects } from '../../data/mock'
 import { platformApi } from '../../api/platform'
@@ -70,6 +70,19 @@ const businesses = [
         </div>
       </section>
 
+      <!-- v6.13.0：智能知识问答入口（独立模块，不碰客服 AgentDock） -->
+      <section class="section-block">
+        <SectionTitle eyebrow="AI ASSISTANT" title="智能知识问答" desc="基于公司资料与留学政策知识库的 AI 问答，即问即答、来源可查。" />
+        <div class="ai-banner" @click="router.push('/knowledge')">
+          <div class="ai-icon"><el-icon><ChatDotRound /></el-icon></div>
+          <div class="ai-copy">
+            <h3>有疑问？直接问</h3>
+            <p>公司信息、业务项目、各国留学政策——AI 从官方知识库检索并生成回答，每条回答附来源引用。</p>
+          </div>
+          <el-button type="primary" round>进入问答 <el-icon><ArrowRight /></el-icon></el-button>
+        </div>
+      </section>
+
       <section class="section-block split-section">
         <div>
           <SectionTitle eyebrow="EVENTS" title="近期活动" desc="未登录可以浏览，报名需要登录。" />
@@ -119,6 +132,11 @@ const businesses = [
 .business-card h3 { margin: 18px 0 10px; color: var(--ink-deep); }
 .business-card p { margin: 0; color: var(--muted); line-height: 1.8; font-size: 14px; }
 .project-grid { grid-template-columns: repeat(3, 1fr); }
+.ai-banner { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 22px; padding: 30px 34px; background: linear-gradient(120deg, #2d2b73, #4a44a8); border-radius: 22px; cursor: pointer; transition: transform .2s, box-shadow .2s; }
+.ai-banner:hover { transform: translateY(-3px); box-shadow: 0 18px 40px rgba(45, 43, 115, .28); }
+.ai-icon { display: grid; place-items: center; width: 62px; height: 62px; color: #2d2b73; background: #fff; border-radius: 18px; font-size: 30px; }
+.ai-copy h3 { margin: 0 0 6px; color: #fff; font-size: 24px; }
+.ai-copy p { margin: 0; max-width: 640px; color: #d7d6f1; line-height: 1.8; font-size: 14px; }
 .project-card { padding: 26px; background: #fff; border: 1px solid var(--line); border-radius: 20px; cursor: pointer; transition: transform .2s, box-shadow .2s; }
 .project-card:hover { transform: translateY(-4px); box-shadow: var(--shadow); }
 .project-top { display: flex; justify-content: space-between; color: var(--violet); font-size: 13px; }
@@ -148,6 +166,7 @@ const businesses = [
   .hero-actions { flex-direction: column; align-items: stretch; }
   .hero-visual { min-height: 390px; }
   .business-grid { grid-template-columns: 1fr; }
+  .ai-banner { grid-template-columns: 1fr; justify-items: center; text-align: center; }
 }
 </style>
 

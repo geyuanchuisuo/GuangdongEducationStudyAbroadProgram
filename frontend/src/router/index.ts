@@ -14,6 +14,7 @@ const routes: RouteRecordRaw[] = [
       { path: 'events', name: 'Events', component: () => import('../views/public/Events.vue') },
       { path: 'policies', name: 'Policies', component: () => import('../views/public/Policies.vue') },
       { path: 'faq', name: 'Faq', component: () => import('../views/public/Faq.vue') },
+      { path: 'knowledge', name: 'Knowledge', component: () => import('../views/public/Knowledge.vue') },
     ],
   },
   { path: '/login', name: 'Login', component: () => import('../views/Login.vue'), meta: { guest: true } },

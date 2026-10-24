@@ -29,6 +29,7 @@ const links = [
   { path: '/events', label: '课程与活动' },
   { path: '/policies', label: '留学政策' },
   { path: '/faq', label: '常见问题' },
+  { path: '/knowledge', label: '智能问答' },
 ]
 
 function go(path: string) {

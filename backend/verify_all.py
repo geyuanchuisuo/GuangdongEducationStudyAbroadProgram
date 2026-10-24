@@ -222,11 +222,13 @@ test(f'/api/v1/reports router↔OpenAPI 一致（动态 {len(_openapi_report_pat
      lambda: None if _router_report_paths == _openapi_report_paths and _openapi_report_paths else
      (_ for _ in ()).throw(Exception(f'router={sorted(_router_report_paths)} openapi={sorted(_openapi_report_paths)}')))
 
-# ── 知识检索路由（独立 /knowledge，Milvus 混合检索，2026-10-24 一期） ─────────
+# ── 知识检索路由（独立 /knowledge，Milvus 混合检索 2026-10-24 一期 + v6.13.0 RAG 问答） ─────────
 expected_knowledge_paths = [
     '/api/v1/knowledge/search',
+    '/api/v1/knowledge/ask',
+    '/api/v1/knowledge/ask/stream',
 ]
-test(f'/api/v1/knowledge (1 path, 知识库混合检索)',
+test(f'/api/v1/knowledge (3 paths, 知识库混合检索 + RAG 问答)',
      lambda: None if all(p in routes for p in expected_knowledge_paths) else
      (_ for _ in ()).throw(Exception('missing')))
 
