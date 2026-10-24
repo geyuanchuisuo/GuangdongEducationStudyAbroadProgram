@@ -123,8 +123,10 @@ const businesses = [
 .visual-card strong { display: block; margin: 8px 0; font-size: 19px; }
 .visual-card p { margin: 0; color: #7b7893; line-height: 1.6; font-size: 13px; }
 .business-grid, .project-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; }
-.business-card { padding: 25px; background: #fff; border: 1px solid var(--line); border-radius: 20px; }
-.business-icon { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 14px; }
+.business-card { padding: 25px; background: #fff; border: 1px solid var(--line); border-radius: 20px; transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease; }
+.business-card:hover { transform: translateY(-5px); box-shadow: var(--shadow); border-color: #c9c6ec; }
+.business-icon { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 14px; transition: transform .25s ease; }
+.business-card:hover .business-icon { transform: scale(1.08) rotate(-4deg); }
 .business-icon.lime { background: var(--mint); color: #5e8c0d; }
 .business-icon.amber { background: var(--yellow-soft); color: #a36e00; }
 .business-icon.purple { background: #efeffa; color: var(--violet); }
@@ -137,8 +139,10 @@ const businesses = [
 .ai-icon { display: grid; place-items: center; width: 62px; height: 62px; color: #2d2b73; background: #fff; border-radius: 18px; font-size: 30px; }
 .ai-copy h3 { margin: 0 0 6px; color: #fff; font-size: 24px; }
 .ai-copy p { margin: 0; max-width: 640px; color: #d7d6f1; line-height: 1.8; font-size: 14px; }
-.project-card { padding: 26px; background: #fff; border: 1px solid var(--line); border-radius: 20px; cursor: pointer; transition: transform .2s, box-shadow .2s; }
-.project-card:hover { transform: translateY(-4px); box-shadow: var(--shadow); }
+.project-card { padding: 26px; background: #fff; border: 1px solid var(--line); border-radius: 20px; cursor: pointer; transition: transform .2s, box-shadow .2s, border-color .2s; }
+.project-card:hover { transform: translateY(-4px); box-shadow: var(--shadow); border-color: #c9c6ec; }
+.project-card button .el-icon { transition: transform .2s ease; }
+.project-card:hover button .el-icon { transform: translateX(3px); }
 .project-top { display: flex; justify-content: space-between; color: var(--violet); font-size: 13px; }
 .project-top b { padding: 5px 9px; color: var(--ink-deep); background: var(--mint); border-radius: 999px; }
 .project-card h3 { margin: 22px 0 10px; font-size: 21px; color: var(--ink-deep); }
@@ -147,11 +151,15 @@ const businesses = [
 .project-card button { display: flex; align-items: center; gap: 7px; padding: 0; border: 0; color: var(--violet); background: transparent; font-weight: 800; cursor: pointer; }
 .split-section { display: grid; grid-template-columns: 1.4fr .6fr; gap: 26px; }
 .event-list { display: grid; gap: 12px; }
-.event-list button { display: grid; grid-template-columns: 80px 1fr 30px; align-items: center; gap: 18px; padding: 18px; border: 1px solid var(--line); border-radius: 16px; color: var(--ink-deep); background: #fff; text-align: left; cursor: pointer; }
+.event-list button { display: grid; grid-template-columns: 80px 1fr 30px; align-items: center; gap: 18px; padding: 18px; border: 1px solid var(--line); border-radius: 16px; color: var(--ink-deep); background: #fff; text-align: left; cursor: pointer; transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease; }
+.event-list button:hover { transform: translateX(4px); border-color: #c9c6ec; box-shadow: 0 10px 26px rgba(45, 43, 115, .08); }
+.event-list button .el-icon { transition: transform .2s ease; }
+.event-list button:hover .el-icon { transform: translateX(3px); }
 .event-date { color: var(--violet); font-weight: 900; }
 .event-list b, .event-list small { display: block; }
 .event-list small { margin-top: 5px; color: var(--muted); }
-.service-banner { padding: 32px; color: #fff; background: var(--ink-deep); border-radius: 22px; }
+.service-banner { padding: 32px; color: #fff; background: var(--ink-deep); border-radius: 22px; transition: transform .25s ease, box-shadow .25s ease; }
+.service-banner:hover { transform: translateY(-4px); box-shadow: var(--shadow); }
 .service-banner > .el-icon { font-size: 35px; color: #8dd933; }
 .service-banner h3 { font-size: 25px; }
 .service-banner p { color: #d4d3ed; line-height: 1.8; }
