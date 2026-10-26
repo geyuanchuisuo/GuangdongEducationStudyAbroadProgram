@@ -2,11 +2,22 @@
 
 覆盖三态降级链：model（网关正常）/ retrieval_only（网关失败或零命中）/
 unavailable（Milvus 不可用），以及 SSE 端点的事件序列。
+v6.14.0：链路检索升级为双集合（search_dual），改写层在本文件统一短路（独立覆盖见
+test_query_rewrite_and_dual.py）。
 """
 
+import pytest
+
 from app.schemas.knowledge import KnowledgeItem, KnowledgeSearchResponse
+from app.services import query_rewriter as qr_module
 from app.services.knowledge_qa_service import knowledge_qa_service
 from app.services.knowledge_service import knowledge_service
+
+
+@pytest.fixture(autouse=True)
+def _skip_rewrite(monkeypatch):
+    """问答链路测试统一跳过改写层（不连外网；改写行为在专项文件覆盖）。"""
+    monkeypatch.setattr(qr_module.query_rewriter, "rewrite", lambda q: (q, False))
 
 
 def _search_response(kb_source: str = "milvus", n: int = 2) -> KnowledgeSearchResponse:
@@ -39,7 +50,7 @@ def _forbid_gateway(monkeypatch):
 
 
 async def test_ask_unavailable_when_milvus_down(monkeypatch):
-    monkeypatch.setattr(knowledge_service, "search", lambda q, k=5, c=None: _search_response("unavailable", 0))
+    monkeypatch.setattr(knowledge_service, "search_dual", lambda q, k=5, c=None: _search_response("unavailable", 0))
     _forbid_gateway(monkeypatch)
     result = await knowledge_qa_service.ask("新加坡签证")
     assert result.answer_source == "unavailable"
@@ -49,7 +60,7 @@ async def test_ask_unavailable_when_milvus_down(monkeypatch):
 
 async def test_ask_retrieval_only_on_zero_hits(monkeypatch):
     # 检索正常但零命中：不调网关，固定提示 + retrieval_only
-    monkeypatch.setattr(knowledge_service, "search", lambda q, k=5, c=None: _search_response("milvus", 0))
+    monkeypatch.setattr(knowledge_service, "search_dual", lambda q, k=5, c=None: _search_response("milvus", 0))
     _forbid_gateway(monkeypatch)
     result = await knowledge_qa_service.ask("完全不相关的问题")
     assert result.answer_source == "retrieval_only"
@@ -57,7 +68,7 @@ async def test_ask_retrieval_only_on_zero_hits(monkeypatch):
 
 
 async def test_ask_retrieval_only_when_gateway_down(monkeypatch):
-    monkeypatch.setattr(knowledge_service, "search", lambda q, k=5, c=None: _search_response())
+    monkeypatch.setattr(knowledge_service, "search_dual", lambda q, k=5, c=None: _search_response())
 
     async def bad_stream(messages):
         raise RuntimeError("gateway down")
@@ -75,7 +86,7 @@ async def test_ask_retrieval_only_when_gateway_down(monkeypatch):
 
 
 async def test_ask_model_stream_ok(monkeypatch):
-    monkeypatch.setattr(knowledge_service, "search", lambda q, k=5, c=None: _search_response())
+    monkeypatch.setattr(knowledge_service, "search_dual", lambda q, k=5, c=None: _search_response())
 
     async def good_stream(messages):
         yield "新加坡签证需要"
@@ -95,7 +106,7 @@ async def test_ask_model_stream_ok(monkeypatch):
 
 
 async def test_ask_stream_event_sequence(monkeypatch):
-    monkeypatch.setattr(knowledge_service, "search", lambda q, k=5, c=None: _search_response())
+    monkeypatch.setattr(knowledge_service, "search_dual", lambda q, k=5, c=None: _search_response())
 
     async def good_stream(messages):
         yield "回答A"

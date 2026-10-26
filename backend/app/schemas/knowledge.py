@@ -21,6 +21,10 @@ class KnowledgeItem(BaseModel):
     section: str = Field(..., description="来源章节（FAQ 为原问题）")
     doc_type: str = Field(..., description="切片类型：faq=问答对 / doc=长文")
     score: float | None = Field(None, description="相关度分数（RRF 融合排名分）")
+    source: str = Field(
+        "knowledge",
+        description='来源集合（v6.14.0 双集合检索）："faq"=问答对库 / "knowledge"=长文库；旧数据默认 knowledge',
+    )
 
 
 class KnowledgeSearchResponse(BaseModel):
@@ -57,3 +61,9 @@ class KnowledgeAskResponse(BaseModel):
         default_factory=list, description="仅 retrieval_only 降级时返回的检索原文片段"
     )
     total: int = Field(0, description="本次引用/返回的检索条数")
+    rewritten_query: str | None = Field(
+        None, description="v6.14.0：检索用改写问题；未改写时为 null"
+    )
+    was_rewritten: bool = Field(
+        False, description="v6.14.0：本次检索是否发生了问题改写"
+    )

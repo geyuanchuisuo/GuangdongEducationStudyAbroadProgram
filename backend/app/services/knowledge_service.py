@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import threading
+from concurrent.futures import ThreadPoolExecutor
 
 from app.config import settings
 from app.schemas.knowledge import KnowledgeItem, KnowledgeSearchResponse
@@ -31,6 +32,7 @@ class KnowledgeService:
     def __init__(self, uri: str | None = None, collection: str | None = None) -> None:
         self._uri = uri or settings.MILVUS_URI
         self._collection = collection or settings.MILVUS_COLLECTION
+        self._faq_collection = settings.MILVUS_FAQ_COLLECTION
         self._client = None
         self._lock = threading.Lock()
 
@@ -99,19 +101,83 @@ class KnowledgeService:
         )
         logger.info("知识库 collection 已创建: %s (%s)", self._collection, self._uri)
 
+    def ensure_faq_collection(self) -> None:
+        """问答对集合（v6.14.0）：仅 question 参与向量化与 BM25，answer 纯存储。"""
+        client = self._get_client()
+        if client.has_collection(self._faq_collection):
+            return
+
+        from pymilvus import DataType, Function, FunctionType, MilvusClient
+
+        schema = MilvusClient.create_schema()
+        schema.add_field("id", DataType.INT64, is_primary=True, auto_id=True)
+        schema.add_field("chunk_id", DataType.VARCHAR, max_length=64)
+        schema.add_field(
+            "question",
+            DataType.VARCHAR,
+            max_length=1024,
+            enable_analyzer=True,
+            analyzer_params={"tokenizer": "jieba"},
+        )
+        schema.add_field("answer", DataType.VARCHAR, max_length=4096)
+        schema.add_field("category", DataType.VARCHAR, max_length=32, is_partition_key=True)
+        schema.add_field("source_file", DataType.VARCHAR, max_length=256)
+        schema.add_field("dense", DataType.FLOAT_VECTOR, dim=settings.EMBED_DIM)
+        schema.add_field("sparse", DataType.SPARSE_FLOAT_VECTOR)
+        schema.add_function(
+            Function(
+                name="question_bm25",
+                function_type=FunctionType.BM25,
+                input_field_names=["question"],
+                output_field_names=["sparse"],
+            )
+        )
+        index_params = client.prepare_index_params()
+        index_params.add_index(
+            field_name="dense", index_type="HNSW", metric_type="COSINE",
+            params={"M": 16, "efConstruction": 200},
+        )
+        index_params.add_index(
+            field_name="sparse", index_type="SPARSE_INVERTED_INDEX", metric_type="BM25",
+        )
+        client.create_collection(self._faq_collection, schema=schema, index_params=index_params)
+        logger.info("FAQ 问答对 collection 已创建: %s", self._faq_collection)
+
     # ---- 嵌入 ---------------------------------------------------------------
 
     def embed_texts(self, texts: list[str]) -> list[list[float]]:
-        """调 Ollama bge-m3 批量嵌入（单批 ≤ _EMBED_BATCH 条）。"""
+        """调 Ollama bge-m3 批量嵌入（单批 ≤ _EMBED_BATCH 条）。
+
+        网络韧性（LOG-117）：本机 Ollama 偶发对批量长文本请求重置连接
+        （WinError 10054），批次级重试 2 次，仍失败则逐条兜底——单条失败
+        才向上抛（导入脚本据此终止）。
+        """
         import ollama
 
         client = ollama.Client(host=settings.OLLAMA_BASE_URL, timeout=120.0)
         vectors: list[list[float]] = []
         for i in range(0, len(texts), _EMBED_BATCH):
             batch = texts[i : i + _EMBED_BATCH]
-            resp = client.embed(model=settings.EMBED_MODEL, input=batch)
-            vectors.extend(list(v) for v in resp["embeddings"])
+            batch_vecs = self._embed_one_batch(client, batch)
+            vectors.extend(batch_vecs)
         return vectors
+
+    def _embed_one_batch(self, client, batch: list[str]) -> list[list[float]]:
+        last_exc: Exception | None = None
+        for attempt in range(3):  # 2 次重试
+            try:
+                resp = client.embed(model=settings.EMBED_MODEL, input=batch)
+                return [list(v) for v in resp["embeddings"]]
+            except Exception as exc:  # noqa: BLE001 - 网络类异常重试
+                last_exc = exc
+                logger.warning("嵌入批次失败（第 %d 次）: %s", attempt + 1, exc)
+        # 批量连败 → 逐条兜底，定位坏数据并隔离单条网络抖动
+        results: list[list[float]] = []
+        for text in batch:
+            resp = client.embed(model=settings.EMBED_MODEL, input=text)
+            results.append(list(resp["embeddings"][0]))
+        logger.info("批次改逐条嵌入完成（%d 条）", len(batch))
+        return results
 
     # ---- 导入 ---------------------------------------------------------------
 
@@ -149,7 +215,81 @@ class KnowledgeService:
             total += len(batch)
         return total
 
+    # ---- FAQ 集合写入（v6.14.0） --------------------------------------------
+
+    def delete_faq_by_source(self, source_file: str) -> None:
+        """按来源文件清空旧问答对（FAQ 导入前调用，幂等）。"""
+        client = self._get_client()
+        client.delete(
+            collection_name=self._faq_collection,
+            filter=f'source_file == "{source_file}"',
+        )
+
+    def upsert_qa_pairs(self, pairs) -> int:
+        """问答对：仅 question 嵌入后写入 FAQ 集合，返回写入条数。"""
+        if not pairs:
+            return 0
+        self.ensure_faq_collection()
+        client = self._get_client()
+        vectors = self.embed_texts([p.question for p in pairs])
+        rows = [
+            {
+                "chunk_id": p.chunk_id,
+                "question": p.question,
+                "answer": p.answer,
+                "category": p.category,
+                "source_file": p.source_file,
+                "dense": vec,
+            }
+            for p, vec in zip(pairs, vectors)
+        ]
+        total = 0
+        for i in range(0, len(rows), _INSERT_BATCH):
+            batch = rows[i : i + _INSERT_BATCH]
+            client.insert(collection_name=self._faq_collection, data=batch)
+            total += len(batch)
+        return total
+
     # ---- 混合检索 -----------------------------------------------------------
+
+    def _hybrid_search_one(
+        self,
+        collection: str,
+        query: str,
+        top_k: int,
+        filter_expr: str | None,
+        output_fields: list[str],
+    ) -> list[dict]:
+        """单集合稠密+BM25 双路召回，RRF 融合；返回原始 hit 字典列表。"""
+        from pymilvus import AnnSearchRequest, RRFRanker
+
+        client = self._get_client()
+        query_vec = self.embed_texts([query])[0]
+        dense_req = AnnSearchRequest(
+            data=[query_vec],
+            anns_field="dense",
+            param={"metric_type": "COSINE", "params": {"ef": 64}},
+            limit=top_k,
+        )
+        # BM25 Function 字段直接传查询原文，稀疏向量由 Milvus 服务端生成
+        sparse_req = AnnSearchRequest(
+            data=[query],
+            anns_field="sparse",
+            param={"metric_type": "BM25"},
+            limit=top_k,
+        )
+        results = client.hybrid_search(
+            collection_name=collection,
+            reqs=[dense_req, sparse_req],
+            ranker=RRFRanker(60),
+            limit=top_k,
+            filter=filter_expr,
+            output_fields=output_fields,
+        )
+        return [
+            dict(hit) if isinstance(hit, dict) else {"distance": 0.0, "entity": {}}
+            for hit in results[0]
+        ]
 
     def search(
         self,
@@ -157,47 +297,25 @@ class KnowledgeService:
         top_k: int = 5,
         categories: list[str] | None = None,
     ) -> KnowledgeSearchResponse:
-        """稠密语义 + BM25 关键词双路召回，RRF 融合。
+        """稠密语义 + BM25 关键词双路召回，RRF 融合（长文集合）。
 
+        v6.14.0 起默认走双集合（search_dual）：长文 + FAQ 并行检索统一融合。
         Milvus/Ollama 任一不可用时返回 kb_source="unavailable"（空结果），
         由调用方按三态口径处理，不向上抛异常。
         """
         try:
             self.ensure_collection()
-            client = self._get_client()
-            query_vec = self.embed_texts([query])[0]
-
-            from pymilvus import AnnSearchRequest, RRFRanker
-
-            dense_req = AnnSearchRequest(
-                data=[query_vec],
-                anns_field="dense",
-                param={"metric_type": "COSINE", "params": {"ef": 64}},
-                limit=top_k,
-            )
-            # BM25 Function 字段直接传查询原文，稀疏向量由 Milvus 服务端生成
-            sparse_req = AnnSearchRequest(
-                data=[query],
-                anns_field="sparse",
-                param={"metric_type": "BM25"},
-                limit=top_k,
-            )
             filter_expr = ""
             if categories:
                 quoted = ", ".join(f'"{c}"' for c in categories)
                 filter_expr = f"category in [{quoted}]"
-
-            results = client.hybrid_search(
-                collection_name=self._collection,
-                reqs=[dense_req, sparse_req],
-                ranker=RRFRanker(60),
-                limit=top_k,
-                filter=filter_expr or None,
-                output_fields=["content", "category", "source_file", "section", "doc_type"],
+            hits = self._hybrid_search_one(
+                self._collection, query, top_k, filter_expr or None,
+                ["content", "category", "source_file", "section", "doc_type"],
             )
             items: list[KnowledgeItem] = []
-            for hit in results[0]:
-                entity = hit.get("entity", {}) if isinstance(hit, dict) else {}
+            for hit in hits:
+                entity = hit.get("entity", {}) or {}
                 items.append(
                     KnowledgeItem(
                         content=entity.get("content", ""),
@@ -205,13 +323,118 @@ class KnowledgeService:
                         source_file=entity.get("source_file", ""),
                         section=entity.get("section", ""),
                         doc_type=entity.get("doc_type", ""),
-                        score=float(hit.get("distance", 0.0)) if isinstance(hit, dict) else 0.0,
+                        score=float(hit.get("distance", 0.0)),
+                        source="knowledge",
                     )
                 )
             return KnowledgeSearchResponse(kb_source="milvus", items=items, total=len(items))
         except Exception as exc:  # noqa: BLE001 - 依赖外部服务，按三态口径降级
             logger.warning("知识检索不可用（Milvus/Ollama）: %s", exc)
             return KnowledgeSearchResponse(kb_source="unavailable", items=[], total=0)
+
+    def search_dual(
+        self,
+        query: str,
+        top_k: int = 5,
+        categories: list[str] | None = None,
+    ) -> KnowledgeSearchResponse:
+        """双集合检索（v6.14.0）：长文库 + FAQ 问答对库并行召回，RRF(k=60) 统一融合。
+
+        - FAQ 库仅对 question 向量化（问题-问题匹配更准），命中后 content 为
+          "问题\\n答案"，section 为原问题，doc_type="faq"；
+        - 单库失败不影响另一路（失败一侧按空结果参与融合）；
+        - 全部失败返回 kb_source="unavailable"。
+        """
+        try:
+            self.ensure_collection()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("知识检索不可用（Milvus 连接）: %s", exc)
+            return KnowledgeSearchResponse(kb_source="unavailable", items=[], total=0)
+
+        filter_expr = ""
+        if categories:
+            quoted = ", ".join(f'"{c}"' for c in categories)
+            filter_expr = f"category in [{quoted}]"
+
+        def run_knowledge():
+            return self._hybrid_search_one(
+                self._collection, query, top_k, filter_expr or None,
+                ["content", "category", "source_file", "section", "doc_type"],
+            )
+
+        def run_faq():
+            self.ensure_faq_collection()
+            return self._hybrid_search_one(
+                self._faq_collection, query, top_k, filter_expr or None,
+                ["question", "answer", "category", "source_file"],
+            )
+
+        # 两库并行检索：线程池并发（Milvus SDK 同步实现），延迟取最慢一路
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            fa_future = pool.submit(run_knowledge)
+            fq_future = pool.submit(run_faq)
+            knowledge_exc: Exception | None = None
+            faq_exc: Exception | None = None
+            try:
+                knowledge_hits = fa_future.result()
+            except Exception as exc:  # noqa: BLE001 - 单库失败不影响另一路
+                knowledge_exc = exc
+                knowledge_hits = []
+            try:
+                faq_hits = fq_future.result()
+            except Exception as exc:  # noqa: BLE001
+                faq_exc = exc
+                faq_hits = []
+
+        if knowledge_exc is not None and faq_exc is not None:
+            logger.warning("双集合检索均不可用: knowledge=%s faq=%s", knowledge_exc, faq_exc)
+            return KnowledgeSearchResponse(kb_source="unavailable", items=[], total=0)
+        if knowledge_exc is not None:
+            logger.warning("长文库检索失败（FAQ 路正常）: %s", knowledge_exc)
+        if faq_exc is not None:
+            logger.warning("FAQ 库检索失败（长文路正常）: %s", faq_exc)
+
+        # RRF 融合：score = Σ 1/(k + rank)，k=60 与库内融合一致；按内容哈希去重
+        from app.utils.knowledge_chunker import make_chunk_id
+
+        RRF_K = 60
+        fused: dict[str, dict] = {}
+        for hits, source in ((knowledge_hits, "knowledge"), (faq_hits, "faq")):
+            for rank, hit in enumerate(hits, 1):
+                entity = hit.get("entity", {}) or {}
+                if source == "faq":
+                    q, a = entity.get("question", ""), entity.get("answer", "")
+                    item = KnowledgeItem(
+                        content=f"{q}\n{a}".strip(),
+                        category=entity.get("category", ""),
+                        source_file=entity.get("source_file", ""),
+                        section=q[:200] or a[:200],
+                        doc_type="faq",
+                        score=0.0,
+                        source="faq",
+                    )
+                else:
+                    item = KnowledgeItem(
+                        content=entity.get("content", ""),
+                        category=entity.get("category", ""),
+                        source_file=entity.get("source_file", ""),
+                        section=entity.get("section", ""),
+                        doc_type=entity.get("doc_type", ""),
+                        score=0.0,
+                        source="knowledge",
+                    )
+                key = make_chunk_id(item.category, item.doc_type, item.content)
+                if key not in fused:
+                    fused[key] = {"item": item, "score": 0.0}
+                fused[key]["score"] += 1.0 / (RRF_K + rank)
+
+        ranked = sorted(fused.values(), key=lambda v: v["score"], reverse=True)[:top_k]
+        items = []
+        for v in ranked:
+            item = v["item"]
+            item.score = round(v["score"], 6)
+            items.append(item)
+        return KnowledgeSearchResponse(kb_source="milvus", items=items, total=len(items))
 
 
 # 模块级单例：Milvus/Ollama 连接懒加载复用

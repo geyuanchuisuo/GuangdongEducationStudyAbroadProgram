@@ -5,8 +5,10 @@
     python -m scripts.ingest_knowledge --dry-run    # 只解析统计，不写库
     python -m scripts.ingest_knowledge --docs-dir "D:/xxx/docs/教育服务"   # 自定义资料目录
 
+v6.14.0 双集合：FAQ 问答对（xlsx）→ 独立集合 yuejiao_faq（仅 question 向量化）；
+md/docx 长文 → yuejiao_knowledge；两库并行维护，互不重复。
+
 分类目录：公司信息 / 公司业务 / 留学政策 → category 字段（即检索过滤值）。
-FAQ 以《常见问答对.xlsx》为准；《问答对文本版.txt》为其文本副本，跳过避免重复。
 前置条件：Milvus（vector/start.bat）与 Ollama（bge-m3 模型）已启动。
 """
 
@@ -17,7 +19,7 @@ import sys
 from pathlib import Path
 
 from app.config import settings
-from app.utils.knowledge_chunker import CATEGORIES, parse_file
+from app.utils.knowledge_chunker import CATEGORIES, parse_file, parse_qa_pairs_xlsx
 from app.utils.logger import logger
 
 # 相对资料目录默认基于 backend 运行目录（python -m scripts.*）
@@ -63,25 +65,43 @@ def main() -> int:
 
     if not args.dry_run:
         knowledge_service.ensure_collection()
+        knowledge_service.ensure_faq_collection()
 
     total_chunks = 0
-    stats: list[tuple[str, str, int]] = []
+    total_qa = 0
+    stats: list[tuple[str, str, str, int]] = []  # (category, file, 库, 条数)
     for path, category in files:
+        if path.suffix.lower() == ".xlsx":
+            # 问答对 → 独立 FAQ 集合（仅 question 向量化）
+            pairs = parse_qa_pairs_xlsx(str(path), category=category, source_file=path.name)
+            if args.dry_run:
+                stats.append((category, path.name, "faq", len(pairs)))
+                total_qa += len(pairs)
+                continue
+            # v6.14.0 迁移：同时从长文集合剔除该文件旧 FAQ 切片（双库不再重复）
+            knowledge_service.delete_by_source(path.name)
+            knowledge_service.delete_faq_by_source(path.name)
+            inserted = knowledge_service.upsert_qa_pairs(pairs)
+            stats.append((category, path.name, "faq", inserted))
+            total_qa += inserted
+            print(f"  [{category}] {path.name} → faq 集合: {inserted} 条问答对")
+            continue
+
         chunks = parse_file(str(path), category=category, source_file=path.name)
         if args.dry_run:
-            stats.append((category, path.name, len(chunks)))
+            stats.append((category, path.name, "knowledge", len(chunks)))
             total_chunks += len(chunks)
             continue
         knowledge_service.delete_by_source(path.name)
         inserted = knowledge_service.upsert_chunks(chunks)
-        stats.append((category, path.name, inserted))
+        stats.append((category, path.name, "knowledge", inserted))
         total_chunks += inserted
-        print(f"  [{category}] {path.name}: {inserted} 条切片")
+        print(f"  [{category}] {path.name} → knowledge 集合: {inserted} 条切片")
 
     mode = "（dry-run，未写库）" if args.dry_run else ""
-    print(f"\n导入完成{mode}：{len(files)} 个文件，共 {total_chunks} 条知识切片")
+    print(f"\n导入完成{mode}：长文 {total_chunks} 条（knowledge 集合）+ 问答对 {total_qa} 条（faq 集合）")
     by_cat: dict[str, int] = {}
-    for category, _, n in stats:
+    for category, _, _, n in stats:
         by_cat[category] = by_cat.get(category, 0) + n
     for category in CATEGORIES:
         print(f"  {category}: {by_cat.get(category, 0)} 条")

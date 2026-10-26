@@ -48,6 +48,20 @@ class KnowledgeChunk:
     doc_type: str
 
 
+@dataclass
+class QAPair:
+    """一条问答对（v6.14.0 独立 FAQ 集合用）：仅 question 参与向量化。"""
+
+    question: str
+    answer: str
+    category: str
+    source_file: str
+
+    @property
+    def chunk_id(self) -> str:
+        return make_chunk_id(self.category, DOC_TYPE_FAQ, self.question)
+
+
 def make_chunk_id(category: str, doc_type: str, content: str) -> str:
     return hashlib.md5(f"{category}|{doc_type}|{content}".encode("utf-8")).hexdigest()
 
@@ -183,8 +197,8 @@ def parse_docx(path: str, *, category: str, source_file: str) -> list[KnowledgeC
     return _build_chunks(sections, category=category, source_file=source_file, doc_type=DOC_TYPE_DOC)
 
 
-def parse_qa_xlsx(path: str, *, category: str, source_file: str) -> list[KnowledgeChunk]:
-    """问答对 xlsx：列头含「问」/「答」定位两列（缺省前两列），一行一问一答一个切片。"""
+def _iter_qa_rows_xlsx(path: str):
+    """xlsx 问答对行迭代器：列头含「问」/「答」定位两列（缺省前两列），yield (q, a)。"""
     from openpyxl import load_workbook
 
     wb = load_workbook(path, read_only=True, data_only=True)
@@ -200,26 +214,39 @@ def parse_qa_xlsx(path: str, *, category: str, source_file: str) -> list[Knowled
                     q_idx = i
                 elif "答" in name:
                     a_idx = i
-        chunks: list[KnowledgeChunk] = []
         for row in rows:
             q = str(row[q_idx]).strip() if q_idx < len(row) and row[q_idx] is not None else ""
             a = str(row[a_idx]).strip() if a_idx < len(row) and row[a_idx] is not None else ""
-            if not q and not a:
-                continue
-            content = f"{q}\n{a}".strip()
-            chunks.append(
-                KnowledgeChunk(
-                    chunk_id=make_chunk_id(category, DOC_TYPE_FAQ, content),
-                    content=content,
-                    category=category,
-                    source_file=source_file,
-                    section=q[:100] or a[:100],
-                    doc_type=DOC_TYPE_FAQ,
-                )
-            )
-        return chunks
+            if q or a:
+                yield q, a
     finally:
         wb.close()
+
+
+def parse_qa_pairs_xlsx(path: str, *, category: str, source_file: str) -> list[QAPair]:
+    """问答对 xlsx → QAPair 列表（v6.14.0 独立 FAQ 集合：仅 question 向量化）。"""
+    return [
+        QAPair(question=q, answer=a, category=category, source_file=source_file)
+        for q, a in _iter_qa_rows_xlsx(path)
+    ]
+
+
+def parse_qa_xlsx(path: str, *, category: str, source_file: str) -> list[KnowledgeChunk]:
+    """问答对 xlsx：一行一问一答一个切片（旧单库模式的兼容入口，测试仍在用）。"""
+    chunks: list[KnowledgeChunk] = []
+    for q, a in _iter_qa_rows_xlsx(path):
+        content = f"{q}\n{a}".strip()
+        chunks.append(
+            KnowledgeChunk(
+                chunk_id=make_chunk_id(category, DOC_TYPE_FAQ, content),
+                content=content,
+                category=category,
+                source_file=source_file,
+                section=q[:100] or a[:100],
+                doc_type=DOC_TYPE_FAQ,
+            )
+        )
+    return chunks
 
 
 def parse_qa_txt(text: str, *, category: str, source_file: str) -> list[KnowledgeChunk]:

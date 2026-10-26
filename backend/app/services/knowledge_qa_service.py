@@ -31,6 +31,7 @@ from app.schemas.knowledge import (
     KnowledgeItem,
 )
 from app.services.knowledge_service import knowledge_service
+from app.services.query_rewriter import query_rewriter
 from app.utils.logger import logger
 
 _NO_MATCH_ANSWER = "知识库中未找到与您问题相关的内容，建议换个问法，或联系顾问进一步咨询。"
@@ -79,10 +80,21 @@ class KnowledgeQAService:
     async def ask_stream(
         self, question: str, top_k: int = 5
     ) -> AsyncIterator[dict]:
-        """产出事件流：meta（来源预告）→ token（增量回答）→ done（完整结果）。"""
-        # ① 检索（knowledge_service 为同步实现，放线程池）
+        """产出事件流：meta（改写+来源预告）→ token（增量回答）→ done（完整结果）。
+
+        v6.14.0：检索前先过问题改写层（智能路由+DeepSeek，失败回退原问题），
+        检索升级为双集合（FAQ 问答对 + 长文并行 RRF 融合）；meta/done 携带
+        rewritten_query 与 was_rewritten（未改写时 was_rewritten=False，
+        前端不显示"已理解为"提示）。
+        """
+        # ① 改写（同步 httpx，放线程池；失败内部已回退原问题）
+        search_query, was_rewritten = await asyncio.to_thread(
+            query_rewriter.rewrite, question
+        )
+
+        # ② 双集合检索（knowledge_service 同步实现，放线程池）
         retrieval = await asyncio.to_thread(
-            knowledge_service.search, question, top_k, None
+            knowledge_service.search_dual, search_query, top_k, None
         )
         sources = [
             KnowledgeAskSource(
@@ -109,10 +121,16 @@ class KnowledgeQAService:
 
         yield {
             "event": "meta",
-            "data": {"sources": [s.model_dump() for s in sources], "total": retrieval.total},
+            "data": {
+                "sources": [s.model_dump() for s in sources],
+                "total": retrieval.total,
+                "rewritten_query": search_query if was_rewritten else None,
+                "was_rewritten": was_rewritten,
+            },
         }
 
         # ③ 网关流式生成；失败按「已产出内容 → 非流式重试 → 纯检索」降级
+        # 生成用用户原话（回答对人），改写只用于检索（改写对库）
         messages = _build_messages(question, retrieval.items)
         answer = ""
         gateway_ok = False
@@ -143,6 +161,8 @@ class KnowledgeQAService:
             yield {"event": "done", "data": KnowledgeAskResponse(
                 answer=answer, answer_source="model",
                 sources=[s.model_dump() for s in sources], total=retrieval.total,
+                rewritten_query=search_query if was_rewritten else None,
+                was_rewritten=was_rewritten,
             ).model_dump()}
         else:
             yield {"event": "done", "data": KnowledgeAskResponse(
@@ -150,6 +170,8 @@ class KnowledgeQAService:
                 sources=[s.model_dump() for s in sources],
                 items=[it.model_dump() for it in retrieval.items],
                 total=retrieval.total,
+                rewritten_query=search_query if was_rewritten else None,
+                was_rewritten=was_rewritten,
             ).model_dump()}
 
     # ---- 模型网关（OpenAI 兼容，复用 DIFY_MODEL_* 配置；零改 model_ai_service） ----

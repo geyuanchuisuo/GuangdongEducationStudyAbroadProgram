@@ -16,6 +16,7 @@ interface Round {
   sources: SourceItem[]
   items: ChunkItem[]
   streaming: boolean
+  rewrittenQuery: string | null // v6.14.0：检索用改写问题（未改写为 null）
 }
 
 const question = ref('')
@@ -41,11 +42,15 @@ function handleEvent(round: Round, name: string, raw: string) {
   if (name === 'token') {
     round.answer += payload.delta || ''
     scrollBottom()
+  } else if (name === 'meta') {
+    if (payload.was_rewritten && payload.rewritten_query) round.rewrittenQuery = payload.rewritten_query
   } else if (name === 'done') {
     round.answer = payload.answer ?? round.answer
     round.answerSource = payload.answer_source || 'model'
     round.sources = payload.sources || []
     round.items = payload.items || []
+    if (payload.was_rewritten && payload.rewritten_query) round.rewrittenQuery = payload.rewritten_query
+    else if (payload.was_rewritten === false) round.rewrittenQuery = null
     scrollBottom()
   }
 }
@@ -93,6 +98,7 @@ async function askViaFallback(round: Round, text: string) {
   round.answerSource = data.answer_source || 'unavailable'
   round.sources = data.sources || []
   round.items = data.items || []
+  round.rewrittenQuery = data.was_rewritten && data.rewritten_query ? data.rewritten_query : null
 }
 
 async function ask(preset?: string) {
@@ -100,7 +106,7 @@ async function ask(preset?: string) {
   if (!text || asking.value) return
   question.value = ''
   asking.value = true
-  rounds.value.push({ question: text, answer: '', answerSource: '', sources: [], items: [], streaming: true })
+  rounds.value.push({ question: text, answer: '', answerSource: '', sources: [], items: [], streaming: true, rewrittenQuery: null })
   const round = rounds.value[rounds.value.length - 1]
   scrollBottom()
   try {
@@ -145,6 +151,7 @@ function sourceLabel(s: SourceItem) {
         <div v-for="(round, i) in rounds" :key="i" class="qa-round">
           <div class="qa-question">{{ round.question }}</div>
           <div class="qa-answer">
+            <div v-if="round.rewrittenQuery" class="qa-rewritten">已理解为：{{ round.rewrittenQuery }}</div>
             <template v-if="round.answer">{{ round.answer }}</template>
             <span v-else-if="round.streaming" class="qa-typing">正在检索知识库并生成回答…</span>
 
@@ -216,6 +223,7 @@ function sourceLabel(s: SourceItem) {
 .qa-round { margin-bottom: 22px; }
 .qa-question { width: fit-content; max-width: 78%; margin-left: auto; padding: 12px 16px; color: #fff; background: var(--violet); border-radius: 16px 16px 4px 16px; line-height: 1.7; }
 .qa-answer { max-width: 92%; margin-top: 12px; padding: 16px 18px; background: #f8f8fc; border: 1px solid var(--line); border-radius: 16px 16px 16px 4px; color: var(--ink-deep); line-height: 1.9; white-space: pre-wrap; word-break: break-word; }
+.qa-rewritten { margin: -4px 0 10px; padding: 6px 10px; color: var(--violet); background: #efeffa; border-left: 3px solid var(--violet); border-radius: 6px; font-size: 12px; line-height: 1.6; white-space: normal; }
 .qa-typing { color: var(--muted); animation: qa-blink 1.2s infinite; }
 @keyframes qa-blink { 50% { opacity: .4; } }
 .qa-note { margin-top: 12px; }

@@ -6,6 +6,7 @@
 
 ## 零、快速定位（打开项目先看这里）
 
+> v6.14.0（2026-10-27，add）：**双集合检索 + 问题改写层**——①FAQ 问答对拆独立集合 `yuejiao_faq`（仅 question 向量化，问题-问题匹配），`yuejiao_knowledge` 剔除 FAQ 只留 74 条长文；`search_dual` 两库并行 + RRF(60) 融合，`KnowledgeItem` 增 `source`（faq/knowledge），/search 与 /ask 均走双集合（118 paths 不变）。②改写层 `query_rewriter.py`：智能路由跳过短查询/规范问句（IHK 类 0ms），模糊问句走 DeepSeek 改写（失败回退原问题），**改写对库、回答对人**，meta/done 增 `rewritten_query`/`was_rewritten`，前端显示「已理解为：XXX」。③修复三缺陷（LOG-117）：**本机 localhost 解析 IPv6 致 10054 断连（默认值一律改 127.0.0.1）**、deepseek-flash 推理模型思考链耗尽 max_tokens 致改写空输出（去限额剥 think）、迁移漏剔除原库 FAQ。实测改写「想去新加坡读书那个本硕连读」→「新加坡本硕连读项目有哪些，申请条件是什么？」；pytest 202/202。详见 `docs/知识库混合检索方案.md` §13。
 > v6.13.0（2026-10-24，add）：**智能知识问答模块（RAG）**——主页新增独立 AI 问答（不碰既有客服 Agent/Dify）：`POST /api/v1/knowledge/ask(/stream)`（公开，路由 116→118 paths）= v6.12.0 混合检索 + 受限 Prompt + 直连模型网关流式生成，回答附来源引用；`answer_source` 三态降级（model/retrieval_only/unavailable）；前端独立问答页 `/knowledge`（流式打字机）+ 主页卡片 + 导航入口，AgentDock/platform.ts 零改动；M0 零改动（网关直连在 knowledge_qa_service 自实现，复用 DIFY_MODEL_*）。实机端到端通过（学费问答数字与知识库一致）；pytest 191/191 + npm build ✓。详见 `docs/知识库混合检索方案.md` §12 / LOG-116。
 > v6.12.0（2026-10-24，add）：**知识库混合检索一期交付**——教育服务三类资料（《公司信息》《公司业务》《留学政策》）切片入 Milvus（复用 `vector/` 已 Docker 化的 v2.6.24 standalone），Ollama bge-m3 稠密 + Milvus 内置 BM25（jieba 分词）稀疏双路 RRF 混合检索；新增公开接口 `POST /api/v1/knowledge/search`（独立 /knowledge 前缀，115→116 paths）+ 幂等导入脚本 `backend/scripts/ingest_knowledge.py`（110 条切片实测入库，5 类典型查询全命中）；方案与 8 项决策记录见 `docs/知识库混合检索方案.md`；pytest 183/183；Dify 客服 Chatflow 对接与 RAG 生成层为二期（另行审批）。详见 LOG-115。
 > v6.11.60（2026-10-20，master_ZNBG）：Dify 出网 DNS 修复（compose x-shared-dns 锚点固定 9 个出网服务公共 DNS）+ 三大需求缺口修复（客服知识库《企业信息》注入 / 学生端 Agent 登录后主动推送 / 员工与管理层 Agent 组织架构注入）+ Dify 15 个应用收敛为 4 个【调用中】+1 留档+10 个【废案】停用 + `dify_init.py` 修 `export_app_keys` 顺序。详见 LOG-114。
@@ -117,8 +118,8 @@
 2. `docs/项目需求文档.md` — 完整业务需求
 3. `promts/lon/提示词整合测试_demo/docs/基础架构方案_五人并行开发.md` — **主基线，权重最高**
 4. `docs/开发路线图.md` — 当前进度、下一步任务
-5. `docs/接口契约v1.md` — API接口契约（v2.13.0，118 paths）
-6. `docs/更新记录.md` — 最近变更（v6.13.0 智能知识问答 RAG + v6.12.0 知识库混合检索一期 + v6.11.59 Agent对话即办理 + v6.11.58 文件上传研判修复/全量UI测试四项修复+投诉率口径修正 + v6.11.57 一键运行流程修复 + v6.11.56 第二十次同步 master 三线统一 + v6.11.55 本线合入 master 推送云端 + v6.11.54 第十九次同步 master + v6.11.52 第十八次同步 master + v6.11.50 管理层Agent经营数据 + v6.11.43 第十七次同步 master + v6.11.42 文档审计 + v6.11.41 流式空白修复 + v6.11.40 清库重注/种子自动注入 + v6.11.39 全角色Agent流式）
+5. `docs/接口契约v1.md` — API接口契约（v2.14.0，118 paths）
+6. `docs/更新记录.md` — 最近变更（v6.14.0 双集合+改写层 + v6.13.0 智能知识问答 RAG + v6.12.0 知识库混合检索一期 + v6.11.59 Agent对话即办理 + v6.11.58 文件上传研判修复/全量UI测试四项修复+投诉率口径修正 + v6.11.57 一键运行流程修复 + v6.11.56 第二十次同步 master 三线统一 + v6.11.55 本线合入 master 推送云端 + v6.11.54 第十九次同步 master + v6.11.52 第十八次同步 master + v6.11.50 管理层Agent经营数据 + v6.11.43 第十七次同步 master + v6.11.42 文档审计 + v6.11.41 流式空白修复 + v6.11.40 清库重注/种子自动注入 + v6.11.39 全角色Agent流式）
 
 **重要规则**：
 - 主基线文档（基础架构方案）权重 > 其他参考文档（共用基座方案、公共框架等）
