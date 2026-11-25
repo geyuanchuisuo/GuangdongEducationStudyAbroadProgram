@@ -27,7 +27,7 @@ def _mysql_conn():
         host=os.environ.get("SEED_MYSQL_HOST", "127.0.0.1"),
         port=int(os.environ.get("SEED_MYSQL_PORT", "59000")),
         user=os.environ.get("SEED_MYSQL_USER", "root"),
-        password=os.environ.get("SEED_MYSQL_PASSWORD", "420821"),
+        password=os.environ.get("SEED_MYSQL_PASSWORD", "change-me-in-local-env"),
         database=os.environ.get("SEED_MYSQL_DB", "GuangdongEducationStudyAbroadProgram"),
         charset="utf8mb4",
     )

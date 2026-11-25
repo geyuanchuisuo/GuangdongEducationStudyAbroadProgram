@@ -1,0 +1,11 @@
+ragas
+langchain
+langchain-openai
+langchain-ollama
+pymilvus
+ollama
+httpx
+pydantic
+pydantic-settings
+python-docx
+openpyxl

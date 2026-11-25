@@ -1,0 +1,47 @@
+{
+  "generated_at": "2026-10-28T22:42:15",
+  "total_questions": 36,
+  "answerable": 33,
+  "refusal": 3,
+  "ragas_scores": {
+    "context_precision": 0.8208,
+    "context_recall": 0.9697,
+    "faithfulness": 0.8567,
+    "answer_relevancy": 0.944,
+    "overall": 0.8978,
+    "overall_grade": "优秀"
+  },
+  "aux_metrics": {
+    "retrieval_hit_rate": 1.0,
+    "model_answer_rate": 1.0,
+    "refusal_accuracy": 1.0
+  },
+  "refusal_detail": [
+    {
+      "id": 34,
+      "question": "粤教服务在A股上市的股票代号是多少？",
+      "n_retrieved": 5,
+      "answer_source": "model",
+      "refused_correctly": true,
+      "answer_preview": "知识库中未找到相关内容。\n\n现有资料仅介绍了广东省教育服务有限公司（粤教服务）的企业简介、业务与项目信息，未提及公司在A股上市或任何股票代号的信息。建议您就此事直接联系粤教服务顾问核实。"
+    },
+    {
+      "id": 35,
+      "question": "公司2025年的净利润和营收具体是多少？",
+      "n_retrieved": 5,
+      "answer_source": "model",
+      "refused_correctly": true,
+      "answer_preview": "知识库中未找到相关内容。现有资料中未包含公司 2025 年的净利润、营收等财务数据。\n\n如需了解相关经营数据，建议联系顾问咨询，联系方式如下：\n- 电话：020-37628058\n- 邮箱：postmaster@ges1981.com\n- "
+    },
+    {
+      "id": 36,
+      "question": "美国留学F1签证的面签技巧有哪些？",
+      "n_retrieved": 5,
+      "answer_source": "model",
+      "refused_correctly": true,
+      "answer_preview": "知识库中未找到相关内容。\n\n现有资料仅涵盖德国留学签证（含面签）等政策信息，未收录美国 F1 签证面签技巧相关内容，因此无法为您提供准确答复。建议您联系「粤教留学」顾问，获取针对美国留学签证的专业指导。"
+    }
+  ],
+  "judge_model": "deepseek-flash",
+  "embedding_model": "bge-m3"
+}

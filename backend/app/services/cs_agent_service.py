@@ -31,6 +31,19 @@ from app.services.crm_service import CrmService
 from app.services.dify_client import DifyClient
 from app.services.event_service import EventService
 
+# LangChain 引擎（CS_ENGINE=langchain 时使用，add_langchain 分支）
+_cs_engine = None
+
+
+def _get_langchain_engine():
+    """懒加载 LangChain 引擎单例。"""
+    global _cs_engine
+    if _cs_engine is None:
+        from app.services.cs_langchain.engine import CsLangChainEngine
+
+        _cs_engine = CsLangChainEngine()
+    return _cs_engine
+
 logger = logging.getLogger(__name__)
 
 # 客服单会话用户消息轮数上限，超过则归档旧会话并开启新会话（防止 Dify 上下文无限增长）
@@ -162,19 +175,73 @@ class AiService:
         session, faq_resp = await self._begin_turn(request)
         if faq_resp is not None:
             return faq_resp
-        try:
-            dify_resp = await self.dify.chat(
-                query=request.message,
-                user=str(request.user_id or "anonymous"),
-                conversation_id=session.dify_conversation_id,
-            )
-        except httpx.HTTPError as exc:
-            # v6.11.30：Dify 超时/不可用不再直接抛 50001，走三级降级链（Dify→直连模型→本地话术），
-            # 保证本轮一定有回复，避免前端弹"当前助手服务暂不可用"
-            logger.warning("客服 Dify 调用失败（%s），走模型/本地降级", type(exc).__name__)
-            fallback_answer = await self._fallback_answer(request.message, session)
-            dify_resp = {"answer": fallback_answer, "conversation_id": session.dify_conversation_id or ""}
+
+        # LangChain 引擎分支（CS_ENGINE=langchain，add_langchain 分支）
+        if settings.CS_ENGINE == "langchain":
+            dify_resp = await self._langchain_answer(request, session)
+        else:
+            try:
+                dify_resp = await self.dify.chat(
+                    query=request.message,
+                    user=str(request.user_id or "anonymous"),
+                    conversation_id=session.dify_conversation_id,
+                )
+            except httpx.HTTPError as exc:
+                # v6.11.30：Dify 超时/不可用不再直接抛 50001，走三级降级链（Dify→直连模型→本地话术），
+                # 保证本轮一定有回复，避免前端弹"当前助手服务暂不可用"
+                logger.warning("客服 Dify 调用失败（%s），走模型/本地降级", type(exc).__name__)
+                fallback_answer = await self._fallback_answer(request.message, session)
+                dify_resp = {"answer": fallback_answer, "conversation_id": session.dify_conversation_id or ""}
         return await self._finalize_turn(request, session, dify_resp)
+
+    async def _langchain_answer(self, request: ChatRequest, session) -> dict:
+        """LangChain 引擎分支：分类意图 → 组装伪标记 → 回答链。
+
+        复用 _finalize_turn 既有 4 出口业务逻辑（意图归一/转线索/报名/推荐落库/敏感过滤/归档）。
+        """
+        engine = _get_langchain_engine()
+
+        # 意图分类链（结构化输出，无正则标记依赖）
+        classification = await engine.classify_intent(request.message)
+        intent = classification.get("intent", "chitchat")
+        slots = classification.get("slots", {})
+
+        # 组装伪标记 + 回答正文（正文在前、标记在后，对齐 Dify 输出契约）
+        from app.services.cs_langchain.schemas import format_as_markers
+
+        markers = format_as_markers(intent, slots)
+        answer = await engine.answer_blocking(request.message)
+        full_answer = f"{answer}{markers}"
+        return {"answer": full_answer, "conversation_id": session.dify_conversation_id or ""}
+
+    async def _langchain_stream(self, request: ChatRequest, session) -> AsyncIterator[dict]:
+        """LangChain 引擎流式分支：意图分类 → 标记扣留 → 回答链流式下发。
+
+        流程：先跑意图分类链拿标记（不下发），再跑回答链流式下发正文，
+        最后 _finalize_turn 解析标记落库。SSE 事件：meta/token/done。
+        """
+        engine = _get_langchain_engine()
+
+        # 意图分类链（先跑完，拿标记不下发）
+        classification = await engine.classify_intent(request.message)
+        intent = classification.get("intent", "chitchat")
+        slots = classification.get("slots", {})
+
+        from app.services.cs_langchain.schemas import format_as_markers
+
+        markers = format_as_markers(intent, slots)
+
+        # 回答链流式下发正文（标记单独落库，不混入正文）
+        buf = ""
+        async for token in engine.answer_stream(request.message):
+            buf += token
+            yield {"event": "token", "delta": token}
+
+        # _finalize_turn 需要带标记的完整 answer（正文在前、标记在后，对齐 Dify 输出契约）
+        full_answer = f"{buf}{markers}"
+        dify_resp = {"answer": full_answer, "conversation_id": session.dify_conversation_id or ""}
+        resp = await self._finalize_turn(request, session, dify_resp)
+        yield {"event": "done", "data": resp.model_dump()}
 
     async def _begin_turn(self, request: ChatRequest):
         """会话准备 + FAQ 秒回判定 + 多轮上限 + 用户消息落库。返回 (session, FAQ响应|None)。
@@ -365,6 +432,12 @@ class AiService:
             yield {"event": "done", "data": faq_resp.model_dump()}
             return
         yield {"event": "meta", "conversation_id": str(session.id)}
+
+        # LangChain 引擎分支（CS_ENGINE=langchain，add_langchain 分支）
+        if settings.CS_ENGINE == "langchain":
+            async for ev in self._langchain_stream(request, session):
+                yield ev
+            return
 
         buf = ""
         cursor = 0

@@ -1,3 +1,4 @@
+import os
 import time
 
 import httpx
@@ -30,7 +31,7 @@ def create_accounts():
         host='localhost',
         port=59000,
         user='root',
-        password='420821',
+        password=os.environ.get("MYSQL_ROOT_PASSWORD", "change-me-in-local-env"),
         database='GuangdongEducationStudyAbroadProgram',
         charset='utf8mb4',
     )

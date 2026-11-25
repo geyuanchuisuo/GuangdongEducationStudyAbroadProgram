@@ -51,4 +51,26 @@ docker-compose.override.yml
 # 日志
 *.log
 
+# 向量服务运行时数据与模型权重（体积大，不入库；首次启动/按需下载）
+vector/data/
+vector/models/
+
 *.rar
+
+# 本机凭据速查页（含明文密钥，禁止入库）
+docs/账号密码速查.html
+
+# WorkBuddy 本地工作区数据
+.workbuddy/
+
+# 本机临时启动配置（含明文数据库密码，禁止入库）
+docker-compose.local.yml
+
+# 本地日志、缓存与临时测试产物
+logs/
+backend/logs/
+backend/.tmp_pytest/
+backend/.pytest_cache/
+evaluation/.venv/
+evaluation/__pycache__/
+ceshi

@@ -11,6 +11,7 @@
 """
 import asyncio
 import io
+import os
 import sys
 from datetime import date, datetime, timedelta
 
@@ -319,7 +320,7 @@ check("M3 跟进记录列表", ok, str(bj)[:160])
 # 成绩录入（v6.11.3 唯一约束后，幂等重跑需先清掉本用例的历史成绩，避免 40901）
 import asyncio as _aio, aiomysql as _aiomysql
 async def _clean_score():
-    conn = await _aiomysql.connect(host="mysql", port=3306, user="root", password="420821", db="GuangdongEducationStudyAbroadProgram")
+    conn = await _aiomysql.connect(host="mysql", port=3306, user="root", password=os.environ.get("MYSQL_ROOT_PASSWORD", "change-me-in-local-env"), db="GuangdongEducationStudyAbroadProgram")
     cur = await conn.cursor()
     await cur.execute("DELETE FROM student_score WHERE course_name=%s AND student_id=%s", ("E2E德语基础", sid))
     await conn.commit(); conn.close()

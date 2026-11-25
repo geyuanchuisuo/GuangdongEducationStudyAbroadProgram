@@ -28,6 +28,10 @@ dependencies = [
     "ollama>=0.6.3",
     # 知识库混合检索（/knowledge）：Milvus 客户端，钉 2.6 线与 vector/ 的 Milvus v2.6.24 服务端对齐
     "pymilvus>=2.6.0,<3.0.0",
+    # 客服 LangChain 引擎（add_langchain 分支）：分类链 + 回答链 + 模型工厂
+    "langchain>=1.0.0",
+    "langchain-openai>=1.0.0",
+    "langchain-ollama>=1.0.0",
 ]
 
 [project.optional-dependencies]

@@ -1,0 +1,51 @@
+{
+  "meta": {
+    "name": "粤教留学 RAG 评测黄金题库",
+    "version": "1.0",
+    "created": "2026-10-28",
+    "method": "RAGAS 四指标（Context Precision / Context Recall / Faithfulness / Answer Relevancy）",
+    "note": "ground_truth 取自知识库原文事实；relevant_docs 为期望命中的来源文件（用于报告归因，ragas 上下文指标以 ground_truth 为参照）。expect_refusal=true 的题目知识库中无答案，单独评估不计入四指标均分。",
+    "rating": {"excellent": 0.8, "good": 0.6, "fair": 0.4}
+  },
+  "questions": [
+    {"id": 1, "category": "公司信息", "question": "广东省教育服务有限公司的简称是什么？", "ground_truth": "简称“粤教服务”。", "relevant_docs": ["企业信息.md", "常见问答对.xlsx"], "expect_refusal": false},
+    {"id": 2, "category": "公司信息", "question": "粤教服务创办于哪一年？", "ground_truth": "创办于1981年。", "relevant_docs": ["企业信息.md"], "expect_refusal": false},
+    {"id": 3, "category": "公司信息", "question": "2024年3月粤教服务划转至哪家公司？", "ground_truth": "划转至广东教育国际交流服务中心有限公司（简称“粤教国际”）。", "relevant_docs": ["企业信息.md", "常见问答对.xlsx"], "expect_refusal": false},
+    {"id": 4, "category": "公司信息", "question": "粤教服务的主营业务有哪些？", "ground_truth": "主营业务包括国际教育、智慧教育、素质教育和实体教育。", "relevant_docs": ["企业信息.md", "常见问答对.xlsx"], "expect_refusal": false},
+    {"id": 5, "category": "公司信息", "question": "粤教服务的使命和价值观分别是什么？", "ground_truth": "使命是“致力让生活更美好”；价值观是“向上向善，实干笃行”。", "relevant_docs": ["企业信息.md"], "expect_refusal": false},
+    {"id": 6, "category": "公司信息", "question": "粤教服务的公司地址和联系电话是什么？", "ground_truth": "公司地址为广东省广州市越秀区东风东路723号高教大厦二楼，电话020-37628058。", "relevant_docs": ["企业信息.md"], "expect_refusal": false},
+    {"id": 7, "category": "公司信息", "question": "粤教服务有哪些事业部？", "ground_truth": "包括双元制事业部、智能装备事业部、课后服务事业部、研学服务事业部和科技赛事事业部。", "relevant_docs": ["企业信息.md", "常见问答对.xlsx"], "expect_refusal": false},
+    {"id": 8, "category": "公司信息", "question": "粤教服务的官方邮箱和网址是什么？", "ground_truth": "邮箱postmaster@ges1981.com，网址http://www.gdjyfw.cn。", "relevant_docs": ["企业信息.md"], "expect_refusal": false},
+
+    {"id": 9, "category": "公司业务", "question": "国际教育包含哪些项目？", "ground_truth": "国际教育包括双元制教育、学历提升项目、国际留学项目和国际研学项目。", "relevant_docs": ["企业信息.md", "常见问答对.xlsx"], "expect_refusal": false},
+    {"id": 10, "category": "公司业务", "question": "德国双元制教育模式是怎样的？", "ground_truth": "受训者必须经过两个场所的培训：一边在职业学校传授与职业有关的专业知识，另一边在企业或公共事业单位等校外实训场所接受职业技能培训。培训年限为两年至三年半，培训生每周三至四日在企业学习实践技能，每周还要在职业学校学习8到12课时课程，费用由企业和国家共同承担，企业每月发放酬金。", "relevant_docs": ["企业信息.md", "中德精英人才共建计划.docx", "常见问答对.xlsx"], "expect_refusal": false},
+    {"id": 11, "category": "公司业务", "question": "德国项目的三大优势是什么？", "ground_truth": "省属教育国企直接签协议、银行全额低息贷款、国内外全程保姆式服务。", "relevant_docs": ["中德精英人才共建计划.docx", "常见问答对.xlsx"], "expect_refusal": false},
+    {"id": 12, "category": "公司业务", "question": "德国项目的报名要求有哪些？", "ground_truth": "年龄18-35岁，高中及以上学历，动手能力强、逻辑思维强、无犯罪记录，有一定德语学习能力和表达能力。", "relevant_docs": ["中德精英人才共建计划.docx", "常见问答对.xlsx"], "expect_refusal": false},
+    {"id": 13, "category": "公司业务", "question": "德国项目有哪些专业类别？", "ground_truth": "医疗健康类、机械制造类、商贸会计类、电子电器类、汽车服务类、酒店管理类。", "relevant_docs": ["中德精英人才共建计划.docx", "常见问答对.xlsx"], "expect_refusal": false},
+    {"id": 14, "category": "公司业务", "question": "考取德语什么水平后可以匹配德国企业并进行面试？", "ground_truth": "在国内考取德语B1后，可匹配德国企业并进行面试。", "relevant_docs": ["中德精英人才共建计划.docx", "常见问答对.xlsx"], "expect_refusal": false},
+    {"id": 15, "category": "公司业务", "question": "德国IHK/HWK职业资格证书是什么？", "ground_truth": "在德国，行业协会负责组织和实施本行业的职业教育和职业资格考试，学员通过结业考试后获得该职业的任职资格即德国职业资格证书。德国工商业联合IHK/手工业协会HWK是德国最重要的行业协会，IHK/HWK证书持有者在欧洲乃至其他国家的工作能力都受到企业极大认可。", "relevant_docs": ["中德精英人才共建计划.docx", "常见问答对.xlsx"], "expect_refusal": false},
+    {"id": 16, "category": "公司业务", "question": "德国项目职业培训期间有津贴吗？以机电一体化专业为例是多少？", "ground_truth": "有津贴。以机电一体化专业为例：第一年880欧/月，第二年950欧/月，第三年1030欧/月，学生3年可获得34320欧，折合人民币275000元。", "relevant_docs": ["中德精英人才共建计划.docx"], "expect_refusal": false},
+    {"id": 17, "category": "公司业务", "question": "新加坡国际本硕升学项目有什么优势？", "ground_truth": "能为学生提供便捷、有效、安全的留学通道，帮助获得国际化名校录取和学位证书，拓宽国际视野并提升跨文化交流能力，实现弯道超车；回国后学位证书受中国教育部认证，享受留学生归国福利。同等条件下就读国外名校专升本只需1-1.5年，本科升硕士仅需一年。", "relevant_docs": ["新加坡国际本硕升学计划.docx", "企业信息.md", "常见问答对.xlsx"], "expect_refusal": false},
+    {"id": 18, "category": "公司业务", "question": "2+2新加坡定向培养本科班的招生群体和培养流程是怎样的？", "ground_truth": "招生群体是应往届初中毕业生。流程为国内前两年在国内培养基地学习新加坡国际课程结合的综合课程（第一年即可收到新加坡学院录取通知书）；新加坡第三年公费0学费留学；第四年直升本科课程并毕业，获世界综合排名200-500名左右大学颁发的毕业证书。", "relevant_docs": ["新加坡国际本硕升学计划.docx", "常见问答对.xlsx"], "expect_refusal": false},
+    {"id": 19, "category": "公司业务", "question": "新加坡2+2国际本科班四年学费总计约多少？", "ground_truth": "国内两年、新加坡两年，四年学费总计约30-31万人民币。", "relevant_docs": ["新加坡国际本硕升学计划.docx", "常见问答对.xlsx"], "expect_refusal": false},
+    {"id": 20, "category": "公司业务", "question": "新加坡一带一路工学交替项目有什么优势？", "ground_truth": "6个月（或9个月）理论知识学习提升学术能力，6个月带薪实习积累工作经验，实习薪资6000-8000元人民币/月，一年即可获大专文凭，实习结束100%推荐就业，就业薪资可达15000元人民币/月以上。", "relevant_docs": ["新加坡国际本硕升学计划.docx", "常见问答对.xlsx"], "expect_refusal": false},
+    {"id": 21, "category": "公司业务", "question": "新加坡定向培养联合办学项目的报名缴费账号信息是什么？", "ground_truth": "账户名称：广东省教育服务有限公司；账户号码：9550889900011455492；开户地址：广发银行广州华夏路支行；转账需备注“新加坡国际班+学生姓名”。", "relevant_docs": ["新加坡国际本硕升学计划.docx", "常见问答对.xlsx"], "expect_refusal": false},
+    {"id": 22, "category": "公司业务", "question": "国际研学项目面向哪些人群，有什么特点？", "ground_truth": "面向中小学生、高职高专及大学生等，分层设计培养方案。中小学生侧重文化浸润与名校初体验，高职高专聚焦技能对接，大学生深耕能源、基建等专业领域。项目时长依学段适配，中小学设3-5天假期营，高职与大学为1-2周专项研学。", "relevant_docs": ["企业信息.md", "常见问答对.xlsx"], "expect_refusal": false},
+    {"id": 23, "category": "公司业务", "question": "粤教服务的国际留学项目有什么特点？", "ground_truth": "作为国际化教育支持平台，与美、英、加、澳、新等英语国家，法、德、意、瑞士、荷兰等欧洲教育强国，以及日、韩、新、马、泰等亚洲教育枢纽的数百所院校建立深度合作，提供院校精准匹配、申请材料指导、签证策略优化的全周期服务，连续保持98%以上的签证通过率。", "relevant_docs": ["企业信息.md", "常见问答对.xlsx"], "expect_refusal": false},
+    {"id": 24, "category": "公司业务", "question": "新加坡定向培养联合办学项目的入学测试内容是什么？", "ground_truth": "笔试占40%，包括英语（词汇、语法、阅读、运用能力）和心理讲课测评（心理健康、综合素质、生活态度、批判思维）；面试占60%，包括英语口语、沟通能力、团队合作、学习态度。", "relevant_docs": ["新加坡国际本硕升学计划.docx", "常见问答对.xlsx"], "expect_refusal": false},
+
+    {"id": 25, "category": "留学政策", "question": "中国学生赴德留学的APS审核是什么？审核周期多久？", "ground_truth": "APS审核是中国学生赴德留学的必经程序，需通过德意志学术交流中心审核。审核周期为4-8周（材料审核模式）或8-12周（传统面谈模式）。", "relevant_docs": ["德国留学政策指南.docx"], "expect_refusal": false},
+    {"id": 26, "category": "留学政策", "question": "德国有哪些公立大学免学费的州？学期费大约多少？", "ground_truth": "德国有14个联邦州公立大学免学费（如北莱茵-威斯特法伦州、黑森州、下萨克森州、汉堡州、柏林州等），仅需每学期缴纳学期费150-400欧元，包含学生服务和公共交通票。", "relevant_docs": ["德国留学政策指南.docx"], "expect_refusal": false},
+    {"id": 27, "category": "留学政策", "question": "德国留学签证冻结账户每年需要存入多少钱？", "ground_truth": "签证冻结账户每年需存入11,904欧元，按月支取（约992欧元/月）。", "relevant_docs": ["德国留学政策指南.docx"], "expect_refusal": false},
+    {"id": 28, "category": "留学政策", "question": "德国毕业后的找工作签证有效期是多久？", "ground_truth": "找工作签证（Jobseeker Visa）2026年新政延长至18个月，从毕业证书签发日起算，允许全职工作，无雇主担保要求。", "relevant_docs": ["德国留学政策指南.docx"], "expect_refusal": false},
+    {"id": 29, "category": "留学政策", "question": "新加坡学生签证的申请费用和审批周期是多少？", "ground_truth": "申请费30新元加签发费60新元，需在提交申请后7天内完成；审批周期平均28个工作日，中国学生需10个工作日。", "relevant_docs": ["新加坡留学政策指南.docx"], "expect_refusal": false},
+    {"id": 30, "category": "留学政策", "question": "新加坡教育部学费津贴（MOE Tuition Grant）的资助比例是多少？", "ground_truth": "本科课程资助50%-70%，硕士/博士项目资助60%-80%，适用于公立大学国际学生（含中国学生），需与入学申请同步进行并签署3年服务协议。", "relevant_docs": ["新加坡留学政策指南.docx"], "expect_refusal": false},
+    {"id": 31, "category": "留学政策", "question": "2026年起新加坡EP就业准证的月薪门槛是多少？", "ground_truth": "2026年1月1日起，EP月薪门槛提高至5,600新元（非金融行业）/6,200新元（金融行业），40岁以上申请者需10,700-11,800新元。", "relevant_docs": ["新加坡留学政策指南.docx"], "expect_refusal": false},
+    {"id": 32, "category": "留学政策", "question": "新加坡留学生在校期间打工有什么规定？", "ground_truth": "公立大学/理工学院学期内每周限工16小时（需学校批准），假期期间可全职工作；私立大学需学校获得人力部门特别批准，同样执行学期16小时/周、假期不限制；18岁以下学生严禁校外兼职。", "relevant_docs": ["新加坡留学政策指南.docx"], "expect_refusal": false},
+    {"id": 33, "category": "留学政策", "question": "2026年新加坡永久居民（PR）申请政策有哪些变化？", "ground_truth": "未来5年PR年度获批名额从年均3.5万人上调至4万人，提升14%；持有EP满1年即可申请PR（此前需2年）。", "relevant_docs": ["新加坡留学政策指南.docx"], "expect_refusal": false},
+
+    {"id": 34, "category": "拒答", "question": "粤教服务在A股上市的股票代号是多少？", "ground_truth": "知识库中未找到相关内容，建议联系顾问进一步咨询。", "relevant_docs": [], "expect_refusal": true},
+    {"id": 35, "category": "拒答", "question": "公司2025年的净利润和营收具体是多少？", "ground_truth": "知识库中未找到相关内容，建议联系顾问进一步咨询。", "relevant_docs": [], "expect_refusal": true},
+    {"id": 36, "category": "拒答", "question": "美国留学F1签证的面签技巧有哪些？", "ground_truth": "知识库中未找到相关内容，建议联系顾问进一步咨询。", "relevant_docs": [], "expect_refusal": true}
+  ]
+}
